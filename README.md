@@ -70,7 +70,8 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 
 > **Note on the dip buyer:** the 24 h change is a *rolling* window. If the price keeps falling after the buy, the
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode
-> once the **minimum profit** (default 0.25 %, covers fees) is reached. Set it negative to sell at a loss if needed.
+> once the **minimum profit** (default 0.25 %, covers fees) is reached. It can't be set below 0 – to cut a loss, set a
+> **stop-loss**.
 
 ## Quick start
 

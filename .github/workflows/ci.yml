@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check translations
-        run: python3 scripts/check_localizations.py
+        run: python3 ../scripts/check_localizations.py  # the script lives at the repo root since DipAgentKit
       - name: Build app bundle
         run: ./build-app.sh
       - uses: actions/upload-artifact@v4
