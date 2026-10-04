@@ -156,6 +156,74 @@ async def test_trailing_stop_never_below_break_even():
 
 
 @pytest.mark.asyncio
+async def test_dip_trailing_starts_at_the_sell_signal():
+    s = STRATEGIES["dip"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("1970"))  # entry 2000
+    assert pos.trail_peak is None
+    # 24h change back to ≥ 0 % with the minimum profit: no sale – the trailing stop is armed at the current price
+    d = await s.evaluate(ctx(FakeExchange("2000", "2010"), pos, trail=1))
+    assert d.action is None and "trailing stop" in render(d.status, "en")
+    assert pos.trail_peak == Decimal("2010")
+    pos.trail_peak = Decimal("2050")  # the engine raises it with the price
+    d = await s.evaluate(ctx(FakeExchange("2000", "2040"), pos, trail=1))  # stop 2029.50
+    assert d.action is None and "Trailing active" in render(d.status, "en")
+    # stays armed even when the 24h change falls back below the sell threshold
+    d = await s.evaluate(ctx(FakeExchange("2100", "2040"), pos, trail=1))
+    assert d.action is None and "Trailing active" in render(d.status, "en")
+    d = await s.evaluate(ctx(FakeExchange("2000", "2029"), pos, trail=1))
+    assert isinstance(d.action, Sell) and not d.action.stop
+
+
+@pytest.mark.asyncio
+async def test_dip_trailing_never_sells_below_the_minimum_profit():
+    s = STRATEGIES["dip"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2010"), trail_peak=Decimal("2010"))  # entry 2000
+    # the stop is lifted from 1989.90 (1 % below the high) to the minimum profit (2005); +0.2 % is not enough
+    d = await s.evaluate(ctx(FakeExchange("2000", "2004"), pos, trail=1))
+    assert d.action is None and "minimum" in render(d.status, "en")
+    # the stop-loss still sells right away
+    d = await s.evaluate(ctx(FakeExchange("2000", "1890"), pos, trail=1, stop_loss=5))
+    assert isinstance(d.action, Sell) and d.action.stop
+
+
+@pytest.mark.asyncio
+async def test_dip_trailing_also_starts_at_the_profit_target():
+    s = STRATEGIES["dip"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2040"))  # entry 2000
+    ex = FakeExchange("2100", "2040")  # +2 % profit, 24h change still negative
+    assert isinstance((await s.evaluate(ctx(ex, pos, sell_mode="profit", take_profit=2))).action, Sell)
+    d = await s.evaluate(ctx(ex, pos, sell_mode="profit", take_profit=2, trail=1))
+    assert d.action is None and pos.trail_peak == Decimal("2040")
+
+
+async def test_dip_trailing_in_the_engine(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Trail", "dip", "ETH-EUR", {"trail": 1}, True, True)
+    await engine.tick()
+    assert pos(db.get_bot(bot_id))
+    ex.price = Decimal("2010")  # recovered: the trailing stop is armed and stored with the trade
+    await engine.tick()
+    assert pos(db.get_bot(bot_id))["trail_peak"] == "2010"
+    ex.price = Decimal("2060")
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert pos(bot)["trail_peak"] == "2060"
+    assert bot["state"]["targets"]["sell_price"] == pytest.approx(2039.4)
+    ex.price = Decimal("2039")
+    await engine.tick()
+    assert pos(db.get_bot(bot_id)) is None
+    assert Decimal(db.list_trades(bot_id)[0]["pnl"]) > 0
+
+
+def test_position_state_keeps_the_trailing_high():
+    p = Position(Decimal("1"), Decimal("100"), 0, Decimal("100"), trail_peak=Decimal("105.5"))
+    assert Position.from_state(p.to_state()).trail_peak == Decimal("105.5")
+    old = {"qty": "1", "cost": "100", "opened_at": 0, "peak": "100"}  # stored before the option existed
+    assert Position.from_state(old).trail_peak is None
+
+
+@pytest.mark.asyncio
 async def test_ai_ask_now_skips_the_wait(tmp_path: Path, monkeypatch):
     from app.strategies.ai import AiDecision
 

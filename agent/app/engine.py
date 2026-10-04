@@ -364,6 +364,8 @@ class Engine:
         if positions:
             for position in positions:
                 position.peak = max(position.peak, view.price)
+                if position.trail_peak is not None:
+                    position.trail_peak = max(position.trail_peak, view.price)
             store_positions(state, positions)
 
         _, quote = split_symbol(bot["symbol"])
@@ -376,6 +378,8 @@ class Engine:
         if strategy.accumulates:  # savings plan: one position that every buy adds to
             position = positions[0] if positions else None
             decision = await strategy.evaluate(context(position))
+            if position:
+                store_positions(state, positions)  # the strategy may have changed the trade (an armed trailing stop)
             if isinstance(decision.action, Buy):
                 return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
             if isinstance(decision.action, Sell) and position:
@@ -392,6 +396,8 @@ class Engine:
         position_targets: dict[str, Any] = {}
         for position in positions:
             decision = await strategy.evaluate(context(position))
+            # the strategy may have changed the trade (an armed trailing stop) – store it before any order rereads the state
+            store_positions(state, positions)
             position_targets[position.id] = state.pop("targets", None)
             statuses[position.id] = decision.status
             if isinstance(decision.action, Sell):

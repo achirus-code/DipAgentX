@@ -202,6 +202,18 @@ CATALOG: dict[str, L] = {
     "dip.target_change": L("sell at {hours} h ≥ {threshold}", "Verkauf bei {hours} h ≥ {threshold}"),
     "dip.target_profit": L("target {target}", "Ziel {target}"),
     "dip.position": L("Position {profit} · {window} · {targets}", "Position {profit} · {window} · {targets}"),
+    "dip.position_trailing": L(
+        "Position {profit} · {window} · {targets}, then trailing stop {trail}",
+        "Position {profit} · {window} · {targets}, danach Trailing-Stop {trail}",
+    ),
+    "dip.trailing_armed": L(
+        "Sell signal reached · trailing stop {stop} follows the price · {profit}",
+        "Verkaufssignal erreicht · Trailing-Stop {stop} läuft mit · {profit}",
+    ),
+    "dip.trailing_hold": L(
+        "Trailing stop {stop} reached, but profit {profit} < minimum {min} · holding",
+        "Trailing-Stop {stop} erreicht, aber Gewinn {profit} < Mindestgewinn {min} · halte",
+    ),
     # --- price zones
     "zones.no_price": L("No buy price set", "Kein Kaufpreis eingestellt"),
     "zones.buy_signal": L("Buy zone reached", "Kaufzone erreicht"),

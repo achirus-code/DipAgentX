@@ -2,6 +2,16 @@
 
 All notable changes to DipAgent are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.0] – 2026-10-04
+
+### Added
+
+- **Dip buyer: trailing after the sell signal.** New rule *Trailing after the sell signal* (0 = off, the default).
+  When the sell rule is met – the change has recovered (e.g. 24 h back to ≥ 0 %), the profit target is reached, or
+  whichever comes first – the bot no longer sells right away. A trailing stop follows the price from there and sells
+  once it falls this far below its high since the signal – never below the minimum profit; the stop-loss still sells
+  immediately. The card shows "until trailing starts" and then the trailing stop.
+
 ## [1.17.1] – 2026-10-03
 
 ### Fixed

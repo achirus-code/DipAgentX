@@ -237,6 +237,12 @@ public struct Bot: Codable, Identifiable, Equatable {
     /// True when the bot may hold more than one trade (or does) – the card then lists them.
     public var tradesMode: Bool { (maxTrades ?? 1) > 1 || openTrades.count > 1 }
 
+    /// True when the sale runs through a trailing stop: the trailing strategy, or the dip buyer with
+    /// "Trailing after the sell signal" (agent 1.18+) – its sale price then first lies above, later below the price.
+    public var usesTrailingStop: Bool {
+        strategy == "trailing" || (strategy == "dip" && (params["trail"]?.double ?? 0) > 0)
+    }
+
     /// The next trade trigger with a fixed price: the buy price while waiting, the sale (or the trailing stop) with a
     /// position. Nil for strategies without one (AI decides, the savings plan's next instalment) or old agents.
     public var goal: BotGoal? {
@@ -248,8 +254,8 @@ public struct Bot: Codable, Identifiable, Equatable {
             kind = .buy
             target = buy
         } else if position != nil, let sell = targets.sellPrice {
-            // the trailing strategy first waits for the activation price above, then sells when the stop below is hit
-            kind = strategy == "trailing" ? (sell < price ? .trailingStop : .trailingStart) : .sell
+            // a trailing stop first waits for its start price above (activation / sell signal), then sells when the stop below is hit
+            kind = usesTrailingStop ? (sell < price ? .trailingStop : .trailingStart) : .sell
             target = sell
         } else {
             return nil

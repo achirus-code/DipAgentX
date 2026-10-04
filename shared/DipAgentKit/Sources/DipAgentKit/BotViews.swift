@@ -261,7 +261,7 @@ public struct OpenTradeRow: View {
     public static func targetText(_ trade: BotPosition, bot: Bot) -> String? {
         let q = bot.quoteCurrency
         if let sell = trade.sellPrice, let price = bot.market?.price, price > 0 {
-            let label = bot.strategy == "trailing" && sell < price
+            let label = bot.usesTrailingStop && sell < price
                 ? String(localized: "Trailing stop \(Fmt.price(sell, q))")
                 : String(localized: "Target \(Fmt.price(sell, q))")
             return "\(label) (\(Fmt.pct((sell / price - 1) * 100)))"

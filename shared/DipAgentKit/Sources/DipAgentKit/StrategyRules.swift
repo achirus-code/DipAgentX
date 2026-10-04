@@ -76,8 +76,11 @@ public struct TradeCostCheck {
         switch strategy {
         case "dip":
             let mode = params["sell_mode"]?.string ?? "change"
-            let minProfit = num("min_profit") ?? 0, takeProfit = num("take_profit") ?? 0
+            let minProfit = num("min_profit") ?? 0, takeProfit = num("take_profit") ?? 0, trail = num("trail") ?? 0
             switch mode {
+            case "profit" where trail > 0:
+                // the trailing stop after the profit target may give back "trail" – but never below the minimum profit
+                expected = Self.dipTrailingLock(params); fix = ("min_profit", neededProfitPct)
             case "profit": expected = takeProfit; fix = ("take_profit", neededProfitPct)
             case "either": expected = min(minProfit, takeProfit); fix = (minProfit <= takeProfit ? "min_profit" : "take_profit", neededProfitPct)
             default: expected = minProfit; fix = ("min_profit", neededProfitPct)
@@ -111,6 +114,14 @@ public struct TradeCostCheck {
             }
         }
         suggestedAmount = suggestion
+    }
+
+    /// The lowest gross profit the dip buyer's trailing stop sells at: it starts at the sell signal and never goes
+    /// below the minimum profit – after the profit target it keeps at least the target minus the trailing distance.
+    public static func dipTrailingLock(_ params: [String: JSONValue]) -> Double {
+        let minProfit = params["min_profit"]?.double ?? 0
+        guard params["sell_mode"]?.string == "profit" else { return minProfit }
+        return max((params["take_profit"]?.double ?? 0) - (params["trail"]?.double ?? 0), minProfit)
     }
 
     /// Buy + sell fee for one round trip of `amount`.
@@ -164,6 +175,13 @@ public enum ParamNotes {
         case ("dip", "min_profit"):
             guard let pct = num(key) else { return nil }
             return profit(net(pct)) { String(localized: "Sells from ≈ \($0) after fees") }
+        case ("dip", "trail"):
+            guard let trail = num(key), trail > 0 else { return nil }
+            var rules = values
+            for k in ["sell_mode", "take_profit", "min_profit"] where rules[k] == nil {
+                rules[k] = params.first { $0.key == k }?.default
+            }
+            return profit(net(TradeCostCheck.dipTrailingLock(rules))) { String(localized: "Locks in at least ≈ \($0) after fees") }
         case ("dca", "take_profit"):
             guard let pct = num(key), pct > 0 else { return nil }
             // the plan accumulates: the target applies to the whole position

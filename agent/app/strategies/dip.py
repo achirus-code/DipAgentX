@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from ..i18n import L, dur, m, pct
+from ..i18n import L, dur, m, money, pct
 from .base import (
     COOLDOWN_HELP, COOLDOWN_LABEL, Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left,
     multi_trade_params,
@@ -43,9 +43,15 @@ class DipStrategy(Strategy):
               L("Sell as soon as the position has this much profit.", "Verkauf, sobald die Position so viel Gewinn hat."),
               min=0.1, max=100, step=0.1),
         Param("min_profit", L("Minimum profit", "Mindestgewinn"), "percent", 0.25,
-              L("With “Change recovered”, only sell with at least this profit. The bot never sells at a loss anyway – only the stop-loss does.",
-                "Bei „Veränderung erreicht“ nur verkaufen, wenn mindestens dieser Gewinn erzielt wird. Mit Verlust verkauft der Bot ohnehin nie – nur der Stop-Loss."),
+              L("With “Change recovered” and with trailing, only sell with at least this profit. The bot never sells at a loss anyway – only the stop-loss does.",
+                "Bei „Veränderung erreicht“ und beim Trailing nur verkaufen, wenn mindestens dieser Gewinn erzielt wird. Mit Verlust verkauft der Bot ohnehin nie – nur der Stop-Loss."),
               min=0, max=100, step=0.05),
+        Param("trail", L("Trailing after the sell signal", "Trailing nach Verkaufssignal"), "percent", 0.0,
+              L("Instead of selling as soon as the sell rule is met, a trailing stop follows the price and sells once it "
+                "falls this far below its high since then – never below the minimum profit. 0 = off.",
+                "Statt bei erfüllter Verkaufsregel sofort zu verkaufen, läuft ein Trailing-Stop mit und verkauft erst, wenn "
+                "der Kurs so weit unter sein Hoch seitdem fällt – nie unter dem Mindestgewinn. 0 = aus."),
+              min=0, max=50, step=0.1),
         Param("stop_loss", L("Stop-loss", "Stop-Loss"), "percent", 0.0,
               L("Sell at this loss. 0 = off.", "Verkauf bei so viel Verlust. 0 = aus."), min=0, max=90, step=0.5),
         Param("cooldown_minutes", COOLDOWN_LABEL, "int", 60, COOLDOWN_HELP, min=0, max=10080, unit="min"),
@@ -71,30 +77,62 @@ class DipStrategy(Strategy):
 
         profit = pos.pnl_pct(market.bid)
         mode = p["sell_mode"]
-        # the price the sale waits for: profit target and/or recovered change (never below the minimum profit)
+        q = ctx.quote
         entry = pos.entry_price
+        min_price = entry * (1 + Decimal(str(p["min_profit"])) / 100)
+        stop_loss = entry * (1 - Decimal(str(p["stop_loss"])) / 100) if p["stop_loss"] > 0 else None
+        trail = p["trail"]
+
+        def trailing_stop(high: Decimal) -> Decimal:
+            # follows the high since the sell signal – never below the minimum profit or break-even
+            return max(high * (1 - Decimal(str(trail)) / 100), min_price, pos.break_even_price(ctx.fee_rate, q))
+
+        if trail > 0 and pos.trail_peak is not None:
+            # the sell rule was met earlier: from then on only the trailing stop sells (or the stop-loss)
+            stop = trailing_stop(pos.trail_peak)
+            ctx.targets(sell=stop, stop=stop_loss, note=m("targets.trailing"))
+            if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
+                return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
+            if market.price <= stop:
+                if profit >= p["min_profit"]:
+                    reason = m("trailing.triggered_reason", stop=money(stop, q), high=money(pos.trail_peak, q), profit=pct(profit))
+                    return Decision(m("trailing.triggered"), Sell(reason))
+                return Decision(m("dip.trailing_hold", stop=money(stop, q), profit=pct(profit), min=pct(p["min_profit"])))
+            return Decision(m("trailing.active", stop=money(stop, q), profit=pct(profit)))
+
+        # the price the sale waits for: profit target and/or recovered change (never below the minimum profit)
         sell_at = []
         if mode in {"profit", "either"}:
             sell_at.append(entry * (1 + Decimal(str(p["take_profit"])) / 100))
         if mode in {"change", "either"}:
-            sell_at.append(max(ref * (1 + Decimal(str(p["sell_threshold"])) / 100), entry * (1 + Decimal(str(p["min_profit"])) / 100)))
-        ctx.targets(sell=min(sell_at) if sell_at else None,
-                    stop=entry * (1 - Decimal(str(p["stop_loss"])) / 100) if p["stop_loss"] > 0 else None)
+            sell_at.append(max(ref * (1 + Decimal(str(p["sell_threshold"])) / 100), min_price))
+        ctx.targets(sell=min(sell_at) if sell_at else None, stop=stop_loss,
+                    note=m("targets.trailing_from") if trail > 0 else None)
         if p["stop_loss"] > 0 and profit <= -p["stop_loss"]:
             return Decision(m("stop_loss"), Sell(m("stop_loss.reason", profit=pct(profit)), stop=True))
 
+        signal: tuple[dict, dict] | None = None  # (status, reason) of a met sell rule
         if mode in {"profit", "either"} and profit >= p["take_profit"]:
-            return Decision(m("take_profit"), Sell(m("take_profit.reason", profit=pct(profit), target=pct(p["take_profit"]))))
-        if mode in {"change", "either"} and change >= p["sell_threshold"]:
-            if profit >= p["min_profit"]:
-                reason = m("dip.recovered.reason", hours=hours, change=pct(change),
-                           threshold=pct(p["sell_threshold"]), profit=pct(profit))
-                return Decision(m("dip.recovered"), Sell(reason))
-            return Decision(m("dip.recovered_hold", profit=pct(profit), min=pct(p["min_profit"])))
+            signal = m("take_profit"), m("take_profit.reason", profit=pct(profit), target=pct(p["take_profit"]))
+        elif mode in {"change", "either"} and change >= p["sell_threshold"]:
+            if profit < p["min_profit"]:
+                return Decision(m("dip.recovered_hold", profit=pct(profit), min=pct(p["min_profit"])))
+            signal = m("dip.recovered"), m("dip.recovered.reason", hours=hours, change=pct(change),
+                                           threshold=pct(p["sell_threshold"]), profit=pct(profit))
+        if signal and trail > 0:
+            # don't sell yet: arm the trailing stop – it follows the price from here on
+            pos.trail_peak = market.price
+            stop = trailing_stop(market.price)
+            ctx.targets(sell=stop, stop=stop_loss, note=m("targets.trailing"))
+            return Decision(m("dip.trailing_armed", stop=money(stop, q), profit=pct(profit)))
+        if signal:
+            return Decision(signal[0], Sell(signal[1]))
 
         targets = []
         if mode in {"change", "either"}:
             targets.append(m("dip.target_change", hours=hours, threshold=pct(p["sell_threshold"])))
         if mode in {"profit", "either"}:
             targets.append(m("dip.target_profit", target=pct(p["take_profit"])))
+        if trail > 0:
+            return Decision(m("dip.position_trailing", profit=pct(profit), window=window, targets=targets, trail=pct(-trail)))
         return Decision(m("dip.position", profit=pct(profit), window=window, targets=targets))

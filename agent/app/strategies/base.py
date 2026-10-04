@@ -90,6 +90,8 @@ class Position:
     paper: bool = True  # bought with simulated or real money – sells always use the same mode
     id: str = ""  # a bot can hold several trades at once – each is sold on its own
     order_id: str | None = None  # the live buy order that opened it (a late fill of that order is added here)
+    # the high since a strategy's sell signal armed a trailing stop (dip buyer); None = not armed. Raised like peak.
+    trail_peak: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -128,6 +130,7 @@ class Position:
             "paper": self.paper,
             "id": self.id,
             "order_id": self.order_id,
+            "trail_peak": str(self.trail_peak) if self.trail_peak is not None else None,
         }
 
     @classmethod
@@ -138,6 +141,7 @@ class Position:
             dec(raw["qty"]), dec(raw["cost"]), int(raw["opened_at"]), dec(raw["peak"]),
             int(raw.get("buys", 1)), bool(raw.get("paper", True)),
             str(raw.get("id") or "p1"), raw.get("order_id"),
+            dec(raw["trail_peak"]) if raw.get("trail_peak") else None,
         )
 
 
