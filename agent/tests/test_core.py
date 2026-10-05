@@ -10,7 +10,7 @@ from app.config import Settings
 from app.db import Database
 from app.engine import Engine
 from app.exchange import Candle, Exchange, MockExchange, OrderResult, PairInfo, Ticker
-from app.i18n import Problem, render
+from app.i18n import Problem, message_key, render
 from app.revolutx import RevolutXClient
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
 from app.strategies import open_positions as trades_of
@@ -194,6 +194,57 @@ async def test_dip_trailing_also_starts_at_the_profit_target():
     assert isinstance((await s.evaluate(ctx(ex, pos, sell_mode="profit", take_profit=2))).action, Sell)
     d = await s.evaluate(ctx(ex, pos, sell_mode="profit", take_profit=2, trail=1))
     assert d.action is None and pos.trail_peak == Decimal("2040")
+
+
+class MarketPhaseExchange(FakeExchange):
+    """Like FakeExchange, but the 4-hour candles trend (falling 0.5 % per candle) or move sideways."""
+
+    def __init__(self, ref: str, price: str, phase: str):
+        super().__init__(ref, price)
+        self.phase = phase
+
+    async def candles(self, symbol, interval, since, until):
+        flat = await super().candles(symbol, interval, since, until)
+        if interval < 240:
+            return flat
+        out, n = [], len(flat)
+        for i, c in enumerate(flat):
+            f = 1 - 0.005 * (i - n) if self.phase == "trend" else 1 + (0.005 if i % 2 else -0.005)
+            close = self.ref * Decimal(str(f))
+            out.append(Candle(c.start, close, close * Decimal("1.002"), close * Decimal("0.998"), close))
+        return out
+
+
+def candles_of(closes):
+    return [Candle(i * HOUR, Decimal(str(c)), Decimal(str(c * 1.002)), Decimal(str(c * 0.998)), Decimal(str(c)))
+            for i, c in enumerate(closes)]
+
+
+def test_adx_tells_a_trend_from_a_sideways_market():
+    from app.strategies.base import adx
+    assert adx(candles_of([2000 * 0.995 ** i for i in range(98)])) > 60  # steady fall
+    assert adx(candles_of([2000 * (1.005 if i % 2 else 0.995) for i in range(98)])) < 20  # back and forth
+    assert adx(candles_of([2000] * 98)) == 0  # no movement at all
+    assert adx(candles_of([2000] * 20)) is None  # too few candles
+
+
+@pytest.mark.asyncio
+async def test_dip_sideways_filter_skips_dips_in_a_trend():
+    s = STRATEGIES["dip"]
+    trend, sideways = MarketPhaseExchange("2000", "1970", "trend"), MarketPhaseExchange("2000", "1970", "sideways")
+    d = await s.evaluate(ctx(trend, max_adx=25))  # −1.5 % in 24 h, but the market trends
+    assert d.action is None and message_key(d.status) == "dip.trending"
+    assert "ADX 4h" in render(d.status, "en")
+    assert isinstance((await s.evaluate(ctx(sideways, max_adx=25))).action, Buy)
+    assert isinstance((await s.evaluate(ctx(trend))).action, Buy)  # filter off (default)
+
+
+@pytest.mark.asyncio
+async def test_dip_sideways_filter_doesnt_touch_selling():
+    s = STRATEGIES["dip"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2040"))  # entry 2000
+    d = await s.evaluate(ctx(MarketPhaseExchange("2100", "2040", "trend"), pos, max_adx=25, sell_mode="profit", take_profit=2))
+    assert isinstance(d.action, Sell)
 
 
 async def test_dip_trailing_in_the_engine(tmp_path: Path):

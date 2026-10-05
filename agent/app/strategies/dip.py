@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from ..i18n import L, dur, m, money, pct
+from ..i18n import L, dur, m, money, num, pct
 from .base import (
     COOLDOWN_HELP, COOLDOWN_LABEL, Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left,
     multi_trade_params,
@@ -31,6 +31,14 @@ class DipStrategy(Strategy):
         Param("buy_threshold", L("Buy at change ≤", "Kaufen bei Veränderung ≤"), "percent", -1.0,
               L("e.g. −1 % = the price fell by at least 1 % within the window.", "z. B. −1 % = Kurs ist im Zeitfenster um mind. 1 % gefallen."),
               min=-50, max=0, step=0.1),
+        Param("max_adx", L("Only buy while ADX (4h) below", "Nur kaufen, solange ADX (4h) unter"), "number", 0.0,
+              L("Sideways filter: buys only while the trend strength ADX (14) of the 4-hour candles is below this value – "
+                "below about 20–25 the market moves sideways and dips tend to recover, above it it trends and a dip "
+                "often keeps falling. Selling isn't affected. 0 = off.",
+                "Seitwärtsfilter: kauft nur, solange die Trendstärke ADX (14) der 4-Stunden-Kerzen unter diesem Wert "
+                "liegt – unter etwa 20–25 läuft der Markt seitwärts und Dips erholen sich eher, darüber trendet er und "
+                "ein Dip fällt oft weiter. Verkäufe betrifft das nicht. 0 = aus."),
+              min=0, max=100, step=1),
         Param("sell_mode", L("Sell when", "Verkaufen wenn"), "select", "change", options=[
             Option("change", L("Change recovered", "Veränderung wieder erreicht")),
             Option("profit", L("Profit target reached", "Gewinnziel erreicht")),
@@ -71,6 +79,13 @@ class DipStrategy(Strategy):
             if wait:
                 return Decision(m("cooldown.window", left=dur(wait), window=window))
             if change <= p["buy_threshold"]:
+                if p["max_adx"] > 0:
+                    # a dip in a trend tends to keep falling – only buy it while the market moves sideways
+                    trend = await market.adx(240)
+                    if trend is None:
+                        return Decision(m("dip.adx_missing", window=window))
+                    if trend >= p["max_adx"]:
+                        return Decision(m("dip.trending", window=window, adx=num(trend, 0), max=num(p["max_adx"], 0)))
                 reason = m("dip.buy_reason", hours=hours, change=pct(change), threshold=pct(p["buy_threshold"]))
                 return Decision(m("dip.buy_signal", window=window), Buy(Decimal(str(p["amount"])), reason))
             return Decision(m("dip.waiting", window=window, threshold=pct(p["buy_threshold"])))

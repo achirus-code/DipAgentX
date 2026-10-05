@@ -268,6 +268,36 @@ class MarketView:
         candles, _ = await self.candles(hours)
         return min([c.low for c in candles] + [self.price])
 
+    async def adx(self, interval: int, period: int = 14) -> float | None:
+        """Trend strength ADX of the completed ``interval``-minute candles (about 98 of them, one request).
+        None while there are too few candles."""
+        candles, got = await self.candles(98 * interval / 60)
+        if got != interval:
+            return None
+        return adx([c for c in candles if c.start + interval * 60_000 <= self.now], period)
+
+
+def adx(candles: list[Candle], period: int = 14) -> float | None:
+    """Average directional index (Wilder): below ~25 the market moves sideways, above it trends – up or down."""
+    if len(candles) < 3 * period:
+        return None
+    a = 1 / period
+    atr = plus = minus = value = None
+    for prev, c in zip(candles, candles[1:]):
+        high, low, close = float(c.high), float(c.low), float(prev.close)
+        up, down = high - float(prev.high), float(prev.low) - low
+        tr = max(high - low, abs(high - close), abs(low - close))
+        pdm = up if up > down and up > 0 else 0.0
+        ndm = down if down > up and down > 0 else 0.0
+        if atr is None:
+            atr, plus, minus = tr, pdm, ndm
+        else:
+            atr, plus, minus = atr + a * (tr - atr), plus + a * (pdm - plus), minus + a * (ndm - minus)
+        pdi, ndi = (100 * plus / atr, 100 * minus / atr) if atr else (0.0, 0.0)
+        dx = 100 * abs(pdi - ndi) / (pdi + ndi) if pdi + ndi else 0.0
+        value = dx if value is None else value + a * (dx - value)
+    return value
+
 
 @dataclass
 class Context:
