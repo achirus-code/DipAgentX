@@ -62,9 +62,10 @@ public struct TradeCostCheck {
         return expectedProfitPct >= neededProfitPct
     }
 
-    public init?(strategy: String, params: [String: JSONValue], quote: String, feeRate: Double) {
+    /// `fixedFee`: a fixed amount per order on top of the rate (Trade Republic: 1 €).
+    public init?(strategy: String, params: [String: JSONValue], quote: String, feeRate: Double, fixedFee: Double = 0) {
         guard let amount = params["amount"]?.double, amount > 0 else { return nil }
-        let (fee, pct) = Self.cost(amount: amount, quote: quote, feeRate: feeRate)
+        let (fee, pct) = Self.cost(amount: amount, quote: quote, feeRate: feeRate, fixedFee: fixedFee)
         self.amount = amount
         roundTripFee = fee
         costPct = pct
@@ -103,14 +104,15 @@ public struct TradeCostCheck {
         expectedProfitPct = expected
         profitFix = fix.map { (key: $0.0, value: $0.1) }
 
-        // Bigger orders dilute the cent rounding – find the size at which the current setting is enough
+        // Bigger orders dilute the cent rounding and a fixed fee – find the size at which the current setting is enough
         var suggestion: Double?
         if let expected, expected > Self.slippagePct + feeRate * 200 {
-            var candidate = (amount / 5).rounded(.up) * 5
-            while candidate <= 500 {
-                let (_, candidatePct) = Self.cost(amount: candidate, quote: quote, feeRate: feeRate)
+            let stepSize = fixedFee > 0 ? 25.0 : 5.0
+            var candidate = (amount / stepSize).rounded(.up) * stepSize
+            while candidate <= (fixedFee > 0 ? 5000 : 500) {
+                let (_, candidatePct) = Self.cost(amount: candidate, quote: quote, feeRate: feeRate, fixedFee: fixedFee)
                 if ((candidatePct + Self.slippagePct) * 20).rounded(.up) / 20 <= expected { suggestion = candidate; break }
-                candidate += 5
+                candidate += stepSize
             }
         }
         suggestedAmount = suggestion
@@ -125,16 +127,17 @@ public struct TradeCostCheck {
     }
 
     /// Buy + sell fee for one round trip of `amount`.
-    public static func roundTripFee(amount: Double, quote: String, feeRate: Double) -> Double {
-        cost(amount: amount, quote: quote, feeRate: feeRate).fee
+    public static func roundTripFee(amount: Double, quote: String, feeRate: Double, fixedFee: Double = 0) -> Double {
+        cost(amount: amount, quote: quote, feeRate: feeRate, fixedFee: fixedFee).fee
     }
 
     /// Buy fee is charged in the coin (exact), the sell fee in the quote currency – rounded up to a cent for fiat.
-    private static func cost(amount: Double, quote: String, feeRate: Double) -> (fee: Double, pct: Double) {
+    /// A fixed fee (Trade Republic) is paid on the buy and on the sale.
+    private static func cost(amount: Double, quote: String, feeRate: Double, fixedFee: Double = 0) -> (fee: Double, pct: Double) {
         let buyFee = amount * feeRate
         var sellFee = amount * feeRate
         if fiat.contains(quote) { sellFee = (sellFee * 100).rounded(.up) / 100 }
-        let fee = buyFee + sellFee
+        let fee = buyFee + sellFee + 2 * fixedFee
         return (fee, fee / amount * 100)
     }
 }
@@ -144,14 +147,14 @@ public enum ParamNotes {
     /// What a profit rule means in money for the entered amount, net of buy + sell fees – shown under the field.
     public static func note(
         for key: String, strategy strategyKey: String, params: [StrategyParam], values: [String: JSONValue],
-        quote: String, takerFee: Double?
+        quote: String, takerFee: Double?, fixedFee: Double = 0
     ) -> (text: String, color: Color)? {
         let feeRate = takerFee ?? TradeCostCheck.defaultFeeRate
         func num(_ key: String) -> Double? { values[key]?.double ?? params.first { $0.key == key }?.default.double }
         let amount = num("amount") ?? 0
         if key != "model", amount <= 0 { return nil }
         func net(_ pct: Double, on base: Double = amount) -> Double {
-            base * pct / 100 - TradeCostCheck.roundTripFee(amount: base, quote: quote, feeRate: feeRate)
+            base * pct / 100 - TradeCostCheck.roundTripFee(amount: base, quote: quote, feeRate: feeRate, fixedFee: fixedFee)
         }
         func profit(_ value: Double, _ template: (String) -> String) -> (String, Color) {
             (template(Fmt.money(value, quote, signed: true)), value > 0 ? .profit : .orange)
@@ -197,27 +200,31 @@ public enum ParamNotes {
         case ("zones", "sell_above"):
             guard let sell = num(key), let buy = num("buy_below"), buy > 0, sell > 0 else { return nil }
             return profit(net((sell / buy - 1) * 100)) { String(localized: "Planned profit ≈ \($0) after fees") }
+        case (_, "amount") where fixedFee > 0:
+            // Trade Republic: the 1 € per order comes out of the amount
+            return (String(localized: "Of it \(Fmt.money(fixedFee, quote)) fee per order – \(Fmt.money(max(amount - fixedFee, 0), quote)) are invested"), .secondary)
         case (_, "max_trades"):
             guard let trades = num(key), trades > 1 else { return nil }
             return (String(localized: "Up to \(Fmt.money(amount * trades, quote)) invested at the same time"), .secondary)
         case (_, "stop_loss"):
             guard let pct = num(key), pct > 0 else { return (String(localized: "No stop-loss – the loss is not limited"), .red) }
-            let loss = -(amount * pct / 100) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate)
+            let loss = -(amount * pct / 100) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate, fixedFee: fixedFee)
             return (String(localized: "Max. loss ≈ \(Fmt.money(loss, quote, signed: true)) incl. fees"), .red)
         case ("zones", "stop_price"):
             guard let stop = num(key), stop > 0, let buy = num("buy_below"), buy > 0 else {
                 return (String(localized: "No stop-loss – the loss is not limited"), .red)
             }
-            let loss = -amount * max(1 - stop / buy, 0) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate)
+            let loss = -amount * max(1 - stop / buy, 0) - TradeCostCheck.roundTripFee(amount: amount, quote: quote, feeRate: feeRate, fixedFee: fixedFee)
             return (String(localized: "Max. loss ≈ \(Fmt.money(loss, quote, signed: true)) incl. fees"), .red)
         default:
             return nil
         }
     }
 
-    /// "ETH Dip", "BTC Savings plan" … – the name used when the name field is left empty.
-    public static func generatedName(strategy key: String, strategyName: String?, symbol: String) -> String {
-        let base = symbol.split(separator: "-").first.map(String.init) ?? symbol
+    /// "ETH Dip", "BTC Savings plan" … – the name used when the name field is left empty. `base` replaces the
+    /// symbol's first part (Trade Republic: the ticker instead of the ISIN).
+    public static func generatedName(strategy key: String, strategyName: String?, symbol: String, base: String? = nil) -> String {
+        let base = base ?? symbol.split(separator: "-").first.map(String.init) ?? symbol
         let short: String
         switch key {
         case "dip": short = String(localized: "Dip")

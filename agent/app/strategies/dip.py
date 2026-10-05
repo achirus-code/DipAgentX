@@ -85,7 +85,7 @@ class DipStrategy(Strategy):
 
         def trailing_stop(high: Decimal) -> Decimal:
             # follows the high since the sell signal – never below the minimum profit or break-even
-            return max(high * (1 - Decimal(str(trail)) / 100), min_price, pos.break_even_price(ctx.fee_rate, q))
+            return max(high * (1 - Decimal(str(trail)) / 100), min_price, pos.break_even_price(ctx.fees, q))
 
         if trail > 0 and pos.trail_peak is not None:
             # the sell rule was met earlier: from then on only the trailing stop sells (or the stop-loss)

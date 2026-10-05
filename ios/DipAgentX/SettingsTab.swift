@@ -13,22 +13,43 @@ struct SettingsTab: View {
         NavigationStack {
             Form {
                 agentSection
+                if store.isConnected, store.supportsBrokers {
+                    BrokersSection()
+                }
                 if store.isConnected {
-                    if store.status?.exchange != "mock" {
-                        LiveTradingSection()
+                    // trading mode, limits, fees and the connection belong to the broker of the tabs
+                    if store.showsBrokerTabs {
+                        Section {
+                            BrokerTabsRow()
+                        } footer: {
+                            Text("Trading mode, limits, fees and the connection below belong to this broker.")
+                        }
+                    }
+                    if store.status?.isDemo != true {
+                        LiveTradingSection().id(store.broker)
                     }
                     Section {
                         if let limits = store.limits {
-                            NavigationLink { LimitsPage(limits: limits) } label: {
+                            NavigationLink { LimitsPage(limits: limits).id(store.broker) } label: {
                                 LabeledContent("Risk & limits", value: limitsSummary(limits))
                             }
                         }
                         if let fees = store.paperFees {
-                            NavigationLink { PaperFeesPage(fees: fees) } label: {
-                                LabeledContent("Paper mode fees", value: "\(Fmt.rate(fees.buy * 100)) / \(Fmt.rate(fees.sell * 100))")
+                            NavigationLink { PaperFeesPage(fees: fees).id(store.broker) } label: {
+                                LabeledContent("Paper mode fees", value: feesSummary(fees))
                             }
                         }
-                        if let info = store.exchangeInfo {
+                        if store.broker == .tradeRepublic {
+                            if let info = store.tradeRepublic {
+                                if info.isDemo {
+                                    LabeledContent("Trade Republic", value: String(localized: "Demo market (simulated)"))
+                                } else {
+                                    NavigationLink { TradeRepublicPage() } label: {
+                                        LabeledContent("Trade Republic") { TradeRepublicStatusText(info: info) }
+                                    }
+                                }
+                            }
+                        } else if let info = store.exchangeInfo {
                             if info.mode == "mock" {
                                 LabeledContent("Revolut X", value: String(localized: "Demo market (simulated)"))
                             } else {
@@ -79,7 +100,8 @@ struct SettingsTab: View {
             LabeledContent("Address", value: displayAddress)
             if let status = store.status {
                 LabeledContent("Agent version", value: status.version)
-                LabeledContent("Exchange", value: status.exchange == "mock" ? String(localized: "Demo market (simulated)") : "Revolut X")
+                LabeledContent("Exchange", value: status.isDemo ? String(localized: "Demo market (simulated)")
+                               : store.enabledBrokers.map(\.title).joined(separator: " · "))
                 LabeledContent("Check interval", value: String(localized: "every \(String(status.tickSeconds)) s"))
                 if let tick = status.lastTick {
                     LabeledContent("Last check", value: Date(ms: tick).formatted(.relative(presentation: .named)))
@@ -100,6 +122,17 @@ struct SettingsTab: View {
             return store.serverURL
         }
         return url.port.map { "\(host):\($0)" } ?? host
+    }
+
+    /// "0 % / 0.09 %" – Trade Republic: "1.00 € per order"
+    private func feesSummary(_ fees: PaperFees) -> String {
+        let currency = store.summary?.currencies.first?.currency ?? "EUR"
+        if let fixed = fees.fixed, fixed > 0, fees.buy == 0, fees.sell == 0 {
+            return String(localized: "\(Fmt.money(fixed, currency)) per order")
+        }
+        let rates = "\(Fmt.rate(fees.buy * 100)) / \(Fmt.rate(fees.sell * 100))"
+        if let fixed = fees.fixed, fixed > 0 { return "\(rates) + \(Fmt.money(fixed, currency))" }
+        return rates
     }
 
     private func limitsSummary(_ limits: Limits) -> String {
@@ -136,9 +169,10 @@ struct LiveTradingSection: View {
     @State private var error: String?
     @State private var info: String?
 
-    private var live: Bool { store.status?.liveTradingAllowed ?? false }
-    private var exchangeReady: Bool { store.exchangeInfo?.connected == true }
-    private var liveBotsWithPosition: [Bot] { store.bots.filter { $0.position?.paper == false } }
+    private var broker: Broker { store.broker }
+    private var live: Bool { store.isLive }
+    private var exchangeReady: Bool { store.brokerReady(broker) }
+    private var liveBotsWithPosition: [Bot] { store.brokerBots.filter { $0.position?.paper == false } }
 
     var body: some View {
         Section {
@@ -146,7 +180,7 @@ struct LiveTradingSection: View {
                 IconTile(symbol: live ? "bolt.fill" : "testtube.2", colors: live ? [.red, .orange] : [.orange, .yellow], size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     (live ? Text("Live trading active") : Text("Paper mode (demo)")).font(.headline)
-                    (live ? Text("Real orders with real money on Revolut X") : Text("Real prices, orders are only simulated"))
+                    (live ? Text("Real orders with real money on \(broker.title)") : Text("Real prices, orders are only simulated"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -169,10 +203,14 @@ struct LiveTradingSection: View {
             if let info { Label(info, systemImage: "checkmark.circle.fill").font(.footnote).foregroundStyle(.green) }
             if let error { ErrorLabel(message: error) }
         } header: {
-            Text("Trading mode")
+            store.showsBrokerTabs ? Text("Trading mode") + Text(verbatim: " · \(broker.title)") : Text("Trading mode")
         } footer: {
             if !live && !exchangeReady {
-                Text("Connect Revolut X first – then live trading can be switched on.")
+                if broker == .tradeRepublic {
+                    Text("Log in to Trade Republic first – then live trading can be switched on.")
+                } else {
+                    Text("Connect Revolut X first – then live trading can be switched on.")
+                }
             } else if live {
                 Text("When switching back to paper mode, all open live positions are sold immediately.")
             } else if !liveBotsWithPosition.isEmpty {
@@ -193,7 +231,7 @@ struct LiveTradingSection: View {
                 let lines = liveBotsWithPosition.compactMap { bot in
                     bot.position.map { "\(bot.name): \(Fmt.qty($0.qty)) \(bot.baseCurrency) (\(Fmt.money($0.unrealizedPnl, bot.quoteCurrency, signed: true)))" }
                 }
-                Text("All open live trades are closed immediately, i.e. sold at the current market price on Revolut X:") + Text(verbatim: "\n" + lines.joined(separator: "\n") + "\n") + Text("This locks in the result – even if a position is currently at a loss.")
+                Text("All open live trades are closed immediately, i.e. sold at the current market price on \(broker.title):") + Text(verbatim: "\n" + lines.joined(separator: "\n") + "\n") + Text("This locks in the result – even if a position is currently at a loss.")
             }
         }
     }
@@ -207,7 +245,7 @@ struct LiveTradingSection: View {
             if !failed.isEmpty {
                 error = failed.map { "\($0.botName): \($0.message)" }.joined(separator: "\n")
             } else if !closed.isEmpty {
-                info = String(localized: "\(String(closed.count)) live position(s) sold. All bots now trade in paper mode.")
+                info = String(localized: "\(String(closed.count)) live position(s) sold. All \(broker.title) bots now trade in paper mode.")
             }
         } catch {
             self.error = error.localizedDescription
@@ -224,7 +262,9 @@ struct LiveWarningSheet: View {
     @State private var understood = false
     @State private var finalQuestion = false
 
-    private var openPaperPositions: [Bot] { store.bots.filter { $0.position?.paper == true } }
+    private var broker: Broker { store.broker }
+    private var bots: [Bot] { store.brokerBots }
+    private var openPaperPositions: [Bot] { bots.filter { $0.position?.paper == true } }
 
     var body: some View {
         NavigationStack {
@@ -232,11 +272,16 @@ struct LiveWarningSheet: View {
                 Section {
                     Label("Attention: real money", systemImage: "exclamationmark.triangle.fill")
                         .font(.headline).foregroundStyle(.orange)
-                    if store.bots.isEmpty {
-                        bullet("All bots you create afterwards buy and sell with your real balance on Revolut X.")
+                    if bots.isEmpty {
+                        bullet("All \(broker.title) bots you create afterwards buy and sell with your real balance on \(broker.title).")
                     } else {
-                        bullet("All existing bots are switched to live as well and then trade with your real balance on Revolut X: \(store.bots.map(\.name).joined(separator: ", ")).")
+                        bullet("All existing \(broker.title) bots are switched to live as well and then trade with your real balance: \(bots.map(\.name).joined(separator: ", ")).")
                         bullet("If a bot should not trade with real money, you have to delete it first (Bots tab).").bold()
+                    }
+                    if broker == .tradeRepublic {
+                        bullet("Trade Republic ends every login after 24 hours – confirm the new one in the Trade Republic app. While logged out the bots can't trade, not even sell at the stop-loss.").bold()
+                        bullet("Stocks and ETFs only trade Monday to Friday, 07:30–23:00. Every order costs 1 €.")
+                        bullet("Trade Republic offers no official interface for programs – DipAgentX uses the one of its web app. Trade Republic's terms don't allow that; it may block the access or the account.")
                     }
                     if !openPaperPositions.isEmpty {
                         bullet("Open paper positions (\(openPaperPositions.map(\.name).joined(separator: ", "))) are still sold simulated, afterwards the bot buys live.")
@@ -270,12 +315,12 @@ struct LiveWarningSheet: View {
     }
 
     private var finalText: Text {
-        if store.bots.isEmpty {
-            return Text("Enable live trading now? Bots place real orders from the next buy signal on.")
-        } else if store.bots.count == 1 {
-            return Text("Enable live trading now? Your bot is switched to live and places real orders from the next buy signal on.")
+        if bots.isEmpty {
+            return Text("Enable live trading on \(broker.title) now? Bots place real orders from the next buy signal on.")
+        } else if bots.count == 1 {
+            return Text("Enable live trading on \(broker.title) now? Your bot is switched to live and places real orders from the next buy signal on.")
         }
-        return Text("Enable live trading now? All \(String(store.bots.count)) bots are switched to live and place real orders from the next buy signal on.")
+        return Text("Enable live trading on \(broker.title) now? All \(String(bots.count)) bots are switched to live and place real orders from the next buy signal on.")
     }
 
     private func bullet(_ text: LocalizedStringKey) -> Text {
@@ -285,7 +330,7 @@ struct LiveWarningSheet: View {
 
 // MARK: - Limits and fees
 
-/// Global risk limits: how many positions may be open, how much capital, one bot per pair.
+/// Risk limits of the selected broker: how many positions may be open, how much capital, one bot per pair.
 struct LimitsPage: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -329,7 +374,7 @@ struct LimitsPage: View {
             }
             if let error { Section { ErrorLabel(message: error) } }
         }
-        .navigationTitle("Risk & limits")
+        .navigationTitle(store.showsBrokerTabs ? Text("Risk & limits") + Text(verbatim: " · \(store.broker.title)") : Text("Risk & limits"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if saving {
@@ -385,18 +430,29 @@ struct PaperFeesPage: View {
             Section {
                 row("Buy fee", value: Binding(
                     get: { current.buy * 100 },
-                    set: { draft = PaperFees(buy: max(0, min($0, 10)) / 100, sell: current.sell) }
+                    set: { draft = PaperFees(buy: max(0, min($0, 10)) / 100, sell: current.sell, fixed: current.fixed) }
                 ))
                 row("Sell fee", value: Binding(
                     get: { current.sell * 100 },
-                    set: { draft = PaperFees(buy: current.buy, sell: max(0, min($0, 10)) / 100) }
+                    set: { draft = PaperFees(buy: current.buy, sell: max(0, min($0, 10)) / 100, fixed: current.fixed) }
                 ))
+                // a fixed fee per order is what Trade Republic charges – elsewhere only shown when set
+                if let fixed = current.fixed, store.broker == .tradeRepublic || fixed > 0 {
+                    row("Fee per order", unit: "EUR", value: Binding(
+                        get: { fixed },
+                        set: { draft = PaperFees(buy: current.buy, sell: current.sell, fixed: max(0, min($0, 50))) }
+                    ))
+                }
             } footer: {
-                Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
+                if store.broker == .tradeRepublic {
+                    Text("Trade Republic charges 1 € per order (buy and sale) and no percentage. Changing a fee rebooks all simulated Trade Republic trades; live trades stay as they are.")
+                } else {
+                    Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
+                }
             }
             if let error { Section { ErrorLabel(message: error) } }
         }
-        .navigationTitle("Paper mode fees")
+        .navigationTitle(store.showsBrokerTabs ? Text("Paper mode fees") + Text(verbatim: " · \(store.broker.title)") : Text("Paper mode fees"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if saving {
@@ -408,12 +464,12 @@ struct PaperFeesPage: View {
         .keyboardDoneButton()
     }
 
-    private func row(_ title: LocalizedStringKey, value: Binding<Double>) -> some View {
+    private func row(_ title: LocalizedStringKey, unit: String = "%", value: Binding<Double>) -> some View {
         HStack {
             Text(title)
             Spacer()
             NumberField(value: value, fractionDigits: 3).frame(maxWidth: 100)
-            Text(verbatim: "%").foregroundStyle(.secondary)
+            Text(verbatim: unit).foregroundStyle(.secondary)
         }
     }
 
@@ -470,7 +526,7 @@ struct BackupSection: View {
         } header: {
             Text("Backup")
         } footer: {
-            Text("Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token is not included.")
+            Text("Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token and the Trade Republic login are not included.")
         }
         .disabled(busy)
         .fileExporter(isPresented: $exporting, document: exportFile, contentType: .gzip, defaultFilename: exportFile?.name) { result in
@@ -532,5 +588,53 @@ struct BackupFile: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
+    }
+}
+
+
+// MARK: - Brokers
+
+/// Which brokers the agent trades on. A broker that is off is left alone (its bots stop); with only one on, the
+/// tabs above the statistics disappear.
+struct BrokersSection: View {
+    @Environment(AppStore.self) private var store
+    @State private var busy: Broker?
+    @State private var error: String?
+
+    var body: some View {
+        Section {
+            ForEach(Broker.allCases) { broker in
+                Toggle(isOn: binding(broker)) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(verbatim: broker.title)
+                            Text(verbatim: broker.offering).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: broker.icon)
+                    }
+                }
+                .disabled(busy != nil)
+            }
+            if let error { ErrorLabel(message: error) }
+        } header: {
+            Text("Brokers")
+        } footer: {
+            Text("A broker that is switched off is left alone: its bots stop, no prices, no login. With only one broker on, the tabs above the statistics disappear. A broker with open trades can't be switched off.")
+        }
+    }
+
+    private func binding(_ broker: Broker) -> Binding<Bool> {
+        Binding(
+            get: { store.enabledBrokers.contains(broker) },
+            set: { on in
+                busy = broker
+                error = nil
+                Task {
+                    do { try await store.setBrokerEnabled(broker, on) } catch { self.error = error.localizedDescription }
+                    busy = nil
+                }
+            }
+        )
     }
 }

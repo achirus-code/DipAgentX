@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DipAgentX – Trading-Bots für Revolut X, auf Wunsch mit Claude</title>
-  <meta name="description" content="DipAgentX: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
+  <title>DipAgentX – Trading-Bots für Revolut X und Trade Republic, auf Wunsch mit Claude</title>
+  <meta name="description" content="DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#08080b">
-  <meta property="og:title" content="DipAgentX – Trading-Bots für Revolut X">
+  <meta property="og:title" content="DipAgentX – Trading-Bots für Revolut X und Trade Republic">
   <meta property="og:description" content="Bots laufen 24/7 in Docker, die Kontrolle sitzt in der macOS-Menüleiste. Open Source, Paper-Modus zuerst.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://achirus-code.github.io/DipAgentX/screenshots/bots.png">
@@ -344,8 +344,8 @@
       <div class="hero-grid">
         <div>
           <h1>
-            <span class="de">Trading-Bots für Revolut&nbsp;X.<br><span class="grad">Zuhause im Docker, gesteuert aus der Menüleiste.</span></span>
-            <span class="en">Trading bots for Revolut&nbsp;X.<br><span class="grad">Running in Docker, controlled from your menu bar.</span></span>
+            <span class="de">Trading-Bots für Revolut&nbsp;X und Trade&nbsp;Republic.<br><span class="grad">Zuhause im Docker, gesteuert aus der Menüleiste.</span></span>
+            <span class="en">Trading bots for Revolut&nbsp;X and Trade&nbsp;Republic.<br><span class="grad">Running in Docker, controlled from your menu bar.</span></span>
           </h1>
           <p class="lead">
             <span class="de">DipAgentX kauft nach Kursrücksetzern und verkauft, wenn sich der Kurs erholt hat – nach festen Regeln oder, wenn du willst, entscheidet Claude. Rund um die Uhr auf deinem Server, NAS, Raspberry&nbsp;Pi oder in Home Assistant. Eine winzige macOS-App zeigt Trades, Bots und Gewinn.</span>
@@ -458,7 +458,7 @@
         <div class="card">
           <span class="tag">macOS</span>
           <h3><span class="de">Menüleisten-App</span><span class="en">Menu bar app</span></h3>
-          <p><span class="de">Ein Icon in der Menüleiste. Ein Klick zeigt Gewinn, Trades und Bots. Bots anlegen, Limits setzen, Revolut X verbinden – alles ohne Terminal.</span><span class="en">One icon in the menu bar. A click shows profit, trades and bots. Create bots, set limits, connect Revolut X – no terminal needed.</span></p>
+          <p><span class="de">Ein Icon in der Menüleiste. Ein Klick zeigt Gewinn, Trades und Bots. Zwei Tabs über der Statistik wechseln zwischen Revolut X und Trade Republic. Bots anlegen, Limits setzen, Broker verbinden – alles ohne Terminal.</span><span class="en">One icon in the menu bar. A click shows profit, trades and bots. Two tabs above the statistics switch between Revolut X and Trade Republic. Create bots, set limits, connect the brokers – no terminal needed.</span></p>
         </div>
         <div class="arrow">⇄</div>
         <div class="card">
@@ -468,9 +468,9 @@
         </div>
         <div class="arrow">⇄</div>
         <div class="card">
-          <span class="tag">Exchange</span>
-          <h3>Revolut X</h3>
-          <p><span class="de">Signierte REST-Aufrufe (Ed25519). Der private Schlüssel wird auf dem Agent erzeugt und verlässt ihn nie. Der API-Key kann zusätzlich auf die IP des Agents beschränkt werden.</span><span class="en">Signed REST calls (Ed25519). The private key is generated on the agent and never leaves it. The API key can additionally be restricted to the agent's IP.</span></p>
+          <span class="tag">Broker</span>
+          <h3>Revolut X · Trade Republic</h3>
+          <p><span class="de">Revolut X: signierte REST-Aufrufe (Ed25519), der private Schlüssel verlässt den Agent nie. Trade Republic (Aktien, ETFs, Krypto): Paper-Modus mit echten Kursen ohne Anmeldung; für Live-Handel meldet sich der Agent wie die Web-App an – bestätigt in der Trade-Republic-App.</span><span class="en">Revolut X: signed REST calls (Ed25519), the private key never leaves the agent. Trade Republic (stocks, ETFs, crypto): paper mode with real prices without a login; for live trading the agent logs in like the web app – confirmed in the Trade Republic app.</span></p>
         </div>
       </div>
     </div>
@@ -487,7 +487,7 @@
         <div class="card">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3h4v4l-3 1v2l3 1v4h-4l-1 3H9l-1-3H4v-4l3-1v-2L4 10V6h4z"/><circle cx="12" cy="12" r="2.5"/></svg></div>
           <h3><span class="de">Paper-Modus zuerst</span><span class="en">Paper mode first</span></h3>
-          <p><span class="de">Echte Kurse, simulierte Orders und Gebühren. Live-Trading wird nur in der App aktiviert – nach Verbindung mit Revolut X und doppelter Bestätigung.</span><span class="en">Real prices, simulated orders and fees. Live trading is only switched on in the app – after Revolut X is connected and after a double confirmation.</span></p>
+          <p><span class="de">Echte Kurse, simulierte Orders und Gebühren. Live-Trading wird pro Broker nur in der App aktiviert – nach der Verbindung und doppelter Bestätigung.</span><span class="en">Real prices, simulated orders and fees. Live trading is only switched on in the app, per broker – after it is connected and after a double confirmation.</span></p>
         </div>
         <div class="card">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
@@ -727,18 +727,18 @@
       </div>
     </div>
     <p style="margin-top:16px">
-      <span class="de">Keine Anlageberatung: DipAgentX, seine Strategien und die Einschätzungen der KI sind keine Empfehlung zum Kauf oder Verkauf von Kryptowährungen. Der Handel ist mit Verlustrisiken bis zum Totalverlust verbunden; du handelst auf eigene Verantwortung. DipAgentX steht in keiner Verbindung zu Revolut oder Anthropic.</span>
-      <span class="en">Not investment advice: DipAgentX, its strategies and the AI's assessments are no recommendation to buy or sell cryptocurrencies. Trading involves risk of loss up to a total loss; you trade at your own responsibility. DipAgentX is not affiliated with Revolut or Anthropic.</span>
+      <span class="de">Keine Anlageberatung: DipAgentX, seine Strategien und die Einschätzungen der KI sind keine Empfehlung zum Kauf oder Verkauf von Kryptowährungen. Der Handel ist mit Verlustrisiken bis zum Totalverlust verbunden; du handelst auf eigene Verantwortung. DipAgentX steht in keiner Verbindung zu Revolut, Trade Republic oder Anthropic. Trade Republic bietet keine offizielle Schnittstelle; DipAgentX nutzt die der Web-App, was die Bedingungen von Trade Republic nicht erlauben – Nutzung auf eigenes Risiko.</span>
+      <span class="en">Not investment advice: DipAgentX, its strategies and the AI's assessments are no recommendation to buy or sell cryptocurrencies. Trading involves risk of loss up to a total loss; you trade at your own responsibility. DipAgentX is not affiliated with Revolut, Trade Republic or Anthropic. Trade Republic offers no official interface; DipAgentX uses the one of its web app, which Trade Republic's terms don't allow – use at your own risk.</span>
     </p>
   </div>
 </footer>
 
 <script>
   (function () {
-    var titles = { de: "DipAgentX – Trading-Bots für Revolut X, auf Wunsch mit Claude", en: "DipAgentX – Trading bots for Revolut X, with Claude if you like" };
+    var titles = { de: "DipAgentX – Trading-Bots für Revolut X und Trade Republic, auf Wunsch mit Claude", en: "DipAgentX – Trading bots for Revolut X and Trade Republic, with Claude if you like" };
     var descs = {
-      de: "DipAgentX: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
-      en: "DipAgentX: trading bots for Revolut X that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Four rule-based strategies or let Claude decide. Open source, paper mode first."
+      de: "DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
+      en: "DipAgentX: trading bots for Revolut X and Trade Republic that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Four rule-based strategies or let Claude decide. Open source, paper mode first."
     };
     function setLang(lang, store) {
       if (lang !== "de" && lang !== "en") lang = "en";

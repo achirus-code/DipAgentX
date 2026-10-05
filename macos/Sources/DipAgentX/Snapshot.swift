@@ -2,8 +2,8 @@ import AppKit
 import DipAgentXKit
 import SwiftUI
 
-/// Developer aid: `DipAgentX --snapshot <dir> -serverURL <url> -apiToken <token> [-snapshotHeight 1200]`
-/// renders every screen of the panel (light + dark) into PNG files and quits.
+/// Developer aid: `DipAgentX --snapshot <dir> -serverURL <url> -apiToken <token> [-snapshotHeight 1200]
+/// [-broker traderepublic]` renders every screen of the panel (light + dark) into PNG files and quits.
 enum SnapshotRunner {
     /// Returns true if snapshot mode was started (the app then quits by itself).
     @MainActor
@@ -19,6 +19,7 @@ enum SnapshotRunner {
             let firstBot = store.bots.first?.id
             var screens: [(String, MainTab, Route?)] = [
                 ("bots", .bots, nil), ("trades", .trades, nil), ("settings", .settings, nil), ("new-bot", .bots, .editor(nil)), ("exchange-setup", .settings, .exchangeSetup),
+                ("tr-setup", .settings, .tradeRepublicSetup),
             ]
             if let firstBot { screens += [("detail", .bots, .bot(firstBot)), ("edit-bot", .bots, .editor(firstBot))] }
 

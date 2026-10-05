@@ -4,7 +4,7 @@ configuration:
     description: Token, mit dem sich die macOS-App anmeldet. Leer lassen, dann erzeugt der Agent beim ersten Start eines (steht im Add-on-Protokoll).
   exchange:
     name: Börse
-    description: revolutx = echte Börse, mock = simulierter Markt zum Ausprobieren.
+    description: revolutx = die echten Broker (Revolut X und Trade Republic), mock = simulierter Markt zum Ausprobieren.
   tick_seconds:
     name: Prüfintervall (Sekunden)
     description: Wie oft die Bots den Markt prüfen.
@@ -17,5 +17,8 @@ configuration:
   anthropic_api_key:
     name: Anthropic-API-Key
     description: Nur für die Strategie „KI entscheidet“ – Claude entscheidet, wann gekauft und verkauft wird. Key unter console.anthropic.com; jede Prüfung kostet ein paar Cent.
+  tr_app_version:
+    name: Trade-Republic-Web-App-Version
+    description: Nur falls Trade Republic die Anmeldung als veraltet ablehnt – die Version von app.traderepublic.com, die der Agent meldet. Leer lassen für die eingebaute.
 network:
   3470/tcp: Port für die DipAgentX-macOS-App

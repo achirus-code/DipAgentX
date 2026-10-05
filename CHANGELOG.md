@@ -2,12 +2,51 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.20.0] – 2026-10-05
+
+### Added
+
+- **Trade Republic as a second broker.** Bots can now trade stocks, ETFs and crypto on Trade Republic as well – with
+  every strategy, paper mode, live trading, limits, statistics, trade history, profit chart and notifications. Revolut X
+  stays as it was.
+- **Two tabs above the statistics** switch between Revolut X and Trade Republic (macOS menu bar app and iPhone). Each
+  broker has its own result, bots, trades, trading mode (paper/live switch with double confirmation), risk limits and
+  simulation fees; the tabs show both results at a glance.
+- **Brokers on/off** (*Settings → Brokers*): a broker that is switched off is left alone – its bots stop, no prices,
+  no login. With only one broker on, the tabs disappear and the app looks as before. A broker with open trades or
+  orders can't be switched off.
+- **Paper trading on Trade Republic without a login:** prices, charts, trading hours and the instrument search come
+  from Trade Republic's public market data. New bots start in paper mode, as on Revolut X.
+- **Trade Republic login from the app** (*Settings → Trade Republic*): phone number and PIN, confirmed in the Trade
+  Republic app (or with an authenticator code). Trade Republic ends every login after 24 hours; with the PIN saved on
+  the agent, the agent starts the next login itself while live trading is on or live trades are open – you only
+  confirm it in the Trade Republic app, and the DipAgentX app reminds you.
+- **Instrument search** in the bot editor (name, ticker or ISIN) – bots show the instrument's name and ticker
+  instead of the ISIN.
+- **Fixed fees per order:** Trade Republic charges 1 € per order. The simulation, the "never sell at a loss" rule,
+  break-even prices, trailing stops and the fee check in the bot editor include it; the paper fees have a new
+  *Fee per order* field.
+- **Trading hours:** stocks and ETFs trade Monday to Friday 07:30–23:00 (Europe/Berlin). Outside them the bots wait
+  ("Market closed · opens Mon 07:30") and no order is sent; crypto trades around the clock.
+- New option `TR_APP_VERSION` (and the add-on option *Trade Republic web app version*) in case Trade Republic refuses
+  the login as outdated.
 
 ### Changed
 
 - **New icon with the X of Revolut X** in the bottom-right corner – app icon (macOS, iPhone), menu bar icon,
   Home Assistant add-on and website.
+- The REST API takes `?exchange=revolutx|traderepublic` for the summary, limits, paper fees, balances, pairs, trades
+  and the live switch (`?exchange=all` for bots and trades of every broker); bots and trades carry their `exchange`.
+  Without it everything refers to Revolut X, so older apps keep working – they only see the Revolut X bots.
+- "AI decides" knows whether it looks at a coin, a stock or an ETF and on which broker; the Crypto Fear & Greed index
+  is only used for crypto.
+- Backups don't include the Trade Republic login – log in again after restoring one.
+
+### Note
+
+Trade Republic has no official API for programs. DipAgentX uses the interface of the Trade Republic web app; Trade
+Republic's customer agreement doesn't allow access through other programs and Trade Republic may block it or the
+account. The app says so before the login. Use it at your own risk.
 
 ## [1.19.0] – 2026-10-05
 

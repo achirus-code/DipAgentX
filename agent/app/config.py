@@ -24,6 +24,8 @@ class Settings:
     tick_seconds: int
     taker_fee: Decimal
     mock_speed: float
+    # Trade Republic: the web app version reported at the login (TR refuses outdated ones)
+    tr_app_version: str = ""
 
     @property
     def db_path(self) -> Path:
@@ -70,4 +72,5 @@ def load_settings() -> Settings:
         tick_seconds=max(5, int(os.getenv("TICK_SECONDS", "30"))),
         taker_fee=Decimal(os.getenv("TAKER_FEE", "0.0009")),
         mock_speed=float(os.getenv("MOCK_SPEED", "1")),
+        tr_app_version=os.getenv("TR_APP_VERSION", "").strip(),
     )

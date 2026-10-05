@@ -1,7 +1,7 @@
 import DipAgentXKit
 import SwiftUI
 
-/// Global switch between paper mode (default) and live trading on Revolut X.
+/// The selected broker's switch between paper mode (default) and live trading.
 /// Switching on needs two explicit confirmations; switching off warns that all live positions get sold.
 struct LiveTradingSection: View {
     enum Step { case idle, warning, finalConfirmation, disableWarning }
@@ -17,16 +17,18 @@ struct LiveTradingSection: View {
         _step = State(initialValue: initialStep)
     }
 
-    private var live: Bool { store.status?.liveTradingAllowed ?? false }
-    private var exchangeReady: Bool { store.exchangeInfo?.connected == true }
+    private var broker: Broker { store.broker }
+    private var live: Bool { store.isLive }
+    private var exchangeReady: Bool { store.brokerReady(broker) }
+    private var bots: [Bot] { store.brokerBots }
     /// Bots with a simulated position that is still open – it keeps being simulated until it is sold.
-    private var openPaperPositions: [Bot] { store.bots.filter { $0.position?.paper == true } }
-    private var liveBotsWithPosition: [Bot] { store.bots.filter { $0.position?.paper == false } }
+    private var openPaperPositions: [Bot] { bots.filter { $0.position?.paper == true } }
+    private var liveBotsWithPosition: [Bot] { bots.filter { $0.position?.paper == false } }
     private var openLivePositions: Int { liveBotsWithPosition.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel("Trading mode")
+            SectionLabel("Trading mode", trailing: store.showsBrokerTabs ? AnyView(BrokerName(broker: broker)) : nil)
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
@@ -38,7 +40,7 @@ struct LiveTradingSection: View {
                         VStack(alignment: .leading, spacing: 2) {
                             (live ? Text("Live trading active") : Text("Paper mode (demo)"))
                                 .font(.system(size: 12.5, weight: .semibold))
-                            (live ? Text("Real orders with real money on Revolut X") : Text("Real prices, orders are only simulated"))
+                            (live ? Text("Real orders with real money on \(broker.title)") : Text("Real prices, orders are only simulated"))
                                 .font(.system(size: 10.5)).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -54,7 +56,11 @@ struct LiveTradingSection: View {
                     }
 
                     if !live && !exchangeReady && step == .idle {
-                        note("Connect Revolut X first – then live trading can be switched on.", icon: "link")
+                        if broker == .tradeRepublic {
+                            note("Log in to Trade Republic first – then live trading can be switched on.", icon: "link")
+                        } else {
+                            note("Connect Revolut X first – then live trading can be switched on.", icon: "link")
+                        }
                     }
 
                     switch step {
@@ -95,11 +101,16 @@ struct LiveTradingSection: View {
             Label("1/2 · Attention: real money", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.orange)
-            if store.bots.isEmpty {
-                bullet("All bots you create afterwards buy and sell with your real balance on Revolut X.")
+            if bots.isEmpty {
+                bullet("All \(broker.title) bots you create afterwards buy and sell with your real balance on \(broker.title).")
             } else {
-                bullet("All existing bots are switched to live as well and then trade with your real balance on Revolut X: \(store.bots.map(\.name).joined(separator: ", ")).")
+                bullet("All existing \(broker.title) bots are switched to live as well and then trade with your real balance: \(bots.map(\.name).joined(separator: ", ")).")
                 bullet("If a bot should not trade with real money, you have to delete it first (Bots tab).", emphasized: true)
+            }
+            if broker == .tradeRepublic {
+                bullet("Trade Republic ends every login after 24 hours – confirm the new one in the Trade Republic app. While logged out the bots can't trade, not even sell at the stop-loss.", emphasized: true)
+                bullet("Stocks and ETFs only trade Monday to Friday, 07:30–23:00. Every order costs 1 €.")
+                bullet("Trade Republic offers no official interface for programs – DipAgentX uses the one of its web app. Trade Republic's terms don't allow that; it may block the access or the account.")
             }
             if !openPaperPositions.isEmpty {
                 bullet("Open paper positions (\(openPaperPositions.map(\.name).joined(separator: ", "))) are still sold simulated, afterwards the bot buys live.")
@@ -131,12 +142,12 @@ struct LiveTradingSection: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.red)
             Group {
-                if store.bots.isEmpty {
-                    Text("Enable live trading now? Bots place real orders from the next buy signal on.")
-                } else if store.bots.count == 1 {
-                    Text("Enable live trading now? Your bot is switched to live and places real orders from the next buy signal on.")
+                if bots.isEmpty {
+                    Text("Enable live trading on \(broker.title) now? Bots place real orders from the next buy signal on.")
+                } else if bots.count == 1 {
+                    Text("Enable live trading on \(broker.title) now? Your bot is switched to live and places real orders from the next buy signal on.")
                 } else {
-                    Text("Enable live trading now? All \(String(store.bots.count)) bots are switched to live and place real orders from the next buy signal on.")
+                    Text("Enable live trading on \(broker.title) now? All \(String(bots.count)) bots are switched to live and place real orders from the next buy signal on.")
                 }
             }
                 .font(.system(size: 11))
@@ -163,7 +174,7 @@ struct LiveTradingSection: View {
             if liveBotsWithPosition.isEmpty {
                 bullet("No live position is open right now – nothing will be sold.")
             } else {
-                bullet("All open live trades are closed immediately, i.e. sold at the current market price on Revolut X:", emphasized: true)
+                bullet("All open live trades are closed immediately, i.e. sold at the current market price on \(broker.title):", emphasized: true)
                 ForEach(liveBotsWithPosition) { bot in
                     if let position = bot.position {
                         HStack(spacing: 6) {
@@ -177,7 +188,7 @@ struct LiveTradingSection: View {
                 }
                 bullet("This locks in the result – even if a position is currently at a loss.")
             }
-            bullet("Afterwards all bots only trade simulated (paper).")
+            bullet("Afterwards all \(broker.title) bots only trade simulated (paper).")
             HStack {
                 Spacer()
                 Button("Cancel", action: cancel).controlSize(.small)
@@ -230,7 +241,7 @@ struct LiveTradingSection: View {
             if !failed.isEmpty {
                 error = failed.map { "\($0.botName): \($0.message)" }.joined(separator: "\n")
             } else if !closed.isEmpty {
-                info = String(localized: "\(String(closed.count)) live position(s) sold. All bots now trade in paper mode.")
+                info = String(localized: "\(String(closed.count)) live position(s) sold. All \(broker.title) bots now trade in paper mode.")
             }
         } catch {
             self.error = error.localizedDescription

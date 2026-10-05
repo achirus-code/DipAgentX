@@ -9,13 +9,15 @@ public struct SummaryCard: View {
     var trades: [Trade] = []
     var limits: Limits?
     var isDemo = false
+    /// The broker the numbers belong to – the balance footnote names it.
+    var broker: Broker = .revolutX
     /// Opens the profit chart window; nil hides the button.
     var showHistory: (() -> Void)?
     /// Collapsed: only the total and today's result – the rest on demand.
     @AppStorage("summaryExpanded") private var expanded = false
 
     public init(summary: Summary, liveAllowed: Bool, balances: [Balance] = [], bots: [Bot] = [], trades: [Trade] = [],
-                limits: Limits? = nil, isDemo: Bool = false, showHistory: (() -> Void)? = nil) {
+                limits: Limits? = nil, isDemo: Bool = false, broker: Broker = .revolutX, showHistory: (() -> Void)? = nil) {
         self.summary = summary
         self.liveAllowed = liveAllowed
         self.balances = balances
@@ -23,6 +25,7 @@ public struct SummaryCard: View {
         self.trades = trades
         self.limits = limits
         self.isDemo = isDemo
+        self.broker = broker
         self.showHistory = showHistory
     }
 
@@ -46,7 +49,7 @@ public struct SummaryCard: View {
                         .help("Live trading is active – bots trade with real money")
                 } else {
                     Badge(text: "PAPER MODE", color: .paper, icon: "testtube.2")
-                        .help("All orders are only simulated. Live trading: Settings → Trading mode")
+                        .help("All orders of this broker are only simulated. Live trading: Settings → Trading mode")
                 }
                 Image(systemName: "chevron.down")
                     .font(.ui(10, weight: .semibold)).foregroundStyle(.secondary)
@@ -163,7 +166,7 @@ public struct SummaryCard: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
-    private var balanceTitle: String { isDemo ? String(localized: "Balance (demo)") : String(localized: "Balance on Revolut X") }
+    private var balanceTitle: String { isDemo ? String(localized: "Balance (demo)") : String(localized: "Balance on \(broker.title)") }
 
     /// Spendable cash (fiat and the bots' quote currencies) – coins held in positions are not included.
     private var cash: [Balance] {

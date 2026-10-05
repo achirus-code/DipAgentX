@@ -244,16 +244,25 @@ extension View {
 struct ConnectionLabel: View {
     @Environment(AppStore.self) private var store
 
+    /// What the selected broker reports as a problem (older agents: Revolut X's error).
+    private var brokerError: String? {
+        guard let status = store.status else { return nil }
+        if let exchange = status.exchange(store.broker) {
+            return exchange.ok ? nil : (exchange.error ?? String(localized: "no data"))
+        }
+        return status.exchangeOk ? nil : (status.exchangeError ?? String(localized: "no data"))
+    }
+
     var body: some View {
         switch store.connection {
         case .connected:
             if let engineError = store.status?.engineError {
                 Label(engineError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
-            } else if let status = store.status, !status.exchangeOk {
-                Label("Agent connected · Exchange: \(status.exchangeError ?? String(localized: "no data"))", systemImage: "exclamationmark.triangle.fill")
+            } else if let error = brokerError {
+                Label("Agent connected · \(store.broker.title): \(error)", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             } else {
-                Label(store.status?.exchange == "mock" ? LocalizedStringKey("Connected · Demo market") : LocalizedStringKey("Connected · Revolut X"),
+                Label(store.status?.isDemo == true ? LocalizedStringKey("Connected · Demo market") : LocalizedStringKey("Connected · \(store.broker.title)"),
                       systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
