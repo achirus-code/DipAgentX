@@ -38,7 +38,7 @@ jobs:
           build-args: BUILD_VERSION=ci
           tags: dipagentx-agent:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
   addon:
     name: Home Assistant add-on
