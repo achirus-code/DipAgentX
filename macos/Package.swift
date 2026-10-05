@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "DipAgent",
+    name: "DipAgentX",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(path: "../shared/DipAgentKit")
+        .package(path: "../shared/DipAgentXKit")
     ],
     targets: [
         .executableTarget(
-            name: "DipAgent",
-            dependencies: [.product(name: "DipAgentKit", package: "DipAgentKit")],
-            path: "Sources/DipAgent"
+            name: "DipAgentX",
+            dependencies: [.product(name: "DipAgentXKit", package: "DipAgentXKit")],
+            path: "Sources/DipAgentX"
         )
     ]
 )

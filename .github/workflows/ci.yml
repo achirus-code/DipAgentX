@@ -36,7 +36,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: false
           build-args: BUILD_VERSION=ci
-          tags: dipagent-agent:ci
+          tags: dipagentx-agent:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -49,7 +49,7 @@ jobs:
         run: python3 scripts/sync-addon.py --check
       - name: Only the add-on has a config.yaml (the Supervisor scans the whole repository)
         run: |
-          extra=$(git ls-files | grep -E '(^|/)config\.(ya?ml|json)$' | grep -v '^homeassistant/dipagent/config.yaml$' || true)
+          extra=$(git ls-files | grep -E '(^|/)config\.(ya?ml|json)$' | grep -v '^homeassistant/dipagentx/config.yaml$' || true)
           if [ -n "$extra" ]; then echo "unexpected add-on config files:"; echo "$extra"; exit 1; fi
 
   app:
@@ -61,10 +61,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check translations
-        run: python3 ../scripts/check_localizations.py  # the script lives at the repo root since DipAgentKit
+        run: python3 ../scripts/check_localizations.py  # the script lives at the repo root since DipAgentXKit
       - name: Build app bundle
         run: ./build-app.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: DipAgent.app
-          path: macos/build/DipAgent.app
+          name: DipAgentX.app
+          path: macos/build/DipAgentX.app

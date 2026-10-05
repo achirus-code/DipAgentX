@@ -1,4 +1,4 @@
-"""DipAgent – REST API for the macOS app plus the always-on bot engine.
+"""DipAgentX – REST API for the macOS app plus the always-on bot engine.
 
 Every response is rendered in the language of the request (``Accept-Language``: German or English).
 """
@@ -31,11 +31,11 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position
 from .strategies.ai import AiStrategy
 
-VERSION = "1.18.0"
+VERSION = "1.19.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("dipagent")
+log = logging.getLogger("dipagentx")
 
 settings = load_settings()
 db = Database(settings.db_path)
@@ -97,7 +97,7 @@ async def lifespan(_: FastAPI):
     db.close()
 
 
-app = FastAPI(title="DipAgent", version=VERSION, lifespan=lifespan)
+app = FastAPI(title="DipAgentX", version=VERSION, lifespan=lifespan)
 _bearer = HTTPBearer(auto_error=False)
 
 

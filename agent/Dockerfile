@@ -1,4 +1,4 @@
-# DipAgent agent: REST API for the macOS app + the always-on bot engine.
+# DipAgentX agent: REST API for the macOS app + the always-on bot engine.
 #
 # One image for both plain Docker and the Home Assistant add-on: the entrypoint reads the add-on options from
 # /data/options.json when they exist and maps them to the same environment variables .env users set.
@@ -15,10 +15,10 @@ FROM base-${TARGETARCH} AS final
 ARG BUILD_VERSION=dev
 LABEL io.hass.version="${BUILD_VERSION}" \
       io.hass.type="addon" \
-      io.hass.name="DipAgent" \
-      io.hass.description="Trading bots for Revolut X, controlled from the DipAgent macOS menu bar app" \
-      org.opencontainers.image.title="DipAgent" \
-      org.opencontainers.image.source="https://github.com/achirus-code/DipAgent" \
+      io.hass.name="DipAgentX" \
+      io.hass.description="Trading bots for Revolut X, controlled from the DipAgentX macOS menu bar app" \
+      org.opencontainers.image.title="DipAgentX" \
+      org.opencontainers.image.source="https://github.com/achirus-code/DipAgentX" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
       org.opencontainers.image.licenses="MIT"
 
@@ -35,7 +35,7 @@ COPY app ./app
 # Unprivileged runtime user; bots, trades, settings and the Revolut X key live in /data.
 # The container starts as root only so the entrypoint can take over /data (Home Assistant mounts it root-owned)
 # and then drops to this user before uvicorn starts. `docker run --user 10001` still works as before.
-RUN useradd --system --uid 10001 dipagent && mkdir -p /data && chown dipagent /data
+RUN useradd --system --uid 10001 dipagentx && mkdir -p /data && chown dipagentx /data
 VOLUME ["/data"]
 EXPOSE 3470
 

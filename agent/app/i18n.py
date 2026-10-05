@@ -274,8 +274,8 @@ CATALOG: dict[str, L] = {
     "ai.holding": L("Claude: hold ({confidence}, {profit}) · next check in {left}", "Claude: halten ({confidence}, {profit}) · nächste Prüfung in {left}"),
     # --- engine
     "engine.instance_locked": L(
-        "Another DipAgent engine is already running with this data directory – this instance does not trade.",
-        "Eine andere DipAgent-Engine läuft bereits mit diesem Datenverzeichnis – diese Instanz handelt nicht.",
+        "Another DipAgentX engine is already running with this data directory – this instance does not trade.",
+        "Eine andere DipAgentX-Engine läuft bereits mit diesem Datenverzeichnis – diese Instanz handelt nicht.",
     ),
     "engine.no_market_data": L("No market data: {error}", "Keine Marktdaten: {error}"),
     "engine.waiting_for_order": L("Waiting for order execution …", "Warte auf Order-Ausführung …"),
@@ -423,7 +423,7 @@ CATALOG: dict[str, L] = {
     ),
     "api.connect_revx_first": L("Please connect Revolut X first", "Bitte zuerst Revolut X verbinden"),
     "api.confirm_live": L("Live trading must be confirmed explicitly", "Live-Handel muss ausdrücklich bestätigt werden"),
-    "api.invalid_backup": L("Not a valid DipAgent backup: {error}", "Kein gültiges DipAgent-Backup: {error}"),
+    "api.invalid_backup": L("Not a valid DipAgentX backup: {error}", "Kein gültiges DipAgentX-Backup: {error}"),
     "api.revx_unreachable_live": L(
         "Revolut X is not reachable – live trading stays off: {error}",
         "Revolut X nicht erreichbar – Live-Handel bleibt aus: {error}",

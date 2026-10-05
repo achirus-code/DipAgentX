@@ -1,22 +1,22 @@
-name: dipagent
+name: dipagentx
 
 services:
-  dipagent:
+  dipagentx:
     # released image (amd64 + arm64); `docker compose up -d --build` builds it from this directory instead
-    image: ghcr.io/achirus-code/dipagent:latest
+    image: ghcr.io/achirus-code/dipagentx:latest
     build: .
-    container_name: dipagent
+    container_name: dipagentx
     restart: unless-stopped
     ports:
-      # 3470 is the DipAgent default port – the app uses it automatically
+      # 3470 is the DipAgentX default port – the app uses it automatically
       - "3470:3470"
     env_file:
       - path: .env
         required: false   # without .env the defaults apply (token is generated, paper trading)
     volumes:
-      - dipagent-data:/data
+      - dipagentx-data:/data
       # optional: Revolut X private key (revx_private.pem) when configured via .env instead of the app
       - ./secrets:/secrets:ro
 
 volumes:
-  dipagent-data:
+  dipagentx-data:

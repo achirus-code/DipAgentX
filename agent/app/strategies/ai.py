@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from ..i18n import L, dur, m, pct
 from .base import COOLDOWN_HELP, COOLDOWN_LABEL, Buy, Context, Decision, Option, Param, Sell, Strategy, cooldown_left
 
-log = logging.getLogger("dipagent")
+log = logging.getLogger("dipagentx")
 
 DEFAULT_MODEL = "claude-sonnet-5"
 # Haiku 4.5 is an older generation: no effort control, no adaptive thinking, basic web search tool

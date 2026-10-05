@@ -49,13 +49,13 @@ def test_export_contains_snapshot_but_not_the_token(api):
     r = client.get("/api/backup")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/gzip"
-    assert r.headers["content-disposition"].startswith('attachment; filename="dipagent-backup-')
+    assert r.headers["content-disposition"].startswith('attachment; filename="dipagentx-backup-')
 
     with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tar:
         names = set(tar.getnames())
         manifest = json.load(tar.extractfile("manifest.json"))
-    assert names == {"manifest.json", "dipagent.db"}  # no credentials set up, never the API token
-    assert manifest["format"] == backup.FORMAT and manifest["app"] == "dipagent"
+    assert names == {"manifest.json", "dipagentx.db"}  # no credentials set up, never the API token
+    assert manifest["format"] == backup.FORMAT and manifest["app"] == "dipagentx"
     assert manifest["agent_version"] == main.VERSION and manifest["credentials"] is False
 
     # the snapshot includes what is still in the WAL: restore it elsewhere and read the bot + trade back
@@ -147,26 +147,41 @@ def _archive(files: dict[str, bytes]) -> bytes:
 
 def test_restore_rejects_foreign_files(api):
     client, main, data = api
-    manifest = json.dumps({"format": backup.FORMAT, "app": "dipagent"}).encode()
+    manifest = json.dumps({"format": backup.FORMAT, "app": "dipagentx"}).encode()
     good_db = backup.unpack(client.get("/api/backup").content, data)
     db_bytes = good_db.db_path.read_bytes()
     good_db.cleanup()
 
     cases = {
         "garbage": b"not a tar",
-        "stray entry": _archive({"manifest.json": manifest, "dipagent.db": db_bytes, "../etc/passwd": b"x"}),
-        "no manifest": _archive({"dipagent.db": db_bytes}),
-        "wrong app": _archive({"manifest.json": json.dumps({"format": 1, "app": "other"}).encode(), "dipagent.db": db_bytes}),
-        "future format": _archive({"manifest.json": json.dumps({"format": 99, "app": "dipagent"}).encode(), "dipagent.db": db_bytes}),
-        "not sqlite": _archive({"manifest.json": manifest, "dipagent.db": b"hello"}),
-        "half credentials": _archive({"manifest.json": manifest, "dipagent.db": db_bytes, "revx_api_key": b"k"}),
+        "stray entry": _archive({"manifest.json": manifest, "dipagentx.db": db_bytes, "../etc/passwd": b"x"}),
+        "no manifest": _archive({"dipagentx.db": db_bytes}),
+        "wrong app": _archive({"manifest.json": json.dumps({"format": 1, "app": "other"}).encode(), "dipagentx.db": db_bytes}),
+        "future format": _archive({"manifest.json": json.dumps({"format": 99, "app": "dipagentx"}).encode(), "dipagentx.db": db_bytes}),
+        "not sqlite": _archive({"manifest.json": manifest, "dipagentx.db": b"hello"}),
+        "half credentials": _archive({"manifest.json": manifest, "dipagentx.db": db_bytes, "revx_api_key": b"k"}),
+        "two databases": _archive({"manifest.json": manifest, "dipagentx.db": db_bytes, "dipagent.db": db_bytes}),
     }
     for label, body in cases.items():
         r = client.post("/api/restore", content=body, headers={"Content-Type": "application/gzip", "Accept-Language": "de"})
         assert r.status_code == 400, label
-        assert r.json()["detail"].startswith("Kein gültiges DipAgent-Backup"), label
+        assert r.json()["detail"].startswith("Kein gültiges DipAgentX-Backup"), label
     assert not list(data.glob("restore.*"))
     assert client.get("/api/bots").json() == []  # nothing changed
+
+
+def test_restore_accepts_backups_from_before_the_rename(api):
+    client, main, data = api
+    _bot(client, "Old")
+    good = backup.unpack(client.get("/api/backup").content, data)
+    db_bytes = good.db_path.read_bytes()
+    good.cleanup()
+    legacy = _archive({"manifest.json": json.dumps({"format": backup.FORMAT, "app": "dipagent"}).encode(),
+                       "dipagent.db": db_bytes})
+
+    unpacked = backup.unpack(legacy, data)
+    assert unpacked.db_path.name == "dipagentx.db" and unpacked.db_path.read_bytes() == db_bytes
+    unpacked.cleanup()
 
 
 def test_backup_needs_the_token(api):

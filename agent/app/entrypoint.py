@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 OPTIONS_FILE = Path("/data/options.json")
-RUN_AS = "dipagent"
+RUN_AS = "dipagentx"
 PORT = 3470
 
 # add-on option → environment variable (only these are ever taken from options.json)

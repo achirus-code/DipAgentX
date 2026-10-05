@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "agent" / "app" / "main.py"
 CHANGELOG = ROOT / "CHANGELOG.md"
-ADDON = ROOT / "homeassistant" / "dipagent"
+ADDON = ROOT / "homeassistant" / "dipagentx"
 CONFIG = ADDON / "config.yaml"
 ADDON_CHANGELOG = ADDON / "CHANGELOG.md"
 

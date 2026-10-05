@@ -1,0 +1,21 @@
+configuration:
+  api_token:
+    name: API token
+    description: Token the macOS app uses to log in. Leave empty and the agent generates one on first start (shown in the add-on log).
+  exchange:
+    name: Exchange
+    description: revolutx = real exchange, mock = simulated market for trying things out.
+  tick_seconds:
+    name: Check interval (seconds)
+    description: How often the bots check the market.
+  taker_fee:
+    name: Taker fee
+    description: Fee used for simulated (paper) trades, 0.0009 = 0.09 %.
+  mock_speed:
+    name: Simulation speed
+    description: Only for exchange = mock. 60 = one market hour per real minute.
+  anthropic_api_key:
+    name: Anthropic API key
+    description: Only for the "AI decides" strategy – Claude decides when to buy and sell. Get a key at console.anthropic.com; every check costs a few cents.
+network:
+  3470/tcp: Port for the DipAgentX macOS app

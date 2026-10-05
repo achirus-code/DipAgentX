@@ -26,7 +26,7 @@ from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, re
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
 
-log = logging.getLogger("dipagent.engine")
+log = logging.getLogger("dipagentx.engine")
 
 # market orders usually fill within a second – poll quickly first, then back off (≈ 8 s in total)
 # first read a second after placing (Revolut X rarely has complete fill data earlier), ~9 s in total

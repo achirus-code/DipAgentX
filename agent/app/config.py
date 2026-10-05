@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-log = logging.getLogger("dipagent")
+log = logging.getLogger("dipagentx")
 
 
 
@@ -27,7 +27,7 @@ class Settings:
 
     @property
     def db_path(self) -> Path:
-        return self.data_dir / "dipagent.db"
+        return self.data_dir / "dipagentx.db"
 
 
 def _resolve_token(data_dir: Path) -> str:
@@ -44,9 +44,22 @@ def _resolve_token(data_dir: Path) -> str:
     return token
 
 
+def _migrate_legacy_db(data_dir: Path) -> None:
+    """Up to 1.18 the project was called DipAgent and the database dipagent.db – take it over once."""
+    new = data_dir / "dipagentx.db"
+    if new.exists() or not (data_dir / "dipagent.db").exists():
+        return
+    for suffix in ("-wal", "-shm", ""):
+        old = data_dir / f"dipagent.db{suffix}"
+        if old.exists():
+            old.rename(data_dir / f"dipagentx.db{suffix}")
+    log.info("Renamed dipagent.db to dipagentx.db")
+
+
 def load_settings() -> Settings:
     data_dir = Path(os.getenv("DATA_DIR", "/data"))
     data_dir.mkdir(parents=True, exist_ok=True)
+    _migrate_legacy_db(data_dir)
     return Settings(
         data_dir=data_dir,
         api_token=_resolve_token(data_dir),

@@ -20,14 +20,18 @@ from typing import Any
 
 FORMAT = 1
 MANIFEST = "manifest.json"
-DB_FILE = "dipagent.db"
+DB_FILE = "dipagentx.db"
+APP = "dipagentx"
+# backups made before the rename to DipAgentX (up to 1.18) – still accepted on restore
+LEGACY_DB_FILE = "dipagent.db"
+LEGACY_APP = "dipagent"
 CREDENTIAL_FILES = ("revx_api_key", "revx_private.pem")
-ALLOWED = {MANIFEST, DB_FILE, *CREDENTIAL_FILES}
+ALLOWED = {MANIFEST, DB_FILE, LEGACY_DB_FILE, *CREDENTIAL_FILES}
 MAX_SIZE = 256 * 1024 * 1024  # a database of trades is a few MB; anything bigger is not one of ours
 
 
 class InvalidBackup(Exception):
-    """The uploaded file is not a DipAgent backup (message in English, rendered via api.invalid_backup)."""
+    """The uploaded file is not a DipAgentX backup (message in English, rendered via api.invalid_backup)."""
 
 
 def _add(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o600) -> None:
@@ -40,7 +44,7 @@ def _add(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o600) -> Non
 
 def create(db_snapshot: bytes, credentials: dict[str, bytes], meta: dict[str, Any]) -> tuple[bytes, str]:
     """Build the archive; returns (bytes, suggested file name)."""
-    manifest = {"format": FORMAT, "app": "dipagent", "created_at": int(time.time() * 1000), **meta,
+    manifest = {"format": FORMAT, "app": APP, "created_at": int(time.time() * 1000), **meta,
                 "credentials": bool(credentials)}
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -49,7 +53,7 @@ def create(db_snapshot: bytes, credentials: dict[str, bytes], meta: dict[str, An
         for name in CREDENTIAL_FILES:
             if name in credentials:
                 _add(tar, name, credentials[name])
-    return buf.getvalue(), time.strftime("dipagent-backup-%Y%m%d-%H%M.tgz")
+    return buf.getvalue(), time.strftime("dipagentx-backup-%Y%m%d-%H%M.tgz")
 
 
 @dataclass
@@ -82,14 +86,18 @@ def unpack(data: bytes, data_dir: Path) -> Unpacked:
                 raise InvalidBackup(f"unexpected entry {member.name!r}")
             with tar.extractfile(member) as f:  # type: ignore[union-attr]
                 members[member.name] = f.read()
+    if LEGACY_DB_FILE in members:
+        if DB_FILE in members:
+            raise InvalidBackup("two databases")
+        members[DB_FILE] = members.pop(LEGACY_DB_FILE)
     if MANIFEST not in members or DB_FILE not in members:
         raise InvalidBackup("manifest or database missing")
     try:
         manifest = json.loads(members[MANIFEST])
     except ValueError as exc:
         raise InvalidBackup("manifest is not valid JSON") from exc
-    if not isinstance(manifest, dict) or manifest.get("app") != "dipagent":
-        raise InvalidBackup("not a DipAgent backup")
+    if not isinstance(manifest, dict) or manifest.get("app") not in (APP, LEGACY_APP):
+        raise InvalidBackup("not a DipAgentX backup")
     if manifest.get("format") != FORMAT:
         raise InvalidBackup(f"unsupported backup format {manifest.get('format')!r}")
     credentials = {name: members[name] for name in CREDENTIAL_FILES if name in members}
@@ -121,7 +129,7 @@ def _check_database(path: Path) -> None:
     except sqlite3.DatabaseError as exc:
         raise InvalidBackup("not a SQLite database") from exc
     if not {"bots", "trades", "settings"} <= tables:
-        raise InvalidBackup("database has no DipAgent tables")
+        raise InvalidBackup("database has no DipAgentX tables")
     # the temporary connection may have left journal files behind
     for suffix in ("-wal", "-shm", "-journal"):
         Path(str(path) + suffix).unlink(missing_ok=True)

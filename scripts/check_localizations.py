@@ -17,12 +17,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [ROOT / "shared" / "DipAgentKit" / "Sources", ROOT / "macos" / "Sources", ROOT / "ios" / "DipAgent"]
+SOURCES = [ROOT / "shared" / "DipAgentXKit" / "Sources", ROOT / "macos" / "Sources", ROOT / "ios" / "DipAgentX"]
 RESOURCES = ROOT / "shared" / "Localization"
 
 # literals that are not UI text (identifiers, protocol values, product names …)
 IGNORE = {
-    "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgent", "English", "Deutsch", "System",
+    "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgentX", "English", "Deutsch", "System",
     "Authorization", "Accept", "Accept-Language", "Content-Type", "application/json",
     "GET", "POST", "PUT", "DELETE", "AppleLanguages", "LIVE", "Bots", "Trades", "Name", "Agent",
     " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken", "Not Found",

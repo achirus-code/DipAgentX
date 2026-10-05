@@ -14,7 +14,7 @@ from .i18n import Problem
 from .revolutx import RevolutXClient
 
 D0 = Decimal(0)
-log = logging.getLogger("dipagent.exchange")
+log = logging.getLogger("dipagentx.exchange")
 
 
 def dec(value: object, default: Decimal = D0) -> Decimal:

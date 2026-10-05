@@ -24,7 +24,7 @@ API_PREFIX = "/api/1.0"
 # idempotent GETs are retried on network errors, 429 and 5xx; orders (POST) are never resent
 RETRY_DELAYS = (0.5, 1.0, 2.0)
 
-log = logging.getLogger("dipagent.revolutx")
+log = logging.getLogger("dipagentx.revolutx")
 
 
 class RevolutXError(Exception):

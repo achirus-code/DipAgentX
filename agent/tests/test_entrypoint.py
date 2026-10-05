@@ -43,7 +43,7 @@ def test_unknown_keys_are_ignored():
 
 
 def test_take_over_data_dir_skips_options_json(tmp_path, monkeypatch):
-    (tmp_path / "dipagent.db").write_text("")
+    (tmp_path / "dipagentx.db").write_text("")
     (tmp_path / "api_token").write_text("t")
     (tmp_path / "options.json").write_text("{}")
     calls = []
@@ -51,7 +51,7 @@ def test_take_over_data_dir_skips_options_json(tmp_path, monkeypatch):
 
     entrypoint.take_over_data_dir(tmp_path, 10001, 10001)
 
-    assert sorted(calls) == [("api_token", 10001, 10001), ("dipagent.db", 10001, 10001), (tmp_path.name, 10001, 10001)]
+    assert sorted(calls) == [("api_token", 10001, 10001), ("dipagentx.db", 10001, 10001), (tmp_path.name, 10001, 10001)]
 
 
 def test_take_over_data_dir_survives_chown_errors(tmp_path, monkeypatch, capsys):
@@ -63,3 +63,14 @@ def test_take_over_data_dir_survives_chown_errors(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(os, "chown", fail)
     entrypoint.take_over_data_dir(tmp_path, 10001, 10001)
     assert "cannot chown" in capsys.readouterr().err
+
+
+def test_legacy_database_is_taken_over(tmp_path, monkeypatch):
+    from app import config
+
+    (tmp_path / "dipagent.db").write_text("db")
+    (tmp_path / "dipagent.db-wal").write_text("wal")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    assert config.load_settings().db_path.read_text() == "db"
+    assert sorted(p.name for p in tmp_path.glob("dipagent*")) == ["dipagentx.db", "dipagentx.db-wal"]

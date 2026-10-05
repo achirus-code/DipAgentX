@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DipAgent – Trading-Bots für Revolut X, auf Wunsch mit Claude</title>
-  <meta name="description" content="DipAgent: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
+  <title>DipAgentX – Trading-Bots für Revolut X, auf Wunsch mit Claude</title>
+  <meta name="description" content="DipAgentX: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#08080b">
-  <meta property="og:title" content="DipAgent – Trading-Bots für Revolut X">
+  <meta property="og:title" content="DipAgentX – Trading-Bots für Revolut X">
   <meta property="og:description" content="Bots laufen 24/7 in Docker, die Kontrolle sitzt in der macOS-Menüleiste. Open Source, Paper-Modus zuerst.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://achirus-code.github.io/DipAgent/screenshots/bots.png">
-  <meta property="og:url" content="https://achirus-code.github.io/DipAgent/">
-  <link rel="canonical" href="https://achirus-code.github.io/DipAgent/">
+  <meta property="og:image" content="https://achirus-code.github.io/DipAgentX/screenshots/bots.png">
+  <meta property="og:url" content="https://achirus-code.github.io/DipAgentX/">
+  <link rel="canonical" href="https://achirus-code.github.io/DipAgentX/">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
   <style>
@@ -319,7 +319,7 @@
 <header>
   <div class="wrap">
     <nav>
-      <a class="brand" href="#"><img src="icon.svg" alt="">DipAgent</a>
+      <a class="brand" href="#"><img src="icon.svg" alt="">DipAgentX</a>
       <div class="links">
         <a href="#ai"><span class="de">KI</span><span class="en">AI</span></a>
         <a href="#how"><span class="de">So funktioniert's</span><span class="en">How it works</span></a>
@@ -327,7 +327,7 @@
         <a href="#strategies"><span class="de">Strategien</span><span class="en">Strategies</span></a>
         <a href="#homeassistant">Home Assistant</a>
         <a href="#start"><span class="de">Loslegen</span><span class="en">Get started</span></a>
-        <a href="https://github.com/achirus-code/DipAgent">GitHub</a>
+        <a href="https://github.com/achirus-code/DipAgentX">GitHub</a>
       </div>
       <div class="lang" role="group" aria-label="Sprache / Language">
         <button type="button" data-lang="de" aria-pressed="true">DE</button>
@@ -348,8 +348,8 @@
             <span class="en">Trading bots for Revolut&nbsp;X.<br><span class="grad">Running in Docker, controlled from your menu bar.</span></span>
           </h1>
           <p class="lead">
-            <span class="de">DipAgent kauft nach Kursrücksetzern und verkauft, wenn sich der Kurs erholt hat – nach festen Regeln oder, wenn du willst, entscheidet Claude. Rund um die Uhr auf deinem Server, NAS, Raspberry&nbsp;Pi oder in Home Assistant. Eine winzige macOS-App zeigt Trades, Bots und Gewinn.</span>
-            <span class="en">DipAgent buys after price dips and sells once the price has recovered – by fixed rules or, if you like, Claude decides. Around the clock on your home server, NAS, Raspberry&nbsp;Pi or inside Home Assistant. A tiny macOS app shows your trades, bots and profit.</span>
+            <span class="de">DipAgentX kauft nach Kursrücksetzern und verkauft, wenn sich der Kurs erholt hat – nach festen Regeln oder, wenn du willst, entscheidet Claude. Rund um die Uhr auf deinem Server, NAS, Raspberry&nbsp;Pi oder in Home Assistant. Eine winzige macOS-App zeigt Trades, Bots und Gewinn.</span>
+            <span class="en">DipAgentX buys after price dips and sells once the price has recovered – by fixed rules or, if you like, Claude decides. Around the clock on your home server, NAS, Raspberry&nbsp;Pi or inside Home Assistant. A tiny macOS app shows your trades, bots and profit.</span>
           </p>
           <div class="cta">
             <a class="btn primary" href="#start">
@@ -360,7 +360,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/></svg>
               <span class="de">KI-Strategie</span><span class="en">AI strategy</span>
             </a>
-            <a class="btn" href="https://github.com/achirus-code/DipAgent">
+            <a class="btn" href="https://github.com/achirus-code/DipAgentX">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 8.36 22.9c.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
               <span class="de">Quellcode auf GitHub</span><span class="en">Source on GitHub</span>
             </a>
@@ -382,8 +382,8 @@
       <div class="disclaimer">
         <span>⚠️</span>
         <p>
-          <span class="de"><strong>Keine Anlageberatung.</strong> DipAgent ist ein persönliches Open-Source-Projekt und keine Finanzdienstleistung. Der Handel mit Kryptowährungen ist mit Verlustrisiken verbunden – bis hin zum Totalverlust des eingesetzten Kapitals. Auch die Entscheidungen der KI-Strategie sind keine Empfehlungen, sondern automatisierte Einschätzungen, die falsch liegen können. Alles startet im <strong>Paper-Modus</strong> (echte Kurse, simulierte Orders). Schalte Live-Trading erst ein, wenn du deinem Setup vertraust, und setze nur Geld ein, dessen Verlust du verkraften kannst.</span>
-          <span class="en"><strong>Not investment advice.</strong> DipAgent is a personal open-source project, not a financial service. Trading cryptocurrencies involves risk of loss – up to the total loss of the capital you put in. The decisions of the AI strategy are not recommendations either, but automated assessments that can be wrong. Everything starts in <strong>paper mode</strong> (real prices, simulated orders). Only enable live trading once you trust your setup, and only use money you can afford to lose.</span>
+          <span class="de"><strong>Keine Anlageberatung.</strong> DipAgentX ist ein persönliches Open-Source-Projekt und keine Finanzdienstleistung. Der Handel mit Kryptowährungen ist mit Verlustrisiken verbunden – bis hin zum Totalverlust des eingesetzten Kapitals. Auch die Entscheidungen der KI-Strategie sind keine Empfehlungen, sondern automatisierte Einschätzungen, die falsch liegen können. Alles startet im <strong>Paper-Modus</strong> (echte Kurse, simulierte Orders). Schalte Live-Trading erst ein, wenn du deinem Setup vertraust, und setze nur Geld ein, dessen Verlust du verkraften kannst.</span>
+          <span class="en"><strong>Not investment advice.</strong> DipAgentX is a personal open-source project, not a financial service. Trading cryptocurrencies involves risk of loss – up to the total loss of the capital you put in. The decisions of the AI strategy are not recommendations either, but automated assessments that can be wrong. Everything starts in <strong>paper mode</strong> (real prices, simulated orders). Only enable live trading once you trust your setup, and only use money you can afford to lose.</span>
         </p>
       </div>
     </div>
@@ -463,7 +463,7 @@
         <div class="arrow">⇄</div>
         <div class="card">
           <span class="tag">Docker · Home Assistant</span>
-          <h3>DipAgent Agent</h3>
+          <h3>DipAgentX Agent</h3>
           <p><span class="de">Kleiner Python-Dienst, der alle 30 Sekunden den Markt prüft, die Bots auswertet und Orders platziert. Speichert Bots, Trades und Schlüssel in einem Docker-Volume.</span><span class="en">Small Python service that checks the market every 30 seconds, evaluates the bots and places orders. Stores bots, trades and keys in a Docker volume.</span></p>
         </div>
         <div class="arrow">⇄</div>
@@ -590,8 +590,8 @@
           </span>
           <h2><span class="de">Läuft dort, wo dein Smart Home schon wach ist.</span><span class="en">Runs where your smart home is already awake.</span></h2>
           <p class="muted" style="margin-top:14px;font-size:18px">
-            <span class="de">Wer Home Assistant betreibt, hat bereits eine Maschine, die 24/7 läuft. DipAgent gibt es deshalb als <strong style="color:var(--text)">Add-on</strong>: der Agent wird im Add-on-Store installiert, aktualisiert und gesichert – wie jedes andere Add-on. Kein Docker-Wissen, kein Terminal.</span>
-            <span class="en">If you run Home Assistant you already own a machine that is on 24/7. That is why DipAgent ships as an <strong style="color:var(--text)">add-on</strong>: the agent is installed, updated and backed up from the add-on store – like any other add-on. No Docker knowledge, no terminal.</span>
+            <span class="de">Wer Home Assistant betreibt, hat bereits eine Maschine, die 24/7 läuft. DipAgentX gibt es deshalb als <strong style="color:var(--text)">Add-on</strong>: der Agent wird im Add-on-Store installiert, aktualisiert und gesichert – wie jedes andere Add-on. Kein Docker-Wissen, kein Terminal.</span>
+            <span class="en">If you run Home Assistant you already own a machine that is on 24/7. That is why DipAgentX ships as an <strong style="color:var(--text)">add-on</strong>: the agent is installed, updated and backed up from the add-on store – like any other add-on. No Docker knowledge, no terminal.</span>
           </p>
           <p class="muted" style="margin-top:14px">
             <span class="de">Das Add-on hat keine eigene Weboberfläche. Es stellt nur die Schnittstelle bereit, mit der die macOS-App spricht. Bots, Trades, Gewinn und die Revolut-X-Verbindung verwaltest du wie gewohnt in der Menüleisten-App – nur die Adresse des Agents ist jetzt dein Home-Assistant-Host.</span>
@@ -626,8 +626,8 @@
           <h3 style="margin-bottom:16px"><span class="de">Installation in fünf Schritten</span><span class="en">Installation in five steps</span></h3>
           <ol class="ha-steps">
             <li><div><span class="de"><strong>Repository hinzufügen:</strong> Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories.</span><span class="en"><strong>Add the repository:</strong> Settings → Add-ons → Add-on store → ⋮ → Repositories.</span>
-              <div class="ha-repo"><span>https://github.com/achirus-code/DipAgent</span><button type="button" data-copy="https://github.com/achirus-code/DipAgent"><span class="de">Kopieren</span><span class="en">Copy</span></button></div></div></li>
-            <li><div><span class="de"><strong>DipAgent installieren</strong> und den Tab <strong>Konfiguration</strong> öffnen.</span><span class="en"><strong>Install DipAgent</strong> and open its <strong>Configuration</strong> tab.</span></div></li>
+              <div class="ha-repo"><span>https://github.com/achirus-code/DipAgentX</span><button type="button" data-copy="https://github.com/achirus-code/DipAgentX"><span class="de">Kopieren</span><span class="en">Copy</span></button></div></div></li>
+            <li><div><span class="de"><strong>DipAgentX installieren</strong> und den Tab <strong>Konfiguration</strong> öffnen.</span><span class="en"><strong>Install DipAgentX</strong> and open its <strong>Configuration</strong> tab.</span></div></li>
             <li><div><span class="de"><strong>API-Token</strong> setzen (optional). Bleibt er leer, erzeugt der Agent beim ersten Start einen und schreibt ihn ins Add-on-Log.</span><span class="en">Set an <strong>API token</strong> (optional). If left empty, the agent generates one on first start and prints it to the add-on log.</span></div></li>
             <li><div><span class="de"><strong>Starten.</strong> Der Status wechselt auf „Gestartet“, sobald die Schnittstelle antwortet.</span><span class="en"><strong>Start.</strong> The state switches to “Started” once the API answers.</span></div></li>
             <li><div><span class="de">In der macOS-App unter <strong>Einstellungen</strong> den Home-Assistant-Host und den Token eintragen, <strong>Verbinden</strong> – fertig. Revolut X verbindest du anschließend direkt aus der App.</span><span class="en">In the macOS app, enter the Home Assistant host and the token under <strong>Settings</strong>, then <strong>Connect</strong> – done. Revolut X is connected from the app afterwards.</span></div></li>
@@ -665,14 +665,14 @@
         <div class="step">
           <div>
             <h3><span class="de">Agent starten</span><span class="en">Run the agent</span></h3>
-            <p><span class="de"><strong>Home Assistant:</strong> das <a href="#homeassistant">Add-on</a> installieren – der einfachste Weg. <strong>Ohne Home Assistant:</strong> der Agent läuft als Docker-Container auf jedem immer eingeschalteten Rechner, ob Heimserver, NAS, Raspberry Pi oder Mac mini (x86-64 und arm64). Das fertige Image kommt von GitHub; die Docker-Anleitung steht in der <a href="https://github.com/achirus-code/DipAgent#readme">README</a>.</span><span class="en"><strong>Home Assistant:</strong> install the <a href="#homeassistant">add-on</a> – the easiest way. <strong>Without Home Assistant:</strong> the agent runs as a Docker container on any always-on machine, be it a home server, NAS, Raspberry Pi or Mac mini (x86-64 and arm64). The released image comes from GitHub; the Docker guide is in the <a href="https://github.com/achirus-code/DipAgent#readme">README</a>.</span></p>
+            <p><span class="de"><strong>Home Assistant:</strong> das <a href="#homeassistant">Add-on</a> installieren – der einfachste Weg. <strong>Ohne Home Assistant:</strong> der Agent läuft als Docker-Container auf jedem immer eingeschalteten Rechner, ob Heimserver, NAS, Raspberry Pi oder Mac mini (x86-64 und arm64). Das fertige Image kommt von GitHub; die Docker-Anleitung steht in der <a href="https://github.com/achirus-code/DipAgentX#readme">README</a>.</span><span class="en"><strong>Home Assistant:</strong> install the <a href="#homeassistant">add-on</a> – the easiest way. <strong>Without Home Assistant:</strong> the agent runs as a Docker container on any always-on machine, be it a home server, NAS, Raspberry Pi or Mac mini (x86-64 and arm64). The released image comes from GitHub; the Docker guide is in the <a href="https://github.com/achirus-code/DipAgentX#readme">README</a>.</span></p>
             <p class="note"><span class="de">Noch kein Revolut-X-Konto? Mit <code>exchange = mock</code> simuliert der Agent einen Markt mit realistischen Schwankungen – zum gefahrlosen Kennenlernen.</span><span class="en">No Revolut X account yet? With <code>exchange = mock</code> the agent simulates a market with realistic ups and downs – to get to know it risk-free.</span></p>
           </div>
         </div>
         <div class="step">
           <div>
             <h3><span class="de">App installieren und verbinden</span><span class="en">Install and connect the app</span></h3>
-            <p><span class="de">Die macOS-App gibt es im <a href="https://github.com/achirus-code/DipAgent">GitHub-Repository</a>. Nach dem Start erscheint das Chart-Icon in der Menüleiste. Unter <strong>Einstellungen</strong> die Adresse des Agents (IP oder Hostname, der Port wird automatisch ergänzt) und den API-Token eintragen, dann <strong>Verbinden</strong>. Der Token landet im macOS-Schlüsselbund.</span><span class="en">The macOS app is available from the <a href="https://github.com/achirus-code/DipAgent">GitHub repository</a>. Once launched, the chart icon appears in the menu bar. Under <strong>Settings</strong>, enter the agent's address (IP or host name, the port is added automatically) and the API token, then <strong>Connect</strong>. The token is stored in the macOS keychain.</span></p>
+            <p><span class="de">Die macOS-App gibt es im <a href="https://github.com/achirus-code/DipAgentX">GitHub-Repository</a>. Nach dem Start erscheint das Chart-Icon in der Menüleiste. Unter <strong>Einstellungen</strong> die Adresse des Agents (IP oder Hostname, der Port wird automatisch ergänzt) und den API-Token eintragen, dann <strong>Verbinden</strong>. Der Token landet im macOS-Schlüsselbund.</span><span class="en">The macOS app is available from the <a href="https://github.com/achirus-code/DipAgentX">GitHub repository</a>. Once launched, the chart icon appears in the menu bar. Under <strong>Settings</strong>, enter the agent's address (IP or host name, the port is added automatically) and the API token, then <strong>Connect</strong>. The token is stored in the macOS keychain.</span></p>
           </div>
         </div>
         <div class="step">
@@ -717,28 +717,28 @@
   <div class="wrap">
     <div class="row">
       <div>
-        <strong style="color:var(--text)">DipAgent</strong> · <span class="de">MIT-Lizenz</span><span class="en">MIT License</span> © 2026 Tillmann David
+        <strong style="color:var(--text)">DipAgentX</strong> · <span class="de">MIT-Lizenz</span><span class="en">MIT License</span> © 2026 Tillmann David
       </div>
       <div style="display:flex;gap:18px">
-        <a href="https://github.com/achirus-code/DipAgent">GitHub</a>
-        <a href="https://github.com/achirus-code/DipAgent/blob/main/CHANGELOG.md">Changelog</a>
-        <a href="https://github.com/achirus-code/DipAgent/issues">Issues</a>
+        <a href="https://github.com/achirus-code/DipAgentX">GitHub</a>
+        <a href="https://github.com/achirus-code/DipAgentX/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="https://github.com/achirus-code/DipAgentX/issues">Issues</a>
         <a href="https://exchange.revolut.com">Revolut X</a>
       </div>
     </div>
     <p style="margin-top:16px">
-      <span class="de">Keine Anlageberatung: DipAgent, seine Strategien und die Einschätzungen der KI sind keine Empfehlung zum Kauf oder Verkauf von Kryptowährungen. Der Handel ist mit Verlustrisiken bis zum Totalverlust verbunden; du handelst auf eigene Verantwortung. DipAgent steht in keiner Verbindung zu Revolut oder Anthropic.</span>
-      <span class="en">Not investment advice: DipAgent, its strategies and the AI's assessments are no recommendation to buy or sell cryptocurrencies. Trading involves risk of loss up to a total loss; you trade at your own responsibility. DipAgent is not affiliated with Revolut or Anthropic.</span>
+      <span class="de">Keine Anlageberatung: DipAgentX, seine Strategien und die Einschätzungen der KI sind keine Empfehlung zum Kauf oder Verkauf von Kryptowährungen. Der Handel ist mit Verlustrisiken bis zum Totalverlust verbunden; du handelst auf eigene Verantwortung. DipAgentX steht in keiner Verbindung zu Revolut oder Anthropic.</span>
+      <span class="en">Not investment advice: DipAgentX, its strategies and the AI's assessments are no recommendation to buy or sell cryptocurrencies. Trading involves risk of loss up to a total loss; you trade at your own responsibility. DipAgentX is not affiliated with Revolut or Anthropic.</span>
     </p>
   </div>
 </footer>
 
 <script>
   (function () {
-    var titles = { de: "DipAgent – Trading-Bots für Revolut X, auf Wunsch mit Claude", en: "DipAgent – Trading bots for Revolut X, with Claude if you like" };
+    var titles = { de: "DipAgentX – Trading-Bots für Revolut X, auf Wunsch mit Claude", en: "DipAgentX – Trading bots for Revolut X, with Claude if you like" };
     var descs = {
-      de: "DipAgent: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
-      en: "DipAgent: trading bots for Revolut X that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Four rule-based strategies or let Claude decide. Open source, paper mode first."
+      de: "DipAgentX: Trading-Bots für Revolut X, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
+      en: "DipAgentX: trading bots for Revolut X that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Four rule-based strategies or let Claude decide. Open source, paper mode first."
     };
     function setLang(lang, store) {
       if (lang !== "de" && lang !== "en") lang = "en";
@@ -749,10 +749,10 @@
       document.querySelectorAll(".lang button").forEach(function (b) {
         b.setAttribute("aria-pressed", b.dataset.lang === lang ? "true" : "false");
       });
-      if (store) { try { localStorage.setItem("dipagent-lang", lang); } catch (e) {} }
+      if (store) { try { localStorage.setItem("dipagentx-lang", lang); } catch (e) {} }
     }
     var saved = null;
-    try { saved = localStorage.getItem("dipagent-lang"); } catch (e) {}
+    try { saved = localStorage.getItem("dipagentx-lang"); } catch (e) {}
     var fromUrl = (location.hash.match(/lang=(de|en)/) || location.search.match(/lang=(de|en)/) || [])[1];
     var nav = (navigator.language || "en").toLowerCase().indexOf("de") === 0 ? "de" : "en";
     setLang(fromUrl || saved || nav, false);

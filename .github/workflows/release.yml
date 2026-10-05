@@ -1,6 +1,6 @@
 # One build for everyone: pushing a tag vX.Y.Z builds the agent image for amd64 + arm64 and pushes it to GHCR.
-# Docker users pull ghcr.io/achirus-code/dipagent:latest, the Home Assistant add-on pulls the :X.Y.Z tag that
-# homeassistant/dipagent/config.yaml names (kept in sync by scripts/sync-addon.py).
+# Docker users pull ghcr.io/achirus-code/dipagentx:latest, the Home Assistant add-on pulls the :X.Y.Z tag that
+# homeassistant/dipagentx/config.yaml names (kept in sync by scripts/sync-addon.py).
 name: Release
 
 on:
@@ -53,7 +53,7 @@ jobs:
           sbom: false
           build-args: BUILD_VERSION=${{ env.VERSION }}
           tags: |
-            ghcr.io/achirus-code/dipagent:${{ env.VERSION }}
-            ghcr.io/achirus-code/dipagent:latest
+            ghcr.io/achirus-code/dipagentx:${{ env.VERSION }}
+            ghcr.io/achirus-code/dipagentx:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
