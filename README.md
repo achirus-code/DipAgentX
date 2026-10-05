@@ -70,11 +70,34 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 > continues live, otherwise it could never buy again.
 
 > **Note on the momentum trend follower:** over less than a month its result is chance; in strong rallies it catches
-> only about 55–70 % of the rise (it steps in gradually). It rebalances about twice a week, so almost every gain is
-> realized within the one-year holding period (taxable in Germany). The exchange-inflow brake only helps with fresh
-> data and Coin Metrics revises values later – it is off by default. The bot counts as one open position for the
-> limits, however many trades it holds; it can go from paper to live with open paper trades (they are closed
-> simulated and the bot starts afresh with its capital).
+> only about 55–70 % of the rise (it steps in gradually). The exchange-inflow brake only helps with fresh data and
+> Coin Metrics revises values later – it is off by default. If the Binance funding rate can't be fetched, the status
+> starts with a ⚠ warning and the card shows it as a hint: the floor is off until the data is back. The bot counts as
+> one open position for the limits, however many trades it holds; it can go from paper to live with open paper trades
+> (they are closed simulated and the bot starts afresh with its capital).
+>
+> **Drawdowns – 2018 was worse than 2022.** Replaying the rule on Binance 4-hour USDT closes (Dec 2017 – Jun 2019,
+> 0.09 % fee per side, no funding floor – the perpetual futures didn't exist yet) gives for **2018**:
+>
+> | | ETH bot | ETH hold | BTC bot | BTC hold |
+> |---|---|---|---|---|
+> | 2018 result | −15 % | −82 % | −38 % | −72 % |
+> | largest drawdown in 2018 | 49 % | 94 % | 47 % | 81 % |
+> | without volatility cap | 58 % | | 49 % | |
+> | Dec 2017 – Jun 2019 | +113 % | −31 % | +134 % | +12 % |
+>
+> It entered 2018 fully invested at the top and lost on the false recoveries of the bear market before it was out.
+> Expect drawdowns of **around 50 %**, not just the 30–39 % of 2022–2026; the volatility cap is why it stays below
+> 60 %. Only invest what you can see halved.
+>
+> **Taxes (Germany, no tax advice):** coins sold within a year of buying are a *private sale* (§ 23 EStG), taxed at
+> your personal income-tax rate – not the 25 % flat rate. Gains up to 1,000 € per year are tax-free, but it is an
+> allowance limit (*Freigrenze*): at 1,001 € the whole amount is taxable. Losses only offset gains from private
+> sales (also carried back one year or forward). The bot rebalances about twice a week, so practically every gain is
+> taxable, while holding for over a year would be tax-free. The tax office matches sales to buys first-in-first-out
+> per wallet, which can differ from the trade the bot sells – use the transaction export of Revolut X for the tax
+> return, not the bot's per-trade results. Example: 3,000 € gain in a year at a 42 % tax rate (plus solidarity
+> surcharge/church tax) costs about 1,300 €.
 
 > **Note on the dip buyer:** the 24 h change is a *rolling* window. If the price keeps falling after the buy, the
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode

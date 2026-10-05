@@ -20,6 +20,10 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 - The momentum follower counts as **one open position** for the limits and the apps show it as one position with
   its opened trades below. It may switch from paper to live with open paper trades: they are closed (simulated) and
   the bot starts afresh with its capital.
+- If the Binance funding rate is unavailable, the momentum follower's status starts with a **⚠ warning** (since when,
+  the floor is off) and the card shows it as a hint.
+- README: the momentum follower's **2018 drawdowns** (replay on Binance data: ~50 %, hold 81–94 %) and a concrete
+  **German tax note** (private sales within a year, 1,000 € Freigrenze, FIFO per wallet).
 
 ### Changed
 
