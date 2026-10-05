@@ -2,6 +2,14 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.26.0] – 2026-10-05
+
+### Changed
+
+- **Reset in paper mode wipes the broker completely** – "Reset all values and trades" now deletes every trade of the
+  broker (also older live trades) besides the simulated ones, and sits right under the paper/live toggle in the
+  settings; it disappears while live trading is on. It refuses while a bot holds a live trade or has an order running.
+
 ## [1.25.0] – 2026-10-05
 
 ### Added

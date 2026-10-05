@@ -508,11 +508,10 @@
 "Stocks, ETFs and crypto" = "Aktien, ETFs und Krypto";
 "A broker that is switched off is left alone: its bots stop, no prices, no login. With only one broker on, the tabs above the statistics disappear. A broker with open trades can't be switched off." = "Ein ausgeschalteter Broker bleibt unberührt: Seine Bots stoppen, keine Kurse, keine Anmeldung. Ist nur ein Broker eingeschaltet, verschwinden die Tabs über der Statistik. Ein Broker mit offenen Trades lässt sich nicht ausschalten.";
 
-/* Reset the broker's paper values */
-"Paper mode values" = "Werte im Papier-Modus";
-"Reset values to zero" = "Werte auf null setzen";
-"Sets the result, fees and trade count of this broker back to zero. Simulated trades are deleted and open paper trades discarded; live trades stay as they are." = "Setzt Ergebnis, Gebühren und Trade-Anzahl dieses Brokers auf null. Simulierte Trades werden gelöscht, offene Paper-Trades verworfen; Live-Trades bleiben unberührt.";
-"Delete all paper trades on this broker and reset its values to zero? This cannot be undone." = "Alle Paper-Trades auf diesem Broker löschen und die Werte auf null setzen? Das lässt sich nicht rückgängig machen.";
+/* Reset the broker's values and trades (paper mode) */
+"Reset all values and trades" = "Alle Werte und Trades zurücksetzen";
+"Delete all trades of this broker and reset its values to zero? This cannot be undone." = "Alle Trades dieses Brokers löschen und die Werte auf null setzen? Das lässt sich nicht rückgängig machen.";
+"Values and trades reset." = "Werte und Trades zurückgesetzt.";
 
 /* Signal overview of the monthly trend follower */
 "Signals" = "Signale";

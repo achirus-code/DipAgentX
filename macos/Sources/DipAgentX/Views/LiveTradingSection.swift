@@ -76,6 +76,24 @@ struct LiveTradingSection: View {
                         note("\(String(openLivePositions)) live position(s) could not be sold and are still managed live – sell them manually in the bot view.", icon: "exclamationmark.circle")
                     }
 
+                    // paper mode only – goes away as soon as live trading is on
+                    if !live && step == .idle {
+                        VStack(spacing: 4) {
+                            ConfirmButton(
+                                title: "Reset all values and trades",
+                                confirmTitle: "Delete all trades of this broker and reset its values to zero? This cannot be undone.",
+                                icon: "arrow.counterclockwise",
+                                tint: .orange
+                            ) {
+                                do {
+                                    try await store.resetPaperBroker()
+                                    error = nil
+                                    info = String(localized: "Values and trades reset.")
+                                } catch { self.error = error.localizedDescription }
+                            }
+                        }
+                    }
+
                     if let info {
                         Label(info, systemImage: "checkmark.circle.fill")
                             .font(.system(size: 10.5)).foregroundStyle(.green)

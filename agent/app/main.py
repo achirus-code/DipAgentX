@@ -34,7 +34,7 @@ from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 from .traderepublic import MockTradeRepublicExchange, TradeRepublicExchange, TradeRepublicSession
 
-VERSION = "1.25.0"
+VERSION = "1.26.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -739,9 +739,12 @@ async def reset_paper(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, A
 
 @api.post("/reset-paper")
 async def reset_paper_broker(exchange: str | None = None, lang: str = Depends(get_lang)) -> dict[str, Any]:
-    """Reset the broker's paper result (all its bots) to zero. Live trades stay."""
+    """Delete all trades of the broker and reset its bots' paper state – everything starts at zero."""
     broker = _broker(exchange, lang)
-    await engine.reset_paper_broker(broker)
+    try:
+        await engine.reset_paper_broker(broker)
+    except Problem as exc:
+        raise fail_with(409, lang, exc) from exc
     engine.reset_caches()
     return engine.summary(broker)
 
