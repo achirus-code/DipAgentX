@@ -2,6 +2,22 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.24.0] – 2026-10-05
+
+### Added
+
+- **Signal overview for the monthly trend follower** – the bot's page in the apps shows, line by line, what the last
+  decision rested on: the price against its average and the return against the cash rate, each with the price that
+  would turn it at the coming month end ("today 112 € – off below 103 € (−8 %)"); every switched-on recession sign
+  (unemployment, jobless claims, yield curve) with its value; EUR/USD against its 12-month average (hedged or not);
+  and the 12-month return of each bond ETF to park in against the cash rate. The recession signs, the dollar and the
+  bonds are now looked at every month, also while they don't decide anything (the decisions don't change).
+- The months so far as a strip: invested, currency-hedged, parked in bonds or in cash (up to 24 months).
+- **Pillars**: with two or more running trend followers on a broker, each one's page lists all of them – value,
+  actual share against the share its amount stands for – and once one drifts 5 percentage points or more, the amounts
+  that would restore the shares.
+- API: `signals` and `pillars` on every bot (null for other strategies).
+
 ## [1.23.0] – 2026-10-05
 
 ### Added

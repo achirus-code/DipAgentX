@@ -16,6 +16,7 @@ from .base import Buy, Context, Decision, Option, Param, Sell, Strategy
 
 MONTHS = L("months", "Monate")
 MAX_FALLBACKS = 3
+HISTORY_MONTHS = 24
 
 
 def month_of(ms: int) -> str:
@@ -162,7 +163,8 @@ class TrendStrategy(Strategy):
             return c.total * 100, True
         return p["cash_rate"] * n / 12, False
 
-    async def _trend(self, ctx: Context, st: dict, closes: list[tuple[str, Decimal]]) -> tuple[bool, dict]:
+    async def _trend(self, ctx: Context, st: dict, closes: list[tuple[str, Decimal]],
+                     facts: dict) -> tuple[bool, dict]:
         p, q = ctx.params, ctx.quote
         last_month, last = closes[0]
         parts = []
@@ -181,11 +183,20 @@ class TrendStrategy(Strategy):
                 sma_on = bool(st.get("sma_on", st.get("trend_on", False)))
                 detail = m("monthly.sma_band", trend=detail, buffer=num(p["sma_buffer"]))
             parts.append(detail)
+            # the next check compares the coming month-end close with the average including it: the price that
+            # turns the signal, if today's were that close
+            rest = float(sum((c for _, c in closes[:n - 1]), Decimal(0)))
+            b = float(buffer)
+            facts["sma"] = dict(n=n, avg=float(avg), diff=float((last / avg - 1) * 100), buffer=p["sma_buffer"],
+                                on=sma_on, enter=rest * (1 + b) / (n - 1 - b), exit=rest * (1 - b) / (n - 1 + b))
         if p["signal"] in ("momentum", "either"):
             n = p["momentum_months"]
             ret = float(last / closes[n][1] - 1) * 100
             hurdle, auto = await self._hurdle(p, n)
             mom_on = ret > hurdle
+            # next month the return runs from one month later – the price that beats the cash rate then
+            facts["momentum"] = dict(n=n, ret=ret, hurdle=hurdle, auto=auto, on=mom_on,
+                                     turn=float(closes[n - 1][1]) * (1 + hurdle / 100))
             parts.append(m("monthly.momentum_euribor" if auto else "monthly.momentum", n=n, ret=pct(ret),
                            hurdle=pct(hurdle), month=month(last_month)))
         st["sma_on"] = sma_on
@@ -193,37 +204,54 @@ class TrendStrategy(Strategy):
         return sma_on or mom_on, detail
 
     @staticmethod
-    async def _recession(p: dict) -> tuple[bool | None, dict | None]:
-        """Whether a switched-on recession sign shows: True/False, None without any data (or none switched on)."""
+    async def _recession(p: dict, rows: list[dict] | None = None) -> tuple[bool | None, dict | None]:
+        """Whether a switched-on recession sign shows: True/False, None without any data (or none switched on).
+        ``rows`` collects one overview row per sign."""
         signs, calm = [], []
+        rows = [] if rows is None else rows
+
+        def row(what: str, value: dict, state: str) -> None:
+            rows.append(signal_row(m(what), value, state))
+
         if p["unemployment"]:
             if (u := await macro.unemployment()) is None:
                 calm.append(m("monthly.missing", what=m("monthly.what_unemployment")))
+                row("monthly.what_unemployment", m("signals.no_data"), "unknown")
             else:
                 args = dict(rate=num(u.rate), avg=num(u.average), month=month(u.month))
                 (signs if u.rising else calm).append(
                     m("monthly.unemployment_up" if u.rising else "monthly.unemployment_down", **args))
+                row("monthly.what_unemployment", m("signals.unemployment", **args), "warn" if u.rising else "ok")
         if p["claims"]:
             if (c := await macro.claims()) is None:
                 calm.append(m("monthly.missing", what=m("monthly.what_claims")))
+                row("monthly.what_claims", m("signals.no_data"), "unknown")
             else:
-                (signs if c.rising else calm).append(m("monthly.claims", change=pct(c.change * 100), month=month(c.month)))
+                args = dict(change=pct(c.change * 100), month=month(c.month))
+                (signs if c.rising else calm).append(m("monthly.claims", **args))
+                row("monthly.what_claims", m("signals.claims", **args), "warn" if c.rising else "ok")
         if p["yield_curve"]:
             if (curve := await macro.yield_curve()) is None:
                 calm.append(m("monthly.missing", what=m("monthly.what_curve")))
+                row("monthly.what_curve", m("signals.no_data"), "unknown")
             elif curve.warning:
                 signs.append(m("monthly.curve_inverted", month=month(curve.last_inverted)))
+                row("monthly.what_curve", m("signals.curve_inverted", month=month(curve.last_inverted),
+                                            spread=num(curve.spread)), "warn")
             else:
                 calm.append(m("monthly.curve_normal", spread=num(curve.spread)))
+                row("monthly.what_curve", m("signals.curve_normal", spread=num(curve.spread)), "ok")
         if signs:
             return True, join(signs)
         if all(message_key(c) == "monthly.missing" for c in calm):
             return None, join(calm) if calm else None
         return False, join(calm)
 
-    async def _parking(self, ctx: Context) -> tuple[str | None, dict | None]:
-        """The fallback with the best 12-month return above the cash rate – (symbol, why) or (None, why)."""
+    async def _parking(self, ctx: Context, rows: list[dict] | None = None) -> tuple[str | None, dict | None]:
+        """The fallback with the best 12-month return above the cash rate – (symbol, why) or (None, why).
+        ``rows`` collects one overview row per candidate."""
         p = ctx.params
+        rows = [] if rows is None else rows
         candidates = [s for s in instrument_symbols(p["fallback_symbols"], ctx.quote) if s != ctx.market.symbol]
         if not candidates:
             return None, None
@@ -235,28 +263,36 @@ class TrendStrategy(Strategy):
                 closes = month_end_closes(await view.daily_candles(31 * 14 + 5), ctx.now)
             except Exception:  # noqa: BLE001 – an unknown ISIN or no data: not a candidate
                 notes.append(m("monthly.park_no_data", name=symbol.split("-")[0]))
+                rows.append(signal_row(m("signals.park", name=symbol.split("-")[0]), m("signals.no_data"), "unknown"))
                 continue
             name = view.instrument.get("short") or view.instrument.get("name") or symbol.split("-")[0]
             if len(closes) < 13:
                 notes.append(m("monthly.park_no_data", name=name))
+                rows.append(signal_row(m("signals.park", name=name), m("signals.no_data"), "unknown"))
                 continue
             ret = float(closes[0][1] / closes[12][1] - 1) * 100
             notes.append(m("monthly.park_candidate", name=name, ret=pct(ret)))
+            rows.append(signal_row(m("signals.park", name=name), m("signals.return_vs", ret=pct(ret), hurdle=pct(hurdle)),
+                                   "ok" if ret > hurdle else "off"))
             if ret > hurdle and (best_ret is None or ret > best_ret):
                 best, best_ret = symbol, ret
         why = m("monthly.park_choice" if best else "monthly.park_none", candidates=join(notes), hurdle=pct(hurdle))
         return best, why
 
-    async def _share_class(self, ctx: Context, st: dict) -> tuple[str, dict | None]:
+    async def _share_class(self, ctx: Context, st: dict, rows: list[dict] | None = None) -> tuple[str, dict | None]:
         """Own instrument or the currency-hedged share class (while the euro rises against the dollar)."""
         p = ctx.params
+        rows = [] if rows is None else rows
         hedged = instrument_symbols(p["hedged_symbol"], ctx.quote, 1)
         if not hedged:
             return ctx.market.symbol, None
         if (e := await macro.eurusd()) is None:
+            rows.append(signal_row(m("signals.dollar"), m("signals.no_data"), "unknown"))
             keep = st.get("target") if st.get("target") in (hedged[0], ctx.market.symbol) else ctx.market.symbol
             return keep, m("monthly.hedge_unknown")
         args = dict(rate=num(e.rate, 4), avg=num(e.average, 4), month=month(e.month))
+        rows.append(signal_row(m("signals.dollar"), m("signals.eurusd_hedged" if e.euro_rising else "signals.eurusd_open",
+                                                     **args), "ok" if e.euro_rising else "neutral"))
         if e.euro_rising:
             try:
                 await ctx.market_of(hedged[0])  # it must exist (and its name is known from here on)
@@ -274,29 +310,67 @@ class TrendStrategy(Strategy):
         closes = month_end_closes(await ctx.market.daily_candles(31 * (need + 1) + 5), ctx.now)
         if len(closes) < need:
             return m("monthly.no_months", have=len(closes), need=need)
-        trend_on, detail = await self._trend(ctx, st, closes)
+        facts: dict = {"month": closes[0][0], "close": float(closes[0][1])}
+        trend_on, detail = await self._trend(ctx, st, closes, facts)
         on = trend_on
-        if not trend_on and (p["unemployment"] or p["claims"] or p["yield_curve"]):
-            sign, why = await self._recession(p)
-            if sign is None:
-                detail = m("monthly.recession_unknown", trend=detail)
-            elif sign:
-                detail = m("monthly.recession_yes", trend=detail, signs=why)
-            else:
-                on = True
-                detail = m("monthly.recession_no", trend=detail, signs=why)
-        extra = None
-        if on:
-            target, extra = await self._share_class(ctx, st)
-        else:
-            target, extra = await self._parking(ctx)
+        # the recession signs, the dollar and the bonds to park in are looked at every month – the overview shows
+        # them even while they don't decide anything
+        signs: list[dict] = []
+        if p["unemployment"] or p["claims"] or p["yield_curve"]:
+            sign, why = await self._recession(p, signs)
+            if not trend_on:
+                if sign is None:
+                    detail = m("monthly.recession_unknown", trend=detail)
+                elif sign:
+                    detail = m("monthly.recession_yes", trend=detail, signs=why)
+                else:
+                    on = True
+                    detail = m("monthly.recession_no", trend=detail, signs=why)
+        dollar: list[dict] = []
+        parking: list[dict] = []
+        share, hedge = await self._share_class(ctx, st, dollar)
+        park, why_park = await self._parking(ctx, parking)
+        target, extra = (share, hedge) if on else (park, why_park)
         if extra:
             detail = m("monthly.with", detail=detail, extra=extra)
         if st.get("amount") != p["amount"]:
             st.pop("capital", None)  # a new amount starts afresh – e.g. when the bots are rebalanced
+        facts.update(signs=signs, dollar=dollar, parking=parking)
         st.update(month=month_of(ctx.now), sig=self._signature(p), trend_on=trend_on, on=on, detail=detail,
-                  target=target, amount=p["amount"], at=ctx.now)
+                  target=target, amount=p["amount"], at=ctx.now, facts=facts)
+        kind = ("hedged" if target != ctx.market.symbol else "in") if on else ("parked" if target else "cash")
+        history = [h for h in st.get("history", []) if h.get("month") != st["month"]]
+        history.append({"month": st["month"], "state": kind,
+                        "name": self._name(ctx, target) if target and target != ctx.market.symbol else None})
+        st["history"] = history[-HISTORY_MONTHS:]
         return None
+
+    def _signals(self, ctx: Context, st: dict) -> None:
+        """The overview in the app: every signal with its value, how far it is from turning, the months so far."""
+        facts, q = st.get("facts") or {}, ctx.quote
+        price = float(ctx.market.price)
+        rows = []
+        kind = st["history"][-1]["state"] if st.get("history") else ("in" if st.get("on") else "cash")
+        rows.append(signal_row(m("signals.decision", month=month(st["month"])), m(f"signals.state_{kind}"),
+                               "on" if st.get("on") else "off"))
+        if sma := facts.get("sma"):
+            turn = sma["exit"] if sma["on"] else sma["enter"]
+            note = m("signals.sma_exit" if sma["on"] else "signals.sma_enter", price=money(price, q),
+                     turn=money(turn, q), diff=pct((turn / price - 1) * 100))
+            rows.append(signal_row(m("signals.sma", n=sma["n"]),
+                                   m("signals.sma_value", month=month(facts["month"]), close=money(facts["close"], q),
+                                     avg=money(sma["avg"], q), diff=pct(sma["diff"])),
+                                   "on" if sma["on"] else "off", note))
+        if mom := facts.get("momentum"):
+            turn = mom["turn"]
+            note = m("signals.momentum_exit" if mom["on"] else "signals.momentum_enter", price=money(price, q),
+                     turn=money(turn, q), diff=pct((turn / price - 1) * 100))
+            rows.append(signal_row(m("signals.momentum", n=mom["n"]),
+                                   m("signals.return_vs_euribor" if mom["auto"] else "signals.return_vs",
+                                     ret=pct(mom["ret"]), hurdle=pct(mom["hurdle"])),
+                                   "on" if mom["on"] else "off", note))
+        rows += facts.get("signs", []) + facts.get("dollar", []) + facts.get("parking", [])
+        ctx.state["signals"] = {"rows": rows, "history": st.get("history", []), "at": st.get("at")}
 
     @staticmethod
     def _name(ctx: Context, symbol: str) -> str:
@@ -312,6 +386,7 @@ class TrendStrategy(Strategy):
             # a new month (the engine only gets here while the market is open – so on its first trading day)
             if waiting := await self._decide(ctx, st):
                 return Decision(waiting)
+        self._signals(ctx, st)
         detail = st["detail"]
         own = ctx.market.symbol
         target = st.get("target", own if st.get("on") else None)
@@ -340,6 +415,11 @@ class TrendStrategy(Strategy):
         return Decision(m("monthly.switch", name=self._name(ctx, target)),
                         Sell(m("monthly.switch_reason", name=self._name(ctx, target), detail=detail, profit=pct(profit)),
                              stop=True))
+
+
+def signal_row(label: dict, value: dict, state: str, note: dict | None = None) -> dict:
+    """One line of the signal overview. ``state``: on/off (a trend signal), ok/warn (a sign), neutral, unknown."""
+    return {"label": label, "value": value, "state": state, "note": note}
 
 
 def join(messages: list[dict]) -> dict | None:
