@@ -38,7 +38,7 @@ async def four_hour_closes(market) -> dict[int, Decimal]:
     last = market.now // STEP_MS * STEP_MS - STEP_MS  # start of the last completed candle
     first = last - HISTORY_DAYS * DAY_MS
     if store and min(store) <= first:
-        since = max(store) + STEP_MS
+        since = max(store)  # the newest candle once more: fetched right after it closed, it may not have been final
     else:
         store.clear()
         since = first
@@ -261,6 +261,8 @@ class MomentumStrategy(Strategy):
         invested = float(exposure / equity * 100) if equity > 0 else 0.0
         ctx.targets(note=m("momentum.target", target=num(level * 10, 0)))
         status = m("momentum.status", invested=num(invested, 0), target=num(level * 10, 0), detail=detail)
+        if st.get("held") is not None and sorted(x.id for x in positions) != st["held"]:
+            st.pop("level", None)  # trades sold or discarded by hand: back to the target
         if level == st.get("level") or equity <= 0:
             # trades only when the target step changes – in between the position rises and falls with the price
             return Decision(status)
@@ -285,4 +287,5 @@ class MomentumStrategy(Strategy):
             reason = m("momentum.buy_reason", target=num(level * 10, 0), detail=detail)
             return Decision(m("momentum.buying", target=num(level * 10, 0)), Buy(gap.quantize(Decimal("0.01")), reason))
         st["level"] = level  # reached (as close as whole trades allow)
+        st["held"] = sorted(x.id for x in positions)
         return Decision(status)

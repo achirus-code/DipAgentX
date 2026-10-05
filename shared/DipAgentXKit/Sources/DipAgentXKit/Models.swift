@@ -381,6 +381,9 @@ public struct Bot: Codable, Identifiable, Equatable {
     /// The open trades one by one – older agents only send the single position.
     public var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
 
+    /// The trades as the apps list them: a sliced position (momentum follower) as one, its total.
+    public var shownTrades: [BotPosition] { sliced == true ? (position.map { [$0] } ?? openTrades) : openTrades }
+
     /// True when the bot may hold more than one trade (or does) – the card then lists them.
     public var tradesMode: Bool { sliced != true && ((maxTrades ?? 1) > 1 || openTrades.count > 1) }
 

@@ -169,7 +169,7 @@ struct BotRow: View {
 
     /// "2 open trades · value 150.00 € · +0.52 %"
     private var openTradesLine: some View {
-        let trades = bot.openTrades
+        let trades = bot.shownTrades
         let value = trades.reduce(0) { $0 + $1.value }
         let cost = trades.reduce(0) { $0 + $1.cost }
         let pct = cost > 0 ? (value / cost - 1) * 100 : 0

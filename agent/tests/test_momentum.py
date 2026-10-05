@@ -249,3 +249,28 @@ async def test_switching_to_live_closes_the_paper_slices_and_starts_afresh(tmp_p
         await engine.tick()
     positions = open_positions(db.get_bot(bot_id)["state"])
     assert len(positions) == 10 and not any(p.paper for p in positions) and len(ex.placed) == 10
+
+
+async def test_trades_sold_by_hand_are_bought_back_to_the_target(tmp_path: Path):
+    ex = PathExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, True)
+    for _ in range(12):
+        await engine.tick()
+    assert len(open_positions(db.get_bot(bot_id)["state"])) == 10
+    await engine.close_position(bot_id)  # "Sell position now": all slices
+    assert not open_positions(db.get_bot(bot_id)["state"])
+    for _ in range(12):
+        await engine.tick()
+    assert len(open_positions(db.get_bot(bot_id)["state"])) == 10  # the target is still 100 %
+
+
+async def test_the_newest_candle_is_fetched_again():
+    from app.strategies.momentum import four_hour_closes
+    ex = PathExchange(steady(0.003))
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    store = await four_hour_closes(view)
+    last = max(store)
+    store[last] = Decimal("1")  # not final yet when it was fetched
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now + 60_000)
+    assert (await four_hour_closes(view))[last] != Decimal("1")

@@ -13,6 +13,10 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 - **Switching a momentum bot from paper to live with open paper trades** is no longer refused: the engine closes the
   paper slices (simulated) with the next check and the bot starts afresh with its capital, live. The other way round,
   and with an order in flight, stays locked.
+- **Momentum trend follower: fixes from a second review.** Trades sold or discarded by hand are bought back to the
+  target with the next check (to stay out, stop the bot) – before, the bot waited for the next change of the target
+  step, in a long trend for months. The newest 4-hour candle is fetched once more on the next check, in case it wasn't
+  final yet. The iPhone's bot page listed every slice as "Open position" – it shows the one position now.
 
 ## [1.26.0] – 2026-10-05
 

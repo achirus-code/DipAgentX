@@ -134,7 +134,7 @@ struct BotDetailView: View {
 
     @ViewBuilder
     private func openTrades(_ bot: Bot) -> some View {
-        let trades = bot.openTrades
+        let trades = bot.shownTrades
         if !trades.isEmpty {
             let several = bot.tradesMode
             ForEach(Array(trades.enumerated()), id: \.offset) { index, trade in
