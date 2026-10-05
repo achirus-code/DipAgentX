@@ -527,6 +527,14 @@ public final class AppStore {
         await refresh()
     }
 
+    /// Paper mode: deletes all simulated trades of the selected broker and discards its open paper trades – the
+    /// broker's values start at zero. Live trades are never touched.
+    public func resetPaperBroker() async throws {
+        guard let client else { return }
+        let _: Summary = try await client.post("/reset-paper", query: query(broker))
+        await refresh()
+    }
+
     /// "AI decides" only: a fresh decision from Claude right now (one extra check).
     public func askClaude(_ bot: Bot) async throws {
         guard let client else { return }

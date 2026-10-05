@@ -441,6 +441,10 @@ CATALOG: dict[str, L] = {
         "Paper result reset – {count} simulated trades deleted, starting from scratch",
         "Paper-Ergebnis zurückgesetzt – {count} simulierte Trades gelöscht, Neustart bei null",
     ),
+    "event.paper_reset_broker": L(
+        "Paper result on {broker} reset to zero",
+        "Paper-Ergebnis auf {broker} auf null zurückgesetzt",
+    ),
     "engine.trade_interval": L(
         "Buy signal – next trade at the earliest in {left} (min. time between trades)",
         "Kaufsignal – nächster Trade frühestens in {left} (Mindestzeit zwischen Trades)",

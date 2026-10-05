@@ -22,7 +22,7 @@ import httpx
 from .config import Settings
 from .db import Database, now_ms, scoped
 from .errors import ExchangeError
-from .exchange import REVOLUTX, Candle, Exchange, Fees, OrderResult, PairInfo, Ticker, UnconfiguredExchange
+from .exchange import BROKER_TITLES, REVOLUTX, Candle, Exchange, Fees, OrderResult, PairInfo, Ticker, UnconfiguredExchange
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
 from .strategies.base import DAY_MS, fetch_daily_candles
@@ -722,6 +722,21 @@ class Engine:
             self.db.add_event(bot_id, "info", status)
             self._persist(bot, state, status, before)
             return status
+
+    async def reset_paper_broker(self, broker: str = REVOLUTX) -> int:
+        """Start the broker's whole paper result from scratch (every bot on it). Bots holding a live trade or with an
+        order in flight are skipped – live trades are never touched. Returns the number of simulated trades deleted."""
+        deleted = 0
+        for bot in self.db.list_bots():
+            if broker_of(bot) != broker:
+                continue
+            try:
+                await self.reset_paper(bot["id"])
+            except Problem:
+                continue
+        deleted = self.db.delete_paper_trades_of_broker(broker)  # what is left, e.g. trades of deleted bots
+        self.db.add_event(None, "info", m("event.paper_reset_broker", broker=BROKER_TITLES[broker]))
+        return deleted
 
     async def close_live_positions(self, reason: Message, broker: str = REVOLUTX) -> list[dict[str, Any]]:
         """Market-sell every open live position on the broker (used when switching it back to paper mode)."""

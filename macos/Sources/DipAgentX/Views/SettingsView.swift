@@ -36,6 +36,10 @@ struct SettingsView: View {
                 PaperFeesSection(fees: fees).id(store.broker)
             }
 
+            if store.isConnected, !liveTradingActive {
+                PaperResetSection().id(store.broker)
+            }
+
             // App
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("App")
