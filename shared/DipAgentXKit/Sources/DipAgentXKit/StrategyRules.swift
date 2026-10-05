@@ -47,9 +47,12 @@ public enum ParamVisibility {
         case "trend_buffer", "trend_exit":
             return (values["trend_days"]?.double ?? 0) > 0 || (values["trend_fast_days"]?.double ?? 0) > 0
         case "sma_months", "sma_buffer":  // monthly trend follower: only the rules of the chosen signal
-            return (values["signal"]?.string ?? "sma") == "sma"
-        case "momentum_months", "cash_rate":
-            return values["signal"]?.string == "momentum"
+            return ["sma", "either"].contains(values["signal"]?.string ?? "sma")
+        case "momentum_months":
+            return ["momentum", "either"].contains(values["signal"]?.string ?? "sma")
+        case "cash_rate_auto", "cash_rate":  // the hurdle: for the return signal and for parking in bonds
+            let parks = !(values["fallback_symbols"]?.string ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+            return parks || ["momentum", "either"].contains(values["signal"]?.string ?? "sma")
         default:
             return true
         }

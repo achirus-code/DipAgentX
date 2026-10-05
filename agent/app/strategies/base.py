@@ -90,6 +90,9 @@ class Position:
     order_id: str | None = None  # the live buy order that opened it (a late fill of that order is added here)
     # the high since a strategy's sell signal armed a trailing stop (dip buyer); None = not armed. Raised like peak.
     trail_peak: Decimal | None = None
+    # the instrument held when it is not the bot's own symbol (the monthly trend follower's currency-hedged ETF or
+    # the bonds it parks in); None = the bot's symbol
+    symbol: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -129,6 +132,7 @@ class Position:
             "id": self.id,
             "order_id": self.order_id,
             "trail_peak": str(self.trail_peak) if self.trail_peak is not None else None,
+            **({"symbol": self.symbol} if self.symbol else {}),
         }
 
     @classmethod
@@ -140,6 +144,7 @@ class Position:
             int(raw.get("buys", 1)), bool(raw.get("paper", True)),
             str(raw.get("id") or "p1"), raw.get("order_id"),
             dec(raw["trail_peak"]) if raw.get("trail_peak") else None,
+            raw.get("symbol") or None,
         )
 
 
@@ -190,6 +195,7 @@ Message = dict  # an i18n message, see app.i18n.m()
 class Buy:
     quote_amount: Decimal
     reason: Message
+    symbol: str | None = None  # another instrument than the bot's own (see Position.symbol)
 
 
 @dataclass
@@ -347,10 +353,28 @@ class Context:
     fees: Fees = Fees()  # what a sale costs (rate and fixed part) – for break-even and net profit
     # set by the engine: strategies can persist a journal entry (used by "AI decides" for Claude's answers)
     journal: Callable[[dict[str, Any]], None] | None = None
+    # set by the engine: market data of another instrument of the same broker (the position's, or one a strategy
+    # may switch to); None in tests that don't need it
+    view_of: Callable[[str], Awaitable["MarketView"]] | None = None
+    # the market of the position's instrument when it is not the bot's symbol (else ``market``)
+    held: "MarketView | None" = None
 
     @property
     def now(self) -> int:
         return self.market.now
+
+    @property
+    def held_market(self) -> "MarketView":
+        return self.held or self.market
+
+    async def market_of(self, symbol: str) -> "MarketView":
+        if symbol == self.market.symbol:
+            return self.market
+        if self.held is not None and symbol == self.held.symbol:
+            return self.held
+        if self.view_of is None:
+            raise Problem("err.no_market_data", error=symbol)
+        return await self.view_of(symbol)
 
     def targets(self, buy: Decimal | float | None = None, sell: Decimal | float | None = None,
                 stop: Decimal | float | None = None, note: dict | None = None) -> None:

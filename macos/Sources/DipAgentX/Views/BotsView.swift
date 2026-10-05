@@ -449,7 +449,7 @@ struct BotDetailView: View {
     private func positionContent(_ bot: Bot, _ position: BotPosition, tradeId: String?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                detail("Amount", "\(Fmt.qty(position.qty)) \(bot.baseCurrency)")
+                detail("Amount", "\(Fmt.qty(position.qty)) \(position.unit(of: bot))")
                 detail("Entry", Fmt.price(position.entryPrice, bot.quoteCurrency))
                 detail("Invested", Fmt.money(position.cost, bot.quoteCurrency))
             }

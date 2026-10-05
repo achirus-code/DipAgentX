@@ -82,7 +82,7 @@ SQLite).
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
-| **Monthly trend follower** | once a month, on the first trading day: the whole amount when the previous month closed above its average of the last months (default 10, with a ±2 % buffer) – or with a better return than the cash rate (e.g. 12 months) | on that monthly check, as soon as the trend is down – also at a loss; optionally only when the US unemployment rate rises as well. Meant for ETFs and gold on Trade Republic (see the example below) |
+| **Monthly trend follower** | once a month, on the first trading day: the whole amount when the previous month closed above its average of the last months (default 10, with a ±2 % buffer) – or with a better return than cash (e.g. 12 months, against the 3-month Euribor) – or either of the two; optionally the currency-hedged share class while the dollar falls | on that monthly check, as soon as the trend is down – also at a loss; optionally only with a recession sign (US unemployment above its 12-month average, jobless claims up more than 5 % on a year earlier, an inverted US yield curve in the last 24 months); optionally parks the money in the best of up to three bond ETFs instead of cash. Meant for ETFs and gold on Trade Republic (see the example below) |
 | **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum, optionally the news and optionally the Crypto Fear & Greed index (as background or as a contrarian signal at extremes) every N minutes (model selectable: Opus 5, Sonnet 5, Haiku 4.5; optional minimum confidence before a trade is executed) | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
@@ -103,24 +103,28 @@ SQLite).
 ### Example: three pillars on Trade Republic
 
 The *monthly trend follower* is meant for a slow, defensive setup – one bot per pillar, picked with the instrument
-search (accumulating share classes are best):
+search (accumulating share classes are best). The rules below are the combination that held up best in the backtests
+([docs/strategien-backtests.md](docs/strategien-backtests.md), sections 9–11):
 
 | Bot | Share | Rules |
 |---|---|---|
-| MSCI World or ACWI IMI ETF | 40 % | price above its 10-month average (buffer 2 %), *sell only when unemployment rises* on |
-| Physical gold ETC | 30 % | signal *return better than the cash rate*, 12 months, cash rate ≈ what Trade Republic pays on cash |
-| Euro government bond ETF | 30 % | price above its 10-month average, buffer 0 % |
+| MSCI ACWI IMI or World ETF (e.g. SPYI) | 40 % | signal *price above its average or return better than the cash rate* (10 months, buffer 2 %; 12 months), recession signs *unemployment*, *jobless claims* and *yield curve* on, *currency-hedged share class* e.g. IE00BF1B7389 (MSCI ACWI EUR hedged) |
+| Physical gold ETC (e.g. Xetra-Gold) | 30 % | signal *return better than the cash rate*, 12 months, *cash rate from the Euribor* on – don't hedge gold: a hedged ETC loses Xetra-Gold's tax-free status after a year |
+| Euro government bond ETF (e.g. XGLE) | 30 % | signal *return better than the cash rate*, 12 months |
 
-Money that isn't invested stays as cash on the account. Once a year, set the amounts back to 40/30/30 of the total and
-use *Sell now* on a bot whose amount changed – it buys again with the new amount. Allow at least three open positions
-under the Trade Republic limits.
+All three park in bonds instead of cash: *Park in instead of cash* = `LU0290355717, LU1407888137` (euro government
+bonds and US Treasuries 7–10 years, EUR hedged) – while a bot is out it buys the one with the better 12-month return,
+as long as that beats the Euribor. Once a year, set the amounts back to 40/30/30 of the total and use *Sell now* on a
+bot whose amount changed – it buys again with the new amount. Allow at least three open positions under the Trade
+Republic limits.
 
-In a backtest in euros (1973–2026, monthly closes, 1 € per order) this setup was up after 12 months in about 9 of 10
-cases and never down after 5 years; its deepest drop was about −14 % against −54 % for the MSCI World, at a slightly
-higher return over the whole period (about 9 % a year against 8 %). In long bull markets it earns clearly less than
-simply holding the index – it pays off in crashes such as 2000–2002 and 2008. A backtest is no guarantee and none
-of this is investment advice; switching in and out also ends tax advantages such as the tax-free gains on gold held
-for more than a year.
+In a backtest in euros (1973–2026, monthly closes, the hedged ETF 0.5 % a year more expensive) this setup returned
+about 11.4 % a year against 8.9 % for the MSCI World, was up after 12 months in 96 % and after 3 years in 99.7 % of
+all start months; its deepest drop was −10.5 % against −54 %. After German taxes on every sale (with the partial
+exemption for equity funds) about 9.5 % a year against 8.6 % for holding the MSCI World. Since 2000 the timing hasn't
+earned more than simply holding 40/30/30 – it halves the drops. In long bull markets it earns clearly less than
+holding the index, and fast crashes like 2020 hit it before the monthly signal reacts. A backtest is no guarantee and
+none of this is investment advice.
 
 ## Quick start
 
@@ -283,7 +287,8 @@ agent/                    Python 3.12 · FastAPI · SQLite
   app/credentials.py      key pair generation / storage for the in-app Revolut X setup
   app/backup.py           backup archive (database snapshot + key) for export/import from the app
   app/i18n.py             English/German texts of the agent
-  app/macro.py            US unemployment rate (BLS) for the monthly trend follower
+  app/macro.py            economic data for the monthly trend follower: US unemployment (BLS), jobless claims (DOL),
+                          yield curve (US Treasury), 3-month Euribor and EUR/USD (ECB)
   tests/
 macos/                    SwiftUI menu bar app (Swift package, no Xcode project needed)
   Sources/DipAgentX/       app, views, API client

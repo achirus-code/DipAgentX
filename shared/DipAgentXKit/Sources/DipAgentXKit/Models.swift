@@ -203,9 +203,20 @@ public struct BotPosition: Codable, Equatable, Identifiable {
     public let sellPrice: Double?
     public let stopPrice: Double?
     public let note: String?
+    // agent 1.22+: the instrument the trade holds when it isn't the bot's own (the monthly trend follower's
+    // currency-hedged share class, or the bonds it parks in)
+    public let heldSymbol: String?
+    public let heldName: String?
+    public let heldUnit: String?
+
+    /// The unit of `qty`: the held instrument's ticker, else the bot's.
+    public func unit(of bot: Bot) -> String { heldUnit ?? bot.baseCurrency }
 
     enum CodingKeys: String, CodingKey {
         case id, qty, cost, value, paper, note
+        case heldSymbol = "symbol"
+        case heldName = "display_symbol"
+        case heldUnit = "base_currency"
         case entryPrice = "entry_price"
         case sellPrice = "sell_price"
         case stopPrice = "stop_price"
