@@ -342,6 +342,18 @@ struct BotDetailView: View {
                         } else if let position = bot.position {
                             positionCard(bot, position)
                         }
+                        if let signals = bot.signals {
+                            VStack(alignment: .leading, spacing: 6) {
+                                SectionLabel("Signals")
+                                Card { SignalList(signals: signals) }
+                            }
+                        }
+                        if let pillars = bot.pillars {
+                            VStack(alignment: .leading, spacing: 6) {
+                                SectionLabel("Pillars")
+                                Card { PillarList(pillars: pillars, currency: bot.quoteCurrency, current: bot.id) }
+                            }
+                        }
                         stats(bot)
                         if bot.strategy == "ai" { claudeDecisions }
                         parameters(bot)

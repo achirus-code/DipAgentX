@@ -259,6 +259,47 @@ public struct BotTargets: Codable, Equatable {
     }
 }
 
+/// What a strategy looks at, line by line – the monthly trend follower's trend, recession signs, dollar and bonds.
+public struct BotSignals: Codable, Equatable {
+    public struct Row: Codable, Equatable, Identifiable {
+        public let label: String
+        public let value: String
+        /// on/off: a trend signal · ok/warn: a recession sign · neutral · unknown: no data
+        public let state: String?
+        /// How far it is from turning, e.g. "Today 112 € – off below 103 € (−8 %) at the month end".
+        public let note: String?
+        public var id: String { label }
+    }
+
+    public struct Month: Codable, Equatable, Identifiable {
+        public let month: String // "2026-10"
+        public let label: String // "Oct 2026"
+        public let state: String // in, hedged, parked, cash
+        public let name: String? // the instrument it parked in or the hedged share class
+        public var id: String { month }
+    }
+
+    public let rows: [Row]
+    public let history: [Month]
+}
+
+/// The trend followers as one portfolio: the share each should have (by its amount) and has (by its value).
+public struct BotPillars: Codable, Equatable {
+    public struct Share: Codable, Equatable, Identifiable {
+        public let id: Int
+        public let name: String
+        public let value: Double
+        public let target: Double // %
+        public let actual: Double // %
+        public let rebalanced: Double // the amount that would restore the target share
+    }
+
+    public let shares: [Share]
+    public let total: Double
+    public let drift: Double // the largest deviation in percentage points
+    public let due: Bool
+}
+
 /// How far the price still has to move until the bot trades – what the card shows first.
 public struct BotGoal {
     public enum Kind { case buy, sell, trailingStart, trailingStop }
@@ -303,9 +344,14 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let wins: Int
     public let losses: Int
     public let market: MarketInfo?
+    /// The signals behind the decision, each with its value and how far it is from turning (agent 1.24+).
+    public let signals: BotSignals?
+    /// The running trend followers of the broker side by side – their shares and whether to rebalance (agent 1.24+).
+    public let pillars: BotPillars?
 
     enum CodingKeys: String, CodingKey {
         case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
+        case signals, pillars
         case exchange
         case displaySymbol = "display_symbol"
         case instrumentType = "instrument_type"
