@@ -24,6 +24,8 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   the floor is off) and the card shows it as a hint.
 - README: the momentum follower's **2018 drawdowns** (replay on Binance data: ~50 %, hold 81–94 %) and a concrete
   **German tax note** (private sales within a year, 1,000 € Freigrenze, FIFO per wallet).
+- Bot documentation `docs/momentum-trendfolger.md` (German): the three building blocks, order handling and costs,
+  execution timing, parameters, worked examples and the backtest results 2017–2026.
 
 ### Changed
 

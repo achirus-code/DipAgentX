@@ -69,7 +69,8 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 > live. The savings plan is the exception – it closes its paper position (simulated) with the next instalment and
 > continues live, otherwise it could never buy again.
 
-> **Note on the momentum trend follower:** over less than a month its result is chance; in strong rallies it catches
+> **Note on the momentum trend follower** (full rules and backtests in German:
+> [docs/momentum-trendfolger.md](docs/momentum-trendfolger.md)): over less than a month its result is chance; in strong rallies it catches
 > only about 55–70 % of the rise (it steps in gradually). The exchange-inflow brake only helps with fresh data and
 > Coin Metrics revises values later – it is off by default. If the Binance funding rate can't be fetched, the status
 > starts with a ⚠ warning and the card shows it as a hint: the floor is off until the data is back. The bot counts as
