@@ -55,16 +55,12 @@ public struct SummaryCard: View {
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.snappy(duration: 0.25)) { expanded.toggle() } }
             // The headline: what DipAgent has earned or lost in total (realized + open, after fees).
-            HStack(alignment: .lastTextBaseline) {
-                PnLText(value: result?.total ?? 0, currency: currency, font: .ui(expanded ? 28 : 24, weight: .bold, design: .rounded), calmLosses: true)
-                    .help("Realized plus open result of all bots, fees already deducted.")
-                Spacer()
-                if !expanded {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("Today").font(.ui(10)).foregroundStyle(.secondary)
-                        PnLText(value: result?.today ?? 0, currency: currency, font: .ui(12.5, weight: .semibold, design: .rounded), calmLosses: true)
-                    }
-                }
+            PnLText(value: result?.total ?? 0, currency: currency, font: .ui(expanded ? 28 : 24, weight: .bold, design: .rounded), calmLosses: true)
+                .help("Realized plus open result of all bots, fees already deducted.")
+            HStack(spacing: 0) {
+                metric("Realized", result?.realized ?? 0, currency)
+                metric("Open", result?.unrealized ?? 0, currency)
+                metric("Today", result?.today ?? 0, currency)
             }
             if expanded {
                 details(result, currency)
@@ -91,11 +87,6 @@ public struct SummaryCard: View {
     @ViewBuilder
     private func details(_ result: CurrencyTotal?, _ currency: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 0) {
-                metric("Realized", result?.realized ?? 0, currency)
-                metric("Open", result?.unrealized ?? 0, currency)
-                metric("Today", result?.today ?? 0, currency)
-            }
             ProfitSparkline(points: profitPoints(currency, realized: result?.realized), open: showHistory)
 
             // How much the bots may still invest under "Risk & limits" – so a new bot is not sized into the limit.
