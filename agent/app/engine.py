@@ -530,7 +530,7 @@ class Engine:
             decision = await strategy.evaluate(context(None))
             buy_targets = state.pop("targets", None)
             next_price = None
-            if positions:
+            if positions and not strategy.fixed_trades:
                 # another trade only well below the open ones – otherwise a lasting signal would buy them all at once
                 spacing = Decimal(str(params.get("trade_spacing", 0))) / 100
                 next_price = min(p.entry_price for p in positions) * (1 - spacing)
@@ -566,7 +566,8 @@ class Engine:
             targets.update(sell_price=near.get("sell_price"), stop_price=near.get("stop_price"))
             targets["note"] = targets["note"] or near.get("note")
         state["targets"] = targets if buy_targets or (nearest and position_targets.get(nearest.id)) else None
-        several = max_trades > 1 or len(positions) > 1  # also when the limit was lowered below the open trades
+        # also when the limit was lowered below the open trades; a strategy that manages its trades speaks for all
+        several = (max_trades > 1 or len(positions) > 1) and not strategy.fixed_trades
         if several and positions:
             state["position_targets"] = position_targets
         else:
@@ -594,6 +595,8 @@ class Engine:
     def max_trades(self, bot: dict) -> int:
         """How many trades the bot may hold at once (1 for strategies without the option)."""
         strategy = STRATEGIES.get(bot["strategy"])
+        if strategy and strategy.fixed_trades:
+            return strategy.fixed_trades
         if not strategy or not strategy.multi_trades:
             return 1
         return int(strategy.normalize(bot["params"]).get("max_trades", 1))
@@ -713,7 +716,7 @@ class Engine:
             before = self._snapshot(bot)
             deleted = self.db.delete_paper_trades(bot_id)
             store_positions(state, [])  # only paper trades are open (checked above)
-            for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at"):
+            for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at", "realized", "momentum"):
                 state.pop(key, None)
             status = m("engine.paper_reset", count=deleted)
             self.db.add_event(bot_id, "info", status)
@@ -748,8 +751,11 @@ class Engine:
             buying = pending.get("side") == "buy"
             if positions or buying:
                 strategy = STRATEGIES.get(b["strategy"])
-                # every trade counts; a buy in flight opens one more (a savings plan's adds to its position)
-                count += len(positions) + (1 if buying and not (positions and strategy and strategy.accumulates) else 0)
+                if strategy and strategy.fixed_trades:  # one position, held in slices
+                    count += 1
+                else:
+                    # every trade counts; a buy in flight opens one more (a savings plan's adds to its position)
+                    count += len(positions) + (1 if buying and not (positions and strategy and strategy.accumulates) else 0)
                 symbols.add(b["symbol"])
                 invested += sum((p.cost for p in positions), Decimal(0))
                 invested += Decimal(pending.get("quote_size") or 0) if buying else Decimal(0)
@@ -760,7 +766,8 @@ class Engine:
         count, invested, symbols = self.exposure(exclude_bot_id=bot["id"], broker=broker_of(bot))
         positions = open_positions(state)
         strategy = STRATEGIES.get(bot["strategy"])
-        if not (positions and strategy and strategy.accumulates):  # this buy opens a new trade
+        # this buy opens a new trade (a savings plan adds to its position, the momentum follower to its slices)
+        if not (positions and strategy and (strategy.accumulates or strategy.fixed_trades)):
             count += len(positions)  # the bot's own open trades count as well
             max_positions = int(limits["max_open_positions"])
             if max_positions > 0 and count >= max_positions:
@@ -1203,6 +1210,8 @@ class Engine:
         sold = min(sold, position.qty)
         cost_part = position.cost * sold / position.qty
         pnl = proceeds - cost_part
+        # what the bot's sales gained or lost in total – a strategy reinvesting it (momentum) counts its capital with it
+        state["realized"] = str(Decimal(str(state.get("realized") or 0)) + pnl)
         position.qty -= sold
         position.cost -= cost_part
         if position.qty <= 0 or position.qty < pair.min_order_size:

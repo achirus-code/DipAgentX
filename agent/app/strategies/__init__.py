@@ -4,12 +4,14 @@ from .base import (
 )
 from .ai import AiStrategy
 from .dip import DipStrategy
+from .momentum import MomentumStrategy
 from .others import DcaStrategy, PriceZoneStrategy, ReboundTrailingStrategy
 from .trend import TrendStrategy
 
 STRATEGIES: dict[str, Strategy] = {
     s.key: s for s in (
-        DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy(), TrendStrategy(), AiStrategy(),
+        DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy(), TrendStrategy(),
+        MomentumStrategy(), AiStrategy(),
     )
 }
 

@@ -253,6 +253,7 @@ public enum ParamNotes {
         case "zones": short = String(localized: "Zones")
         case "dca": short = String(localized: "Savings plan")
         case "trend": short = String(localized: "Trend")
+        case "momentum": short = String(localized: "Momentum")
         case "ai": short = String(localized: "AI")
         default: short = strategyName ?? key
         }

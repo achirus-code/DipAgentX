@@ -598,3 +598,56 @@ Sept. 2000 +1/+13 % statt −4/+8 %, Apr. 2015 −5/+3 % statt −10/−3 %, Feb
 
 Sparplan (gleicher Monatsbetrag, 10 Jahre): C7 im Median 1,77-fach der Einzahlungen, schlechtester Start 1,29-fach
 (Sept. 2013), immer im Plus. World halten: Median 1,73-fach, schlechtester Start 0,66-fach (Febr. 1999), 96 % im Plus.
+
+## 14. Krypto: Momentum-Trendfolger statt Dip-Bot (ETH/BTC, Oktober 2026)
+
+Der Dip-Käufer aus Abschnitt 7 war auf 18 Monaten optimiert. Mit Stundenkursen seit Januar 2020 (ETH-EUR, BTC-EUR,
+Gebühren 0 % Kauf / 0,09 % Verkauf, 0,03 % Spread) hielt er nicht: rund +7 % pro Jahr, Bullenmärkte verpasst. Die
+Suche über mehr als 2.000 Varianten mit jährlichen Blindtests ergab stattdessen einen Trendfolger. In DipAgentX heißt
+er **Momentum-Trendfolger** (ab 1.23.0).
+
+### Regel
+
+- Sechs Zeitfenster (14, 21, 30, 40, 50, 60 Tage) auf den 4-Stunden-Schlusskursen. Ein Fenster zählt als aufwärts,
+  sobald der Kurs darüber mehr als +5 % gestiegen ist (+2 %, solange die 90-Tage-Rendite über +20 % liegt), und als
+  abwärts, sobald er gefallen ist. Dazwischen bleibt es, wie es war.
+- Investiert ist der Anteil der Fenster, die aufwärts zeigen, in 10-%-Stufen. Gewinne werden wieder angelegt.
+- Liegt die Schwankung der letzten 20 Tage über 100 % pro Jahr, wird der Anteil entsprechend kleiner.
+- Funding-Untergrenze: Liegt die Funding-Rate der Binance-Futures im 7-Tage-Schnitt unter 2 % pro Jahr (Panik),
+  bleiben mindestens 50 % investiert.
+- Optional die Zufluss-Bremse: halbieren, solange in 7 Tagen netto mehr als 1 % der Börsenbestände eingezahlt
+  wurden (Coin Metrics).
+
+### Ergebnisse
+
+| | ETH | BTC | Halten ETH | Halten BTC |
+|---|---|---|---|---|
+| Blindtest 2022 – Okt. 2026 (Einstellungen nur mit den Jahren davor gewählt) | ×3,46 | ×3,50 | ×0,74 | ×1,87 |
+| Echte Engine im Replay ab 2022 (Simulation) | ×3,74 (×3,73) | ×3,42 (×3,44) | | |
+| mit Zufluss-Bremse, echte Engine ab 2022 | ×4,68 | ×3,85 | | |
+| 2022 | −10 % | −16 % | −66 % | −62 % |
+| größter Rückgang 2020–2026 | 38–39 % | 27–29 % | 77 % | 74 % |
+
+Zum Vergleich ein Portfolio aus 3.000 € ETH und 2.000 € BTC, frisch gestartet an jedem Tag ab Februar 2020:
+
+| | im Plus nach 1 Jahr | Ø Gewinn nach 1 Jahr | im Plus nach 2 Jahren | Ø Gewinn nach 2 Jahren |
+|---|---|---|---|---|
+| Momentum-Trendfolger | 88 % | +5.379 € | 99 % | +10.183 € |
+| mit Zufluss-Bremse | 92 % | +5.668 € | 100 % | +10.604 € |
+| Halten | 61 % | +6.100 € | 68 % | +7.463 € |
+
+### Erkenntnisse
+
+- **Rallyes:** Der Bot behält etwa 55–70 % einer starken Rallye. Nach dem Hoch verliert er deutlich weniger: 90 Tage
+  nach dem Hoch im Dezember 2024 −21 % statt −55 %, nach August 2025 −22 % statt −43 %.
+- **Kurze Zeiträume:** Unter etwa einem Monat ist das Ergebnis Zufall, für den Bot wie fürs Halten.
+- **Was nicht geholfen hat:** Dip-Kauf, andere Trendindikatoren (gleitende Durchschnitte, MACD, Supertrend,
+  Donchian), Fear & Greed, MVRV/Realized Price, Positionierung der Futures-Händler, Open-Interest-Washouts,
+  Kapitulationsvolumen, Makrodaten, Stablecoin-Menge, implizite Volatilität, maschinelles Lernen. Ebenso wenig
+  langsames Aufstocken nach Indikatoren (Pyramide, Gewinn-Sperrklinke, Trailing-Modus) oder ein fest gehaltener Kern.
+- **Grenzen der Zufluss-Bremse:** Sie wirkt nur mit höchstens einen Tag alten Daten. Coin Metrics korrigiert seine
+  „flash“-Werte später, der Backtest kennt also schon die korrigierten Zahlen. Deshalb ist sie nur eine Option.
+- **Ausführung:** Bis zu 4 Stunden Verzögerung schaden kaum, 12–24 Stunden kosten etwa ein Drittel. Limit-Orders
+  statt Market-Orders würden rund 10 % Endwert bringen; das ist noch nicht umgesetzt.
+- **Steuern (Deutschland):** Der Bot verkauft laufend. Seine Gewinne sind daher überwiegend innerhalb der
+  Spekulationsfrist steuerpflichtig, während Halten nach einem Jahr steuerfrei ist.
