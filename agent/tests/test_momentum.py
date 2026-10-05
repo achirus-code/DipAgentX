@@ -229,3 +229,23 @@ async def test_live_mode_buys_and_sells_real_orders_in_slices(tmp_path: Path):
     state = db.get_bot(bot_id)["state"]
     assert not open_positions(state) and len(ex.placed) == 20  # ten live sells
     assert not state.get("pending_order") and not state.get("holdings_mismatch")
+
+
+async def test_switching_to_live_closes_the_paper_slices_and_starts_afresh(tmp_path: Path):
+    ex = PathExchange(steady(0.003))
+    ex.placed = []
+    db, engine = make_engine(tmp_path, ex, live=True)
+    db.set_limits({"max_open_positions": 1})
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, True)
+    for _ in range(12):
+        await engine.tick()
+    assert len(open_positions(db.get_bot(bot_id)["state"])) == 10 and not ex.placed  # paper
+    db.update_bot(bot_id, paper=False)
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert not open_positions(bot["state"]) and "realized" not in bot["state"]
+    assert "starts afresh" in render(bot["status"], "en")
+    for _ in range(25):
+        await engine.tick()
+    positions = open_positions(db.get_bot(bot_id)["state"])
+    assert len(positions) == 10 and not any(p.paper for p in positions) and len(ex.placed) == 10

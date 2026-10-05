@@ -474,6 +474,8 @@ class Engine:
             return views[symbol]
 
         positions = open_positions(state)
+        if strategy.fixed_trades and not self.is_paper(bot) and any(p.paper for p in positions):
+            return await self._close_paper_slices(bot, state, view, positions)
         held: dict[str, MarketView] = {p.id: await view_of(p.symbol) for p in positions if p.symbol}
         if positions:
             for position in positions:
@@ -583,6 +585,22 @@ class Engine:
         status = buy_status or statuses[nearest.id]
         if several:
             return m("engine.trades_open", open=len(positions), max=max_trades, status=status)
+        return status
+
+    async def _close_paper_slices(self, bot: dict, state: dict, view: MarketView, positions: list[Position]) -> Message:
+        """Switched to live while holding paper slices: close them the simulated way and start afresh from the
+        capital – the next check works out the live position (real coins are never "sold" on paper)."""
+        pair = await self.exchange_for(bot).pair(bot["symbol"])
+        price = view.bid
+        for paper in [p for p in positions if p.paper]:
+            gross = paper.qty * price
+            fee = self._paper_fee(bot, "sell", gross)
+            self._record_sell(bot, state, pair, paper.qty, gross - fee, price, fee, None, True,
+                              m("engine.mode_changed_close"), position_id=paper.id)
+        for key in ("realized", "momentum"):
+            state.pop(key, None)
+        status = m("engine.mode_changed_restart")
+        self.db.add_event(bot["id"], "info", status)
         return status
 
     async def _sell_unless_loss(self, bot: dict, state: dict, view: MarketView, position: Position, sell: Sell,
@@ -1372,6 +1390,8 @@ class Engine:
             "position": pos_json(total) if total else None,
             "positions": [trade_json(p) for p in positions],
             "max_trades": self.max_trades(bot),
+            # the trades are slices of one position (momentum follower) – the apps show them as one
+            "sliced": bool(strategy and strategy.fixed_trades),
             "realized_pnl": float(s.get("realized") or 0),
             "trades_count": int(s.get("trades") or 0),
             "wins": int(s.get("wins") or 0),

@@ -2,6 +2,18 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.27.0] – 2026-10-05
+
+### Changed
+
+- **Momentum trend follower: one position in the apps.** Its up to 10 trades (slices of 10 % of the capital) are shown
+  as one position with entry and result in total instead of "Open trades 10/30"; the agent reports them as `sliced`.
+  The strategy description explains the slices: bought one after the other on entry, sold step by step when the
+  target falls – a change only costs the fee on the part that changes.
+- **Switching a momentum bot from paper to live with open paper trades** is no longer refused: the engine closes the
+  paper slices (simulated) with the next check and the bot starts afresh with its capital, live. The other way round,
+  and with an order in flight, stays locked.
+
 ## [1.26.0] – 2026-10-05
 
 ### Changed

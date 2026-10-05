@@ -119,13 +119,17 @@ class MomentumStrategy(Strategy):
     description = L(
         "For ETH and BTC: invests the more of its capital the more of six lookbacks (14 to 60 days) point up, in 10 % "
         "steps – fully invested in a clear uptrend, in cash in a downtrend. Very volatile markets get less, and while "
-        "the futures funding shows panic it keeps a floor. Rebalances about twice a week, each step is its own trade; "
-        "it also sells at a loss. Gains are reinvested.",
+        "the futures funding shows panic it keeps a floor. The position is held in up to 10 trades of 10 % of the capital "
+        "each – on entry they are bought one after the other within minutes; when the target falls e.g. to 80 %, two "
+        "of them are sold, so a change only costs the fee on the part that changes. Rebalances about twice a week, "
+        "also at a loss. Gains are reinvested.",
         "Für ETH und BTC: investiert umso mehr seines Kapitals, je mehr von sechs Zeitfenstern (14 bis 60 Tage) "
         "aufwärts zeigen, in 10-%-Stufen – im klaren Aufwärtstrend ganz, im Abwärtstrend in Cash. In sehr "
         "schwankenden Märkten weniger, und solange die Funding-Rate der Futures Panik zeigt, hält er eine "
-        "Untergrenze. Schichtet etwa zweimal pro Woche um, jede Stufe ist ein eigener Trade; verkauft auch mit "
-        "Verlust. Gewinne werden wieder angelegt.",
+        "Untergrenze. Die Position liegt in bis zu 10 Trades zu je 10 % des Kapitals – beim Einstieg kauft er sie "
+        "nacheinander innerhalb weniger Minuten; sinkt das Ziel z. B. auf 80 %, verkauft er 2 davon, so kostet jede "
+        "Änderung nur die Gebühr auf den geänderten Teil. Schichtet etwa zweimal pro Woche um, auch mit Verlust. "
+        "Gewinne werden wieder angelegt.",
     )
     icon = "chart.line.uptrend.xyaxis.circle"
     fixed_trades = 30
