@@ -945,6 +945,7 @@ class TradeRepublicExchange(Exchange):
     live_fees = Fees(0.0, float(FEE))
     # the order lists lag behind and executed orders may only show up in the timeline – look longer before giving up
     order_lookup_grace_ms = 15 * 60_000
+    max_candles = 100_000  # one request answers the whole range, however long
     BALANCES_TTL = 60.0
     ORDERS_KEPT = 200
 
@@ -1145,11 +1146,15 @@ class TradeRepublicExchange(Exchange):
 
     async def candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
         meta = await self.resolve(symbol)
-        span_days = (until - since) / 86_400_000
-        # "1d" is only the current trading day – "5d" covers a full 24 h window over night and weekend
-        range_ = "5d" if span_days <= 5 else "1m" if span_days <= 30 else "3m" if span_days <= 90 else "1y"
-        # Trade Republic only answers 10-minute and hourly candles (other resolutions get no answer at all)
-        resolution = 600_000 if interval < 60 else 3_600_000
+        # the range counts back from now, however wide the window is (an older chunk of a long series)
+        back_days = (self.now_ms() - since) / 86_400_000
+        if interval >= 1440:
+            # daily candles: "max" goes back about five years – hourly ones only cover the last three months
+            range_, resolution = ("1y" if back_days <= 360 else "max"), 86_400_000
+        else:
+            # "1d" is only the current trading day – "5d" covers a full 24 h window over night and weekend
+            range_ = "5d" if back_days <= 5 else "1m" if back_days <= 30 else "3m" if back_days <= 90 else "1y"
+            resolution = 600_000 if interval < 60 else 3_600_000
         payload = {"type": "aggregateHistoryLight", "range": range_, "id": f"{meta['isin']}.{meta['venue']}"}
         try:
             data = await self.market.request({**payload, "resolution": resolution}, timeout=10)

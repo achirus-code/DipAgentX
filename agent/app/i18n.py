@@ -64,7 +64,21 @@ def at(ms: int, tz: str = "Europe/Berlin") -> dict:
     return {"$": "at", "v": int(ms), "tz": tz}
 
 
+def day(ms: int) -> dict:
+    """A calendar day (UTC), e.g. the next monthly check – "Nov 2", in German "2.11."."""
+    return {"$": "day", "v": int(ms)}
+
+
+def month(key: str) -> dict:
+    """A month given as "YYYY-MM" – "Sep 2026", in German "Sep. 2026"."""
+    return {"$": "month", "v": key}
+
+
 WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "de": ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")}
+MONTHS = {
+    "en": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+    "de": ("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."),
+}
 
 
 def m(key: str, **args: Any) -> dict:
@@ -121,6 +135,12 @@ def _format_arg(arg: Any, lang: str) -> str:
         if kind == "at":
             when = datetime.fromtimestamp(int(v) / 1000, ZoneInfo(arg.get("tz") or "Europe/Berlin"))
             return f"{WEEKDAYS['de' if lang == 'de' else 'en'][when.weekday()]} {when:%H:%M}"
+        if kind == "day":
+            when = datetime.fromtimestamp(int(v) / 1000, ZoneInfo("UTC"))
+            return f"{when.day}.{when.month}." if lang == "de" else f"{MONTHS['en'][when.month - 1]} {when.day}"
+        if kind == "month":
+            year, mon = str(v).split("-")
+            return f"{MONTHS['de' if lang == 'de' else 'en'][int(mon) - 1]} {year}"
         return str(arg)
     if isinstance(arg, list):
         return " / ".join(_format_arg(a, lang) for a in arg)
@@ -192,6 +212,7 @@ CATALOG: dict[str, L] = {
     "targets.trailing": L("Trailing stop", "Trailing-Stop"),
     "targets.trailing_from": L("Trailing starts here", "Trailing startet hier"),
     "targets.trend": L("Waiting for an uptrend", "Warte auf Aufwärtstrend"),
+    "targets.trend_check": L("Next check {date}", "Nächste Prüfung {date}"),
     "targets.ai": L("Claude decides", "Claude entscheidet"),
     "cooldown": L("Cooling down for {left}", "Pause noch {left}"),
     "cooldown.window": L("Cooling down for {left} · {window}", "Pause noch {left} · {window}"),
@@ -240,6 +261,36 @@ CATALOG: dict[str, L] = {
     "trend.no_history": L(
         "Not enough price history for the trend filter ({days} of {need} days) – no buys",
         "Zu wenig Kursverlauf für den Trendfilter ({days} von {need} Tagen) – keine Käufe",
+    ),
+    # --- monthly trend follower
+    "monthly.invested": L("Invested {profit} · {detail} · next check {date}",
+                          "Investiert {profit} · {detail} · nächste Prüfung {date}"),
+    "monthly.out": L("In cash · {detail} · next check {date}", "In Cash · {detail} · nächste Prüfung {date}"),
+    "monthly.buy": L("Trend up – buying", "Trend aufwärts – kaufe"),
+    "monthly.exit": L("Trend down – selling", "Trend abwärts – verkaufe"),
+    "monthly.exit_reason": L("{detail} · result {profit}", "{detail} · Ergebnis {profit}"),
+    "monthly.sma": L("{month} close {close} vs. {n}-month average {avg} ({diff})",
+                     "Schluss {month} {close} vs. {n}-Monats-Schnitt {avg} ({diff})"),
+    "monthly.sma_band": L("{trend} – inside the ±{buffer}% buffer, unchanged",
+                          "{trend} – im Puffer ±{buffer} %, unverändert"),
+    "monthly.momentum": L("{n}-month return {ret} vs. cash rate {hurdle} (to the {month} close)",
+                          "{n}-Monats-Rendite {ret} vs. Zins {hurdle} (bis Schluss {month})"),
+    "monthly.with_unemployment": L("{trend} · {unemployment}", "{trend} · {unemployment}"),
+    "monthly.unemployment_rising": L(
+        "US unemployment {rate} % above its 12-month average {avg} % ({month})",
+        "US-Arbeitslosenquote {rate} % über ihrem 12-Monats-Schnitt {avg} % ({month})",
+    ),
+    "monthly.unemployment_holds": L(
+        "but US unemployment {rate} % not above its 12-month average {avg} % ({month}) – stays invested",
+        "aber US-Arbeitslosenquote {rate} % nicht über ihrem 12-Monats-Schnitt {avg} % ({month}) – bleibt investiert",
+    ),
+    "monthly.unemployment_unavailable": L(
+        "US unemployment rate not available – the trend alone decides",
+        "US-Arbeitslosenquote nicht verfügbar – der Trend allein entscheidet",
+    ),
+    "monthly.no_months": L(
+        "Not enough price history: {have} of {need} month-end closes – waiting",
+        "Zu wenig Kursverlauf: {have} von {need} Monatsschlusskursen – warte",
     ),
     # --- price zones
     "zones.no_price": L("No buy price set", "Kein Kaufpreis eingestellt"),

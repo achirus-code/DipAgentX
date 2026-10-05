@@ -39,7 +39,7 @@ The app is available in **English and German** (follows the macOS language, can 
 - **Two brokers side by side:** Revolut X (crypto) and Trade Republic (stocks, ETFs, crypto). Each has its own
   result, bots, trades, trading mode, limits and simulation fees – the tabs above the statistics switch between them.
   Don't need one? Switch it off under *Settings → Brokers* – its bots stop and the tabs disappear.
-- **Five strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
+- **Six strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
   sell once it has recovered”* or *“a savings plan for an MSCI World ETF on Trade Republic”*.
 - **Paper mode by default.** Live trading is switched on in the app per broker, only after the broker is connected and
   after a **double confirmation**. Switching back to paper mode sells all open live positions (with a warning first).
@@ -82,6 +82,7 @@ SQLite).
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
+| **Monthly trend follower** | once a month, on the first trading day: the whole amount when the previous month closed above its average of the last months (default 10, with a ±2 % buffer) – or with a better return than the cash rate (e.g. 12 months) | on that monthly check, as soon as the trend is down – also at a loss; optionally only when the US unemployment rate rises as well. Meant for ETFs and gold on Trade Republic (see the example below) |
 | **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum, optionally the news and optionally the Crypto Fear & Greed index (as background or as a contrarian signal at extremes) every N minutes (model selectable: Opus 5, Sonnet 5, Haiku 4.5; optional minimum confidence before a trade is executed) | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
@@ -92,6 +93,27 @@ SQLite).
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode
 > once the **minimum profit** (default 0.25 %, covers fees) is reached. It can't be set below 0 – to cut a loss, set a
 > **stop-loss**.
+
+### Example: three pillars on Trade Republic
+
+The *monthly trend follower* is meant for a slow, defensive setup – one bot per pillar, picked with the instrument
+search (accumulating share classes are best):
+
+| Bot | Share | Rules |
+|---|---|---|
+| MSCI World or ACWI IMI ETF | 40 % | price above its 10-month average (buffer 2 %), *sell only when unemployment rises* on |
+| Physical gold ETC | 30 % | signal *return better than the cash rate*, 12 months, cash rate ≈ what Trade Republic pays on cash |
+| Euro government bond ETF | 30 % | price above its 10-month average, buffer 0 % |
+
+Money that isn't invested stays as cash on the account. Once a year, set the amounts back to 40/30/30 of the total and
+use *Sell now* on a bot whose amount changed – it buys again with the new amount. Allow at least three open positions
+under the Trade Republic limits.
+
+In a backtest in euros (1973–2026, monthly closes, 1 € per order) this setup was up after 12 months in about 9 of 10
+cases and never down after 5 years; its deepest drop was about −14 % against −54 % for the MSCI World, at a slightly
+higher return over the whole period (about 9 % a year against 8 %). In long bull markets it earns clearly less than
+simply holding the index – it pays off in crashes such as 2000–2002 and 2008. A backtest is no guarantee and none of this is investment
+advice; switching in and out also ends tax advantages such as the tax-free gains on gold held for more than a year.
 
 ## Quick start
 
@@ -247,12 +269,14 @@ python3 scripts/check_localizations.py
 agent/                    Python 3.12 · FastAPI · SQLite
   app/main.py             REST API (answers in the app's language via Accept-Language)
   app/engine.py           bot engine: evaluation, limits, idempotent order execution, bookkeeping
-  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan, AI decides (Claude)
+  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan, monthly trend follower,
+                          AI decides (Claude)
   app/revolutx.py         Revolut X client (Ed25519 request signing)
   app/traderepublic.py    Trade Republic: login, WebSocket client, exchange, trading hours, demo market
   app/credentials.py      key pair generation / storage for the in-app Revolut X setup
   app/backup.py           backup archive (database snapshot + key) for export/import from the app
   app/i18n.py             English/German texts of the agent
+  app/macro.py            US unemployment rate (BLS) for the monthly trend follower
   tests/
 macos/                    SwiftUI menu bar app (Swift package, no Xcode project needed)
   Sources/DipAgentX/       app, views, API client

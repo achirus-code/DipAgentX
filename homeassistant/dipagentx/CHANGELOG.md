@@ -2,10 +2,19 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.21.0] – 2026-10-05
 
 ### Added
 
+- **Monthly trend follower** – a new strategy for ETFs and gold. Once a month, on the first trading day, it looks at
+  how the instrument closed the previous month: above its average of the last months (default 10, with a ±2 % buffer
+  so a price close to the average doesn't trade back and forth) – or, as the other signal, with a better return than
+  the cash rate (e.g. 12 months) – the bot holds the whole amount; otherwise it sells, also at a loss, and waits in
+  cash until a later month turns up again. The decision holds for the month, a crash in between doesn't trade. With
+  *Sell only when unemployment rises* a falling trend only sells when the US unemployment rate is also above its
+  12-month average (the agent fetches it from the US Bureau of Labor Statistics once a day; without it the trend alone
+  decides). *Reinvest the proceeds* (on by default) buys again with what the last sale brought in. The README shows a
+  three-bot setup for world shares, gold and euro government bonds on Trade Republic, with backtest results.
 - **Dip buyer: trend filter and trend exit.** New rules *Trend filter: long average* and *short average* (in days,
   0 = off, the default) with a *buffer* (default 3 %): the bot only buys while the price is above both averages – the
   long one by at least the buffer. It counts as a downtrend once the price falls below the short average or more than
@@ -13,6 +22,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   sells open trades right away – also at a loss, like a stop-loss. A backtest on BTC and ETH (2018–2026) worked best
   with 200 and 60 days, a 3 % buffer, trend exit and a wide trailing stop (10 %). The daily closes for the averages
   are fetched once a day (in chunks of at most 98 candles). Without enough history (a young pair) the bot doesn't buy.
+
+### Fixed
+
+- **Trade Republic: long daily price series.** Daily candles were built from hourly ones, which Trade Republic only
+  serves for the last three months – longer averages (like the dip buyer's 200-day trend filter) saw only part of the
+  history. They now come as daily candles, up to about five years back, in one request.
 
 ## [1.20.0] – 2026-10-05
 
