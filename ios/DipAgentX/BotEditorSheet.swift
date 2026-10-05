@@ -13,6 +13,10 @@ struct BotEditorSheet: View {
     @State private var name = ""
     @State private var strategyKey = "dip"
     @State private var symbol = "ETH-EUR"
+    /// The broker the bot trades on: a new bot gets the one of the selected tab, an existing one keeps its own.
+    @State private var broker: Broker = .revolutX
+    /// Trade Republic: what the chosen ISIN stands for (name, ticker).
+    @State private var instrument: Instrument?
     @State private var values: [String: JSONValue] = [:]
     @State private var paper = true
     @State private var enabled = true
@@ -26,8 +30,21 @@ struct BotEditorSheet: View {
     private var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
     private var hasPosition: Bool { bot?.position != nil }
     private var generatedName: String {
-        ParamNotes.generatedName(strategy: strategyKey, strategyName: strategy?.name, symbol: symbol)
+        ParamNotes.generatedName(strategy: strategyKey, strategyName: strategy?.name, symbol: symbol, base: instrumentShort)
     }
+    /// Trade Republic: the ticker (or name) instead of the ISIN.
+    private var instrumentShort: String? {
+        guard broker == .tradeRepublic else { return nil }
+        if let instrument, instrument.symbol == symbol { return instrument.short ?? instrument.name }
+        if let bot, bot.symbol == symbol { return bot.baseCurrency }
+        return nil
+    }
+    private var instrumentTitle: String {
+        if let instrument, instrument.symbol == symbol { return instrument.name }
+        if let bot, bot.symbol == symbol { return bot.title }
+        return symbol
+    }
+    private var fees: (rate: Double, fixed: Double) { store.fees(for: broker, paper: paper) }
 
     var body: some View {
         NavigationStack {
@@ -56,7 +73,17 @@ struct BotEditorSheet: View {
             strategySection
             Section {
                 TextField("Name", text: $name, prompt: Text(verbatim: generatedName)) // empty = the generated name
-                if store.pairs.isEmpty {
+                if store.showsBrokerTabs {
+                    LabeledContent("Broker", value: broker.title)
+                }
+                if broker == .tradeRepublic {
+                    NavigationLink {
+                        InstrumentPicker(broker: broker, selection: $symbol) { instrument = $0 }
+                    } label: {
+                        LabeledContent("Instrument", value: instrumentTitle)
+                    }
+                    .disabled(hasPosition)
+                } else if store.pairs(for: broker).isEmpty {
                     LabeledContent("Trading pair") {
                         TextField("ETH-EUR", text: $symbol)
                             .multilineTextAlignment(.trailing)
@@ -66,7 +93,7 @@ struct BotEditorSheet: View {
                     .disabled(hasPosition)
                 } else {
                     NavigationLink {
-                        PairPicker(pairs: ParamNotes.sortedPairs(store.pairs, including: symbol), selection: $symbol)
+                        PairPicker(pairs: ParamNotes.sortedPairs(store.pairs(for: broker), including: symbol), selection: $symbol)
                     } label: {
                         LabeledContent("Trading pair", value: symbol)
                     }
@@ -135,7 +162,7 @@ struct BotEditorSheet: View {
                         value: Binding(get: { values[param.key] ?? param.default }, set: { values[param.key] = $0 }),
                         currency: quote,
                         note: ParamNotes.note(for: param.key, strategy: strategyKey, params: strategy.params, values: values,
-                                              quote: quote, takerFee: store.status?.takerFee)
+                                              quote: quote, takerFee: fees.rate, fixedFee: fees.fixed)
                     )
                 }
             }
@@ -145,7 +172,7 @@ struct BotEditorSheet: View {
     /// Fees vs. the profit the rules aim for – small orders pay a lot because the fee is rounded up to a cent.
     @ViewBuilder
     private var costCheckSection: some View {
-        if let check = TradeCostCheck(strategy: strategyKey, params: values, quote: quote, feeRate: store.status?.takerFee ?? TradeCostCheck.defaultFeeRate) {
+        if let check = TradeCostCheck(strategy: strategyKey, params: values, quote: quote, feeRate: fees.rate, fixedFee: fees.fixed) {
             Section {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
@@ -160,8 +187,13 @@ struct BotEditorSheet: View {
                                     .font(.footnote).foregroundStyle(.orange)
                             }
                         } else if !check.covered {
-                            Text("Very small orders: the fee is rounded up to a full cent, which makes every trade expensive. Use larger orders.")
-                                .font(.footnote).foregroundStyle(.orange)
+                            if fees.fixed > 0 {
+                                Text("Small orders: the fixed fee per order makes every trade expensive. Use larger orders.")
+                                    .font(.footnote).foregroundStyle(.orange)
+                            } else {
+                                Text("Very small orders: the fee is rounded up to a full cent, which makes every trade expensive. Use larger orders.")
+                                    .font(.footnote).foregroundStyle(.orange)
+                            }
                         }
                     }
                 } icon: {
@@ -191,8 +223,8 @@ struct BotEditorSheet: View {
             .disabled(hasPosition)
             if !paper {
                 Label(
-                    store.status?.liveTradingAllowed == true
-                        ? LocalizedStringKey("Attention: this bot trades with real money on Revolut X.")
+                    store.isLive(broker)
+                        ? LocalizedStringKey("Attention: this bot trades with real money on \(broker.title).")
                         : LocalizedStringKey("Live trading is off in the settings (Trading mode) – until then the bot trades simulated."),
                     systemImage: "exclamationmark.triangle.fill"
                 )
@@ -214,12 +246,18 @@ struct BotEditorSheet: View {
             name = bot.name
             strategyKey = bot.strategy
             symbol = bot.symbol
+            broker = bot.broker
             values = bot.params
             paper = bot.paperRequested
             enabled = bot.enabled
         } else if let s = store.strategy(strategyKey) {
+            broker = store.broker
+            if broker == .tradeRepublic {
+                instrument = .tradeRepublicStart
+                symbol = Instrument.tradeRepublicStart.symbol
+            }
             values = defaults(for: s)
-            paper = !(store.status?.liveTradingAllowed ?? false) // new bots follow the global mode
+            paper = !store.isLive(broker) // new bots follow the broker's mode
         }
     }
 
@@ -246,7 +284,8 @@ struct BotEditorSheet: View {
             symbol: symbol.trimmingCharacters(in: .whitespaces).uppercased(),
             params: values,
             enabled: enabled,
-            paper: paper
+            paper: paper,
+            broker: broker
         )
         Task {
             do {
@@ -432,6 +471,64 @@ struct PairPicker: View {
         }
         .searchable(text: $search, prompt: Text("Search pair, e.g. BTC"))
         .navigationTitle("Trading pair")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+/// Trade Republic lists thousands of stocks, ETFs and coins: the known ones first, the rest via its search.
+struct InstrumentPicker: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let broker: Broker
+    @Binding var selection: String
+    let picked: (Instrument) -> Void
+    @State private var search = ""
+    @State private var results: [Instrument] = []
+    @State private var searching = false
+    @State private var error: String?
+
+    var body: some View {
+        List(results) { instrument in
+            Button {
+                selection = instrument.symbol
+                picked(instrument)
+                dismiss()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: instrument.name).foregroundStyle(.primary)
+                        Text(verbatim: instrument.details).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if instrument.symbol == selection { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                }
+            }
+        }
+        .overlay {
+            if searching && results.isEmpty {
+                ProgressView()
+            } else if let error {
+                Text(error).foregroundStyle(.red).padding()
+            } else if results.isEmpty {
+                Text("Nothing found").foregroundStyle(.secondary)
+            }
+        }
+        .searchable(text: $search, prompt: Text("Search name, ticker or ISIN"))
+        .task(id: search) {
+            // wait for a pause in typing – every search is a request to Trade Republic
+            if !search.isEmpty { try? await Task.sleep(for: .milliseconds(400)) }
+            guard !Task.isCancelled else { return }
+            searching = true
+            do {
+                results = try await store.instruments(search.trimmingCharacters(in: .whitespaces), broker: broker)
+                error = nil
+            } catch {
+                if !Task.isCancelled { self.error = error.localizedDescription }
+            }
+            searching = false
+        }
+        .navigationTitle("Instrument")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

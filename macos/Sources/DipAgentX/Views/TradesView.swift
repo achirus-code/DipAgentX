@@ -7,8 +7,8 @@ struct TradesView: View {
     @State private var botFilter: Int?
 
     private var filtered: [Trade] {
-        guard let botFilter else { return store.trades }
-        return store.trades.filter { $0.botId == botFilter }
+        guard let botFilter else { return store.brokerTrades }
+        return store.brokerTrades.filter { $0.botId == botFilter }
     }
 
     private var grouped: [(day: Date, trades: [Trade])] {
@@ -50,7 +50,7 @@ struct TradesView: View {
             Menu {
                 Button("All bots") { botFilter = nil }
                 Divider()
-                ForEach(store.bots) { bot in
+                ForEach(store.brokerBots) { bot in
                     Button(bot.name) { botFilter = bot.id }
                 }
             } label: {
@@ -62,6 +62,7 @@ struct TradesView: View {
             Spacer()
             Text("\(String(filtered.count)) trades").font(.system(size: 10.5)).foregroundStyle(.secondary)
         }
+        .onChange(of: store.broker) { botFilter = nil } // the other broker has other bots
     }
 
     @ViewBuilder

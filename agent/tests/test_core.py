@@ -565,7 +565,7 @@ async def test_holdings_mismatch_pauses_trading_and_clears(tmp_path: Path, monke
     assert any(e["level"] == "error" and "Holdings check" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
 
     ex.held = {}  # back to normal (e.g. a transfer arrived) – the flag clears, trading resumes
-    engine._holdings_checked_at = 0
+    engine._holdings_checked_at["revolutx"] = 0
     await engine.tick()
     bot = db.get_bot(bot_id)
     assert not bot["state"].get("holdings_mismatch") and pos(bot) is None  # stop-loss sold

@@ -16,7 +16,7 @@ ARG BUILD_VERSION=dev
 LABEL io.hass.version="${BUILD_VERSION}" \
       io.hass.type="addon" \
       io.hass.name="DipAgentX" \
-      io.hass.description="Trading bots for Revolut X, controlled from the DipAgentX macOS menu bar app" \
+      io.hass.description="Trading bots for Revolut X and Trade Republic, controlled from the DipAgentX apps" \
       org.opencontainers.image.title="DipAgentX" \
       org.opencontainers.image.source="https://github.com/achirus-code/DipAgentX" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-# Unprivileged runtime user; bots, trades, settings and the Revolut X key live in /data.
+# Unprivileged runtime user; bots, trades, settings, the Revolut X key and the Trade Republic session live in /data.
 # The container starts as root only so the entrypoint can take over /data (Home Assistant mounts it root-owned)
 # and then drops to this user before uvicorn starts. `docker run --user 10001` still works as before.
 RUN useradd --system --uid 10001 dipagentx && mkdir -p /data && chown dipagentx /data

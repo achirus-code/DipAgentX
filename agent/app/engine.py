@@ -20,10 +20,10 @@ from typing import Any
 import httpx
 
 from .config import Settings
-from .db import Database, now_ms
-from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
+from .db import Database, now_ms, scoped
+from .errors import ExchangeError
+from .exchange import REVOLUTX, Candle, Exchange, Fees, OrderResult, PairInfo, Ticker, UnconfiguredExchange
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
-from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
 from .strategies.base import DAY_MS, fetch_daily_closes
 
@@ -64,6 +64,11 @@ def bot_has_live_position(bot: dict[str, Any] | None) -> bool:
     return bool(bot) and any(not p.paper for p in open_positions(bot["state"]))
 
 
+def broker_of(bot: dict[str, Any]) -> str:
+    """The broker a bot trades on – bots from before the second broker are Revolut X bots."""
+    return bot.get("exchange") or REVOLUTX
+
+
 def find_position(state: dict[str, Any], position_id: str | None) -> Position | None:
     """The trade with this id – without an id (orders placed before 1.13) the bot's only trade."""
     positions = open_positions(state)
@@ -78,20 +83,21 @@ def definitely_not_placed(exc: Exception) -> bool:
     Everything else (timeouts, 5xx, an unreadable response – note that a JSON decoding error is a ``ValueError``)
     means the order *may* have gone through and must be looked up instead of being sent again.
     """
-    return isinstance(exc, Problem) or (isinstance(exc, RevolutXError) and not exc.transient)
+    return isinstance(exc, Problem) or (isinstance(exc, ExchangeError) and not exc.transient)
 
 
 def is_transient(exc: Exception) -> bool:
     """Network or exchange-side trouble that usually clears up by itself."""
     return isinstance(exc, (httpx.HTTPError, ConnectionError, TimeoutError)) or (
-        isinstance(exc, RevolutXError) and exc.transient
+        isinstance(exc, ExchangeError) and exc.transient
     )
 
 
-def short_fill(pending: dict, r: OrderResult) -> bool:
+def short_fill(pending: dict, r: OrderResult, partial_fills: bool = True) -> bool:
     """A terminal order whose reported fill is smaller than what we asked for. Revolut X can report "filled" a
-    moment before the fill data is complete; booking that would leave part of the position unbooked."""
-    if r.status != "filled":
+    moment before the fill data is complete; booking that would leave part of the position unbooked. Exchanges
+    without partial fills (Trade Republic) round the size themselves – their fill is never "short"."""
+    if r.status != "filled" or not partial_fills:
         return False
     if pending.get("base_size"):
         return r.filled_qty < Decimal(pending["base_size"])
@@ -142,13 +148,19 @@ class CandleCache:
 
 
 class Engine:
-    def __init__(self, db: Database, exchange: Exchange, settings: Settings):
+    """Runs the bots of every broker. Symbols of different brokers never collide (Revolut X: ``ETH-EUR``, Trade
+    Republic: ``<ISIN>-EUR``), so prices and candles are kept per symbol; limits, live trading, simulation fees and
+    the summary are kept per broker."""
+
+    def __init__(self, db: Database, exchanges: Exchange | dict[str, Exchange], settings: Settings):
         self.db = db
-        self.exchange = exchange
+        self.exchanges: dict[str, Exchange] = (
+            dict(exchanges) if isinstance(exchanges, dict) else {exchanges.broker: exchanges}
+        )
         self.settings = settings
         self.snapshots: dict[str, dict[str, Any]] = {}
         self.last_tick: int | None = None
-        self.exchange_error: Message | None = None
+        self.exchange_errors: dict[str, Message | None] = {}
         self.instance_error: Message | None = None
         self._wake = asyncio.Event()
         self._locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -160,8 +172,30 @@ class Engine:
         self._candles = CandleCache()
         # last evaluation per bot; only persisted together with a state/status change (saves a write per tick)
         self._last_check: dict[int, int] = {}
-        self._holdings_checked_at = 0
+        self._holdings_checked_at: dict[str, int] = defaultdict(int)
         self._background: set[asyncio.Task] = set()
+
+    # --- brokers -----------------------------------------------------------
+
+    @property
+    def exchange(self) -> Exchange:
+        """The Revolut X slot (what there was before the second broker)."""
+        return self.exchanges[REVOLUTX]
+
+    @exchange.setter
+    def exchange(self, value: Exchange) -> None:
+        self.exchanges[REVOLUTX] = value
+
+    @property
+    def exchange_error(self) -> Message | None:
+        return self.exchange_errors.get(REVOLUTX)
+
+    def exchange_for(self, bot_or_broker: dict[str, Any] | str) -> Exchange:
+        broker = bot_or_broker if isinstance(bot_or_broker, str) else broker_of(bot_or_broker)
+        exchange = self.exchanges.get(broker)
+        if exchange is None:
+            exchange = self.exchanges[broker] = UnconfiguredExchange(m("exchange.unknown", broker=broker), broker)
+        return exchange
 
     # --- loop -------------------------------------------------------------
 
@@ -179,9 +213,11 @@ class Engine:
     async def run(self) -> None:
         if not self._acquire_instance_lock():
             return
-        log.info("Engine started (exchange: %s, interval: %ss)", self.exchange.name, self.settings.tick_seconds)
+        log.info("Engine started (exchanges: %s, interval: %ss)",
+                 ", ".join(f"{b}={e.name}" for b, e in self.exchanges.items()), self.settings.tick_seconds)
         async with self._tick_lock:
-            self.apply_paper_fees()
+            for broker in self.exchanges:
+                self.apply_paper_fees(broker)
         while True:
             try:
                 async with self._tick_lock:
@@ -194,35 +230,49 @@ class Engine:
                 pass
             self._wake.clear()
 
-    def paper_fee(self, side: str) -> Decimal:
-        """Fee rate the simulation charges for a ``buy`` or ``sell`` (settings, default: Revolut X taker rate on sells)."""
-        return Decimal(str(self.db.get_paper_fees(float(self.settings.taker_fee))[side]))
+    def paper_fees(self, broker: str = REVOLUTX) -> dict[str, float]:
+        """What the simulation charges on the broker: rates for buys and sells and a fixed amount per order
+        (settings; defaults: the Revolut X taker rate on sells, 1 € per order on Trade Republic)."""
+        return self.db.get_paper_fees(broker, float(self.settings.taker_fee) if broker == REVOLUTX else None)
 
-    def sell_fee_rate(self, bot: dict) -> float:
-        """The rate a sale of this bot's trades is charged – strategies use it for break-even and net profit."""
-        return float(self.paper_fee("sell")) if self.is_paper(bot) else float(self.settings.taker_fee)
+    def fees(self, broker: str, paper: bool, side: str = "sell") -> Fees:
+        """What a ``buy`` or ``sell`` costs on the broker, simulated or real."""
+        if paper:
+            f = self.paper_fees(broker)
+            return Fees(float(f[side]), float(f.get("fixed") or 0))
+        return self.exchange_for(broker).live_fees or Fees(float(self.settings.taker_fee))
 
-    def apply_paper_fees(self) -> int:
+    def sell_fees(self, bot: dict) -> Fees:
+        """What a sale of this bot's trades costs – strategies use it for break-even and net profit."""
+        return self.fees(broker_of(bot), self.is_paper(bot))
+
+    def apply_paper_fees(self, broker: str = REVOLUTX) -> int:
         """Rebook the simulated trades if the fee settings differ from the rates they were booked with."""
         taker = float(self.settings.taker_fee)
-        applied = self.db.get_setting("paper_fees_applied") or {"buy": taker, "sell": taker}  # before 1.17.1: taker both
-        target = self.db.get_paper_fees(taker)
-        count = self.db.reprice_paper(applied, target)
-        self.db.set_setting("paper_fees_applied", target)
+        target = self.paper_fees(broker)
+        # before 1.17.1 Revolut X simulated the taker rate on both sides; other brokers start with their defaults
+        legacy = {"buy": taker, "sell": taker, "fixed": 0.0} if broker == REVOLUTX else target
+        applied = self.db.get_setting(scoped("paper_fees_applied", broker)) or legacy
+        count = self.db.reprice_paper(applied, target, broker)
+        self.db.set_setting(scoped("paper_fees_applied", broker), target)
         if count:
-            log.info("Simulated trades rebooked with fees buy %s / sell %s (%d trades)", target["buy"], target["sell"], count)
+            log.info("Simulated %s trades rebooked with fees buy %s / sell %s / fixed %s (%d trades)",
+                     broker, target["buy"], target["sell"], target.get("fixed"), count)
         return count
 
     def wake(self) -> None:
         self._wake.set()
 
     def replace_exchange(self, new: Exchange) -> None:
-        """Switch to new credentials without a restart. The old client is closed once the running tick is done."""
-        old = self.exchange
-        self.exchange = new
-        self.exchange_error = None
+        """Switch a broker to new credentials without a restart. The old client is closed once the running tick
+        is done."""
+        old = self.exchanges.get(new.broker)
+        self.exchanges[new.broker] = new
+        self.exchange_errors.pop(new.broker, None)
         self._candles.clear()
         self.wake()
+        if old is None or old is new:
+            return
 
         async def close_old() -> None:
             async with self._tick_lock:
@@ -242,49 +292,52 @@ class Engine:
         """Forget everything derived from the old database (after a restore)."""
         self._last_check.clear()
         self._candles.clear()
-        self.exchange_error = None
+        self.exchange_errors.clear()
 
     async def shutdown(self) -> None:
         for task in list(self._background):
             task.cancel()
-        await self.exchange.close()
+        for exchange in self.exchanges.values():
+            await exchange.close()
 
-    def live_trading_enabled(self) -> bool:
-        """Global switch, off by default; only the app can turn it on (with double confirmation)."""
-        return bool(self.db.get_setting("live_trading", False))
+    def live_trading_enabled(self, broker: str = REVOLUTX) -> bool:
+        """Switch per broker, off by default; only the app can turn it on (with double confirmation)."""
+        return bool(self.db.get_setting(scoped("live_trading", broker), False))
 
     def is_paper(self, bot: dict[str, Any]) -> bool:
         """Mode for *new* buys. Open positions keep the mode they were bought with."""
-        return bot["paper"] or not self.live_trading_enabled()
+        return bot["paper"] or not self.live_trading_enabled(broker_of(bot))
 
-    async def _fetch_candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
-        return await self._candles.fetch(self.exchange, symbol, interval, since, until)
+    async def market_view(self, symbol: str, ticker: Ticker | None = None, exchange: Exchange | None = None) -> MarketView:
+        exchange = exchange or self.exchange
 
-    async def _daily_closes(self, symbol: str, days: int, now: int) -> list[Decimal]:
-        return await self._candles.daily_closes(self.exchange, symbol, days, now)
+        async def fetch(symbol: str, interval: int, since: int, until: int) -> list[Candle]:
+            return await self._candles.fetch(exchange, symbol, interval, since, until)
 
-    async def market_view(self, symbol: str, ticker: Ticker | None = None) -> MarketView:
+        async def daily(symbol: str, days: int, now: int) -> list[Decimal]:
+            return await self._candles.daily_closes(exchange, symbol, days, now)
+
         if ticker is None:
-            ticker = await self.exchange.ticker(symbol)
-        view = MarketView(self.exchange, symbol, ticker, self.exchange.now_ms(), fetch=self._fetch_candles,
-                          daily=self._daily_closes)
+            ticker = await exchange.ticker(symbol)
+        view = MarketView(exchange, symbol, ticker, exchange.now_ms(), fetch=fetch, daily=daily)
         self.snapshots[symbol] = {
             "price": float(view.price),
             "bid": float(view.bid),
             "ask": float(view.ask),
             "change_24h": await view.change_pct(24),
+            "closed": view.closed,
             "updated_at": now_ms(),
         }
         return view
 
-    async def _market_views(self, symbols: list[str]) -> tuple[dict[str, MarketView], dict[str, Message]]:
+    async def _market_views(self, exchange: Exchange, symbols: list[str]) -> tuple[dict[str, MarketView], dict[str, Message]]:
         """Ticker for all symbols in one request (where supported), candles concurrently."""
         views: dict[str, MarketView] = {}
         errors: dict[str, Message] = {}
         if not symbols:
             return views, errors
         try:
-            tickers = await self.exchange.tickers(symbols)
+            tickers = await exchange.tickers(symbols)
         except Exception as exc:  # noqa: BLE001 – fall back to one request per symbol below
             log.warning("Ticker batch failed: %s", exc)
             tickers = {}
@@ -293,7 +346,7 @@ class Engine:
         async def build(symbol: str) -> None:
             async with semaphore:
                 try:
-                    views[symbol] = await self.market_view(symbol, tickers.get(symbol))
+                    views[symbol] = await self.market_view(symbol, tickers.get(symbol), exchange)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("Market data for %s failed: %s", symbol, exc)
                     errors[symbol] = as_message(exc)
@@ -301,14 +354,28 @@ class Engine:
         await asyncio.gather(*(build(symbol) for symbol in symbols))
         return views, errors
 
+    def broker_enabled(self, broker: str) -> bool:
+        """A broker switched off in the settings is left alone: no prices, no bots, no login."""
+        return broker not in (self.db.get_setting("brokers_disabled") or [])
+
     async def tick(self) -> None:
         bots = self.db.list_bots()
+        brokers = sorted(b for b in {*self.exchanges, *(broker_of(bot) for bot in bots)} if self.broker_enabled(b))
+        # every broker on its own: a slow or logged-out broker doesn't hold up the other one's bots
+        await asyncio.gather(*(self._tick_broker(broker, [b for b in bots if broker_of(b) == broker]) for broker in brokers))
+        self.last_tick = now_ms()
+
+    async def _tick_broker(self, broker: str, bots: list[dict[str, Any]]) -> None:
+        exchange = self.exchange_for(broker)
+        try:
+            await exchange.idle()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Housekeeping on %s failed: %s", broker, exc)
         # stopped bots still need a price while they hold a position (unrealised P&L) or an order is in flight
         relevant = [b for b in bots if b["enabled"] or has_position(b["state"]) or b["state"].get("pending_order")]
-        views, errors = await self._market_views(sorted({b["symbol"] for b in relevant}))
-        self.exchange_error = next(iter(errors.values()), None)
-        self.last_tick = now_ms()
-        await self._verify_holdings(bots)
+        views, errors = await self._market_views(exchange, sorted({b["symbol"] for b in relevant}))
+        self.exchange_errors[broker] = next(iter(errors.values()), None)
+        await self._verify_holdings(broker, bots)
 
         for bot in bots:
             if not bot["enabled"]:
@@ -359,9 +426,14 @@ class Engine:
                 if mismatch := state.get("holdings_mismatch"):
                     # the exchange holds less than we booked – no trading until that is resolved (a late fill
                     # gets booked above; otherwise "Sell position now" sells what is there and writes off the rest)
-                    base, _ = split_symbol(bot["symbol"])
+                    base = view.instrument.get("short") or split_symbol(bot["symbol"])[0]
                     status = m("engine.holdings_mismatch", booked=qty(Decimal(mismatch["booked"])),
                                held=qty(Decimal(mismatch["held"])), base=base)
+                    return
+                if view.closed:
+                    # outside trading hours (stocks and ETFs on Trade Republic): nothing can be bought or sold, and
+                    # the prices don't move – the strategy waits for the opening as well
+                    status = view.closed
                     return
                 status = await self._evaluate(bot, state, view)
                 state.pop("retry_after", None)
@@ -389,7 +461,7 @@ class Engine:
         params = strategy.normalize(bot["params"])
 
         def context(position: Position | None) -> Context:
-            return Context(params, position, state, view, quote, self.sell_fee_rate(bot),
+            return Context(params, position, state, view, quote, self.sell_fees(bot),
                            journal=lambda entry: self.db.add_ai_decision(bot_id=bot["id"], **entry))
 
         if strategy.accumulates:  # savings plan: one position that every buy adds to
@@ -485,7 +557,7 @@ class Engine:
         """Sell one trade – unless it is a target rule that would realize a loss. Returns (sold, status)."""
         # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
         # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
-        net = position.net_proceeds(view.bid, float(self.paper_fee("sell")) if position.paper else float(self.settings.taker_fee), quote)
+        net = position.net_proceeds(view.bid, self.fees(broker_of(bot), position.paper), quote)
         if not sell.stop and net < position.cost:
             return False, m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
         return True, await self._sell(bot, state, view, sell.reason, position)
@@ -510,7 +582,9 @@ class Engine:
         bot = self.db.get_bot(bot_id)
         if not bot:
             raise KeyError(bot_id)
-        view = await self.market_view(bot["symbol"])
+        view = await self.market_view(bot["symbol"], exchange=self.exchange_for(bot))
+        if view.closed:
+            raise Problem("err.market_closed", reason=view.closed)
         async with self._locks[bot_id]:
             bot = self.db.get_bot(bot_id)
             if not bot:
@@ -553,7 +627,7 @@ class Engine:
             before = self._snapshot(bot)
             bot["state"].setdefault("ai", {})["next_at"] = 0
             self._persist(bot, bot["state"], bot["status"], before)
-        views, errors = await self._market_views([bot["symbol"]])
+        views, errors = await self._market_views(self.exchange_for(bot), [bot["symbol"]])
         view = views.get(bot["symbol"])
         if view is None:
             raise Problem("err.no_market_data", error=errors.get(bot["symbol"], "?"))
@@ -575,15 +649,16 @@ class Engine:
             if state.get("pending_order"):
                 raise Problem("err.order_running")
             before = self._snapshot(bot)
-            pair = await self.exchange.pair(bot["symbol"])
+            exchange = self.exchange_for(bot)
+            pair = await exchange.pair(bot["symbol"])
             store_positions(state, [p for p in positions if p not in chosen])
             state.pop("holdings_mismatch", None)
             state.pop("fill_check", None)
-            state["last_sell_at"] = self.exchange.now_ms()
-            status = m("engine.position_discarded", qty=qty(sum(p.qty for p in chosen)), base=pair.base,
+            state["last_sell_at"] = exchange.now_ms()
+            status = m("engine.position_discarded", qty=qty(sum(p.qty for p in chosen)), base=self._base(bot, pair),
                        cost=money(sum(p.cost for p in chosen), pair.quote))
             self.db.add_event(bot["id"], "info", status)
-            self._holdings_checked_at = 0
+            self._holdings_checked_at[broker_of(bot)] = 0
             self._persist(bot, state, status, before)
             return status
 
@@ -609,11 +684,11 @@ class Engine:
             self._persist(bot, state, status, before)
             return status
 
-    async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
-        """Market-sell every open live position (used when switching back to paper mode)."""
+    async def close_live_positions(self, reason: Message, broker: str = REVOLUTX) -> list[dict[str, Any]]:
+        """Market-sell every open live position on the broker (used when switching it back to paper mode)."""
         results = []
         for bot in self.db.list_bots():
-            if not bot_has_live_position(bot):
+            if broker_of(bot) != broker or not bot_has_live_position(bot):
                 continue
             try:
                 message = await self.close_position(bot["id"], reason, live_only=True)
@@ -626,11 +701,11 @@ class Engine:
 
     # --- limits -------------------------------------------------------------------
 
-    def exposure(self, exclude_bot_id: int | None = None) -> tuple[int, Decimal, set[str]]:
-        """Open positions (incl. buy orders in flight), invested capital and busy symbols of all bots."""
+    def exposure(self, exclude_bot_id: int | None = None, broker: str = REVOLUTX) -> tuple[int, Decimal, set[str]]:
+        """Open positions (incl. buy orders in flight), invested capital and busy symbols of the broker's bots."""
         count, invested, symbols = 0, Decimal(0), set()
         for b in self.db.list_bots():
-            if b["id"] == exclude_bot_id:
+            if b["id"] == exclude_bot_id or broker_of(b) != broker:
                 continue
             positions = open_positions(b["state"])
             pending = b["state"].get("pending_order") or {}
@@ -645,8 +720,8 @@ class Engine:
         return count, invested, symbols
 
     def _limit_violation(self, bot: dict, state: dict, quote_size: Decimal) -> dict | None:
-        limits = self.db.get_limits()
-        count, invested, symbols = self.exposure(exclude_bot_id=bot["id"])
+        limits = self.db.get_limits(broker_of(bot))
+        count, invested, symbols = self.exposure(exclude_bot_id=bot["id"], broker=broker_of(bot))
         positions = open_positions(state)
         strategy = STRATEGIES.get(bot["strategy"])
         if not (positions and strategy and strategy.accumulates):  # this buy opens a new trade
@@ -674,18 +749,19 @@ class Engine:
             return m("engine.position_open_no_buy")
         # all trades of a bot run in the same mode – a mode change only sells until they are closed
         open_position = next((p for p in positions if p.paper != self.is_paper(bot)), None)
+        exchange = self.exchange_for(bot)
         if open_position:
             if not (open_position.paper and strategy.accumulates):
                 return m("engine.mode_changed_paper" if open_position.paper else "engine.mode_changed_live")
             # a savings plan would otherwise never buy again (and without a profit target never sell): close the
             # simulated position the simulated way and carry on live – real coins are never "sold" on paper
-            pair = await self.exchange.pair(bot["symbol"])
+            pair = await exchange.pair(bot["symbol"])
             price = view.bid
             gross = open_position.qty * price
-            fee = gross * self.paper_fee("sell")
+            fee = self._paper_fee(bot, "sell", gross)
             self._record_sell(bot, state, pair, open_position.qty, gross - fee, price, fee, None, True,
                               m("engine.mode_changed_close"), position_id=open_position.id)
-        pair = await self.exchange.pair(bot["symbol"])
+        pair = await exchange.pair(bot["symbol"])
         quote_size = round_down(amount, pair.quote_step)
         if quote_size < pair.min_order_size_quote:
             raise Problem("err.amount_below_min", amount=money(quote_size, pair.quote),
@@ -705,11 +781,14 @@ class Engine:
 
             if self.is_paper(bot):
                 price = view.ask
-                fee = quote_size * self.paper_fee("buy")
-                bought = (quote_size - fee) / price
-                return self._record_buy(bot, state, pair, bought, quote_size, price, fee, None, True, reason)
+                fee = self._paper_fee(bot, "buy", quote_size)
+                bought, spent = exchange.paper_buy(pair, quote_size, fee, price)
+                if bought <= 0:
+                    raise Problem("err.amount_below_min", amount=money(quote_size, pair.quote),
+                                  min=money(price + fee, pair.quote))
+                return self._record_buy(bot, state, pair, bought, spent, price, fee, None, True, reason)
 
-            balances = await self.exchange.balances()
+            balances = await exchange.balances()
             available = balances.get(pair.quote, (Decimal(0), Decimal(0)))[0]
             if available < quote_size:
                 raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
@@ -718,18 +797,28 @@ class Engine:
         # the pending order already counts towards the limits – don't hold up other bots while it fills
         return await self._track_order(bot, state, pair, pending)
 
+    def _paper_fee(self, bot: dict, side: str, gross: Decimal) -> Decimal:
+        """The fee the simulation books for an order of ``gross``: the rate of the side plus the fixed part."""
+        fees = self.paper_fees(broker_of(bot))
+        return gross * Decimal(str(fees[side])) + Decimal(str(fees.get("fixed") or 0))
+
+    def _base(self, bot: dict, pair: PairInfo) -> str:
+        """The unit of the bot's quantities as people know it: ETH – or AAPL instead of an ISIN."""
+        return self.exchange_for(bot).instrument(bot["symbol"]).get("short") or pair.base
+
     async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position) -> Message:
-        pair = await self.exchange.pair(bot["symbol"])
+        exchange = self.exchange_for(bot)
+        pair = await exchange.pair(bot["symbol"])
         amount = position.qty
 
         if position.paper:  # sell the way it was bought – never "simulate" selling real coins
             price = view.bid
             gross = amount * price
-            fee = gross * self.paper_fee("sell")
+            fee = self._paper_fee(bot, "sell", gross)
             return self._record_sell(bot, state, pair, amount, gross - fee, price, fee, None, True, reason,
                                      position_id=position.id)
 
-        balances = await self.exchange.balances()
+        balances = await exchange.balances()
         available, total = balances.get(pair.base, (Decimal(0), Decimal(0)))
         amount = round_down(min(amount, available), pair.base_step)
         manual = message_key(reason) == "engine.manual_close"
@@ -745,11 +834,11 @@ class Engine:
                 return self._write_off(bot, state, pair, rest, missing)
             return status
         if amount <= 0 or amount < pair.min_order_size:
-            raise Problem("err.sell_below_min", qty=qty(amount), base=pair.base,
+            raise Problem("err.sell_below_min", qty=qty(amount), base=self._base(bot, pair),
                           min=qty(pair.min_order_size), available=qty(available))
         if available + pair.min_order_size < position.qty:
             self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
-                                                    available=qty(available), base=pair.base))
+                                                    available=qty(available), base=self._base(bot, pair)))
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
         return await self._track_order(bot, state, pair, pending)
 
@@ -759,10 +848,11 @@ class Engine:
         store_positions(state, [p for p in open_positions(state) if p.id != position.id])
         state.pop("holdings_mismatch", None)
         state.pop("fill_check", None)
-        msg = m("engine.position_written_off", qty=qty(missing), base=pair.base, cost=money(position.cost * missing / position.qty, pair.quote))
+        msg = m("engine.position_written_off", qty=qty(missing), base=self._base(bot, pair),
+                cost=money(position.cost * missing / position.qty, pair.quote))
         self.db.add_event(bot["id"], "error", msg)
         log.error("Bot %s: %s", bot["name"], render(msg, "en"))
-        self._holdings_checked_at = 0
+        self._holdings_checked_at[broker_of(bot)] = 0
         return msg
 
     async def _submit_order(
@@ -786,30 +876,32 @@ class Engine:
         }
         state["pending_order"] = pending
         self.db.update_bot(bot["id"], state=state)
+        exchange = self.exchange_for(bot)
         try:
-            pending["id"] = await self.exchange.place_market_order(
+            pending["id"] = await exchange.place_market_order(
                 bot["symbol"], side, client_order_id=pending["client_order_id"],
                 base_size=base_size, quote_size=quote_size,
             )
         except Exception as exc:
-            self.exchange.invalidate_balances()  # the order may have gone through anyway
+            exchange.invalidate_balances()  # the order may have gone through anyway
             if definitely_not_placed(exc):
                 state.pop("pending_order", None)
                 raise
             raise Problem("err.order_unclear", error=as_message(exc)) from exc
-        self.exchange.invalidate_balances()  # balances change with this order – the cache must not serve the old ones
+        exchange.invalidate_balances()  # balances change with this order – the cache must not serve the old ones
         self.db.update_bot(bot["id"], state=state)
         self.db.add_event(bot["id"], "info", m("engine.order_sent", id=pending["id"], side=m(f"side.{side}")))
         return pending
 
     async def _track_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
+        exchange = self.exchange_for(bot)
         result = previous = None
         for delay in ORDER_POLL_DELAYS:
             await asyncio.sleep(delay)
-            previous, result = result, await self.exchange.get_order(pending["id"])
+            previous, result = result, await exchange.get_order(pending["id"])
             # book only what two consecutive reads agree on – fill data can still be moving right after "filled"
             confirmed = previous is not None and (previous.status, previous.filled_qty) == (result.status, result.filled_qty)
-            if result.terminal and confirmed and not short_fill(pending, result):
+            if result.terminal and confirmed and not short_fill(pending, result, exchange.partial_fills):
                 return self._apply_order(bot, state, pair, pending, result)
         if result is not None and result.terminal:
             # Revolut X reported "filled" but the fill data still lags behind the order size – book what is
@@ -820,10 +912,11 @@ class Engine:
     async def _reconcile(self, bot: dict, state: dict) -> Message | None:
         """Finish a pending order. Returns the new status once the order is settled, else None."""
         pending = state["pending_order"]
-        pair = await self.exchange.pair(bot["symbol"])
-        overdue = now_ms() - pending["placed_at"] > ORDER_LOOKUP_GRACE_MS
+        exchange = self.exchange_for(bot)
+        pair = await exchange.pair(bot["symbol"])
+        overdue = now_ms() - pending["placed_at"] > (exchange.order_lookup_grace_ms or ORDER_LOOKUP_GRACE_MS)
         if not pending.get("id"):
-            found = await self.exchange.find_order(bot["symbol"], pending["client_order_id"], pending["placed_at"] - 60_000)
+            found = await exchange.find_lost_order(bot["symbol"], pending)
             if found is None:
                 return self._abandon_order(bot, state, pending) if overdue else None
             pending["id"] = found.order_id
@@ -831,37 +924,40 @@ class Engine:
             result = found
         else:
             try:
-                result = await self.exchange.get_order(pending["id"])
-            except RevolutXError as exc:
+                result = await exchange.get_order(pending["id"])
+            except ExchangeError as exc:
                 if exc.status == 404 and overdue:  # the exchange doesn't know the id (any more)
                     return self._abandon_order(bot, state, pending)
                 raise
-        if result.terminal and (not short_fill(pending, result) or overdue):
+        if result.terminal and (not short_fill(pending, result, exchange.partial_fills) or overdue):
             return self._apply_order(bot, state, pair, pending, result)
         return None
 
-    async def _verify_holdings(self, bots: list[dict[str, Any]], force: bool = False) -> None:
-        """Compare the live positions we booked with what the exchange actually holds.
+    async def _verify_holdings(self, broker: str, bots: list[dict[str, Any]], force: bool = False) -> None:
+        """Compare the live positions we booked on the broker with what it actually holds.
 
         Whatever goes wrong in order handling ends up here: if the exchange holds less of a coin than the bots
         think they own, every bot with a live position in that coin is flagged and stops trading. Holding *more*
         is fine (coins the user keeps outside the bots)."""
         live = [b for b in bots if bot_has_live_position(b)]
-        if not live or (not force and now_ms() - self._holdings_checked_at < HOLDINGS_CHECK_MS):
+        if not live or (not force and now_ms() - self._holdings_checked_at[broker] < HOLDINGS_CHECK_MS):
             return
+        exchange = self.exchange_for(broker)
         try:
-            balances = await self.exchange.balances()
-        except Exception as exc:  # noqa: BLE001 – checked again next time
-            log.warning("Holdings check skipped: %s", exc)
+            balances = await exchange.balances()
+        except Exception as exc:  # noqa: BLE001 – checked again in 5 minutes, not on every tick
+            log.warning("Holdings check on %s skipped: %s", broker, exc)
+            self._holdings_checked_at[broker] = now_ms() - HOLDINGS_CHECK_MS + 5 * 60_000
             return
-        self._holdings_checked_at = now_ms()
+        self._holdings_checked_at[broker] = now_ms()
         booked: dict[str, Decimal] = defaultdict(Decimal)
         for b in live:
             booked[split_symbol(b["symbol"])[0]] += sum((p.qty for p in open_positions(b["state"]) if not p.paper), Decimal(0))
         for b in live:
             base, _ = split_symbol(b["symbol"])
             held = balances.get(base, (Decimal(0), Decimal(0)))[1]
-            pair = await self.exchange.pair(b["symbol"])
+            pair = await exchange.pair(b["symbol"])
+            unit = self._base(b, pair)
             tolerance = max(pair.min_order_size, booked[base] * Decimal("0.005"))
             async with self._locks[b["id"]]:
                 bot = self.db.get_bot(b["id"])
@@ -872,16 +968,18 @@ class Engine:
                 if booked[base] - held > tolerance:
                     if not state.get("holdings_mismatch"):
                         state["holdings_mismatch"] = {"booked": str(booked[base]), "held": str(held), "since": now_ms()}
-                        msg = m("engine.holdings_mismatch_event", booked=qty(booked[base]), held=qty(held), base=base)
+                        msg = m("engine.holdings_mismatch_event", booked=qty(booked[base]), held=qty(held), base=unit)
                         self.db.add_event(bot["id"], "error", msg)
                         log.error("Bot %s: %s", bot["name"], render(msg, "en"))
                 elif state.pop("holdings_mismatch", None):
-                    self.db.add_event(bot["id"], "info", m("engine.holdings_ok", base=base))
+                    self.db.add_event(bot["id"], "info", m("engine.holdings_ok", base=unit))
                 self._persist(bot, state, bot["status"], before)
 
     def _sold_but_still_open(self, bot: dict, state: dict) -> bool:
         """A trade that survived its live sell: sells always close the whole trade, so the exchange must have
         reported the fill short (seen on Revolut X right after placing) – re-read that order."""
+        if not self.exchange_for(bot).partial_fills:
+            return False
         if sold := state.get("last_live_sell"):
             position = find_position(state, sold["position_id"])
             if not position or position.paper or state.get("fill_checked") == sold["order_id"]:
@@ -909,14 +1007,15 @@ class Engine:
         """Re-read a short-filled order and book what the exchange executed on top of what we booked."""
         check = state["fill_check"]
         order_id = check["order_id"]
+        exchange = self.exchange_for(bot)
         try:
-            r = await self.exchange.get_order(order_id)
-        except RevolutXError as exc:
+            r = await exchange.get_order(order_id)
+        except ExchangeError as exc:
             if exc.status == 404:
                 state.pop("fill_check", None)
                 state["fill_checked"] = order_id
             return None
-        pair = await self.exchange.pair(bot["symbol"])
+        pair = await exchange.pair(bot["symbol"])
         booked = self.db.booked_for_order(order_id)
         fee_base = r.fee if r.fee_currency == pair.base else Decimal(0)
         fee_quote = r.fee if r.fee_currency == pair.quote else Decimal(0)
@@ -940,7 +1039,7 @@ class Engine:
                 into = next((p.id for p in open_positions(state) if p.order_id == order_id), None)
                 status = self._record_buy(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False,
                                           reason, into=into)
-            self.db.add_event(bot["id"], "info", m("engine.late_fill_booked", id=order_id, qty=qty(more_qty), base=pair.base))
+            self.db.add_event(bot["id"], "info", m("engine.late_fill_booked", id=order_id, qty=qty(more_qty), base=self._base(bot, pair)))
         if r.terminal and (more_qty >= pair.base_step or now_ms() > check["until"]):
             state.pop("fill_check", None)
             state["fill_checked"] = order_id
@@ -967,12 +1066,14 @@ class Engine:
     def _apply_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict, r: OrderResult) -> Message:
         state.pop("pending_order", None)
         state.pop("retry_after", None)  # the "order unclear" error is resolved with the order
+        # the balances changed with the fill – a balance read while the order ran must not be served any more
+        self.exchange_for(bot).invalidate_balances()
         if self.db.trade_exists(r.order_id):  # never book the same exchange order twice
             return m("engine.order_booked")
-        if short_fill(pending, r):
+        if short_fill(pending, r, self.exchange_for(bot).partial_fills):
             state["fill_check"] = {"order_id": r.order_id, "side": pending["side"], "until": now_ms() + FILL_CHECK_MS,
                                    "position_id": pending.get("position_id")}
-        self._holdings_checked_at = 0  # verify the books against the exchange at the next tick
+        self._holdings_checked_at[broker_of(bot)] = 0  # verify the books against the exchange at the next tick
         if r.filled_qty <= 0:
             msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
                    else m("engine.order_failed", status=r.status))
@@ -1012,13 +1113,13 @@ class Engine:
             position = Position(bought, spent, now_ms(), price, paper=paper, order_id=order_id)
             positions.append(position)
         store_positions(state, positions)
-        state["last_buy_at"] = self.exchange.now_ms()
+        state["last_buy_at"] = self.exchange_for(bot).now_ms()
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="buy",
             price=str(price), base_qty=str(bought), quote_amount=str(spent), fee=str(fee), pnl=None,
-            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, exchange=broker_of(bot),
         )
-        status = m("engine.bought", qty=qty(bought), base=pair.base, amount=money(spent, pair.quote))
+        status = m("engine.bought", qty=qty(bought), base=self._base(bot, pair), amount=money(spent, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
         return status
 
@@ -1038,16 +1139,17 @@ class Engine:
         if position.qty <= 0 or position.qty < pair.min_order_size:
             positions.remove(position)  # only dust left
         store_positions(state, positions)
-        state["last_sell_at"] = self.exchange.now_ms()
+        state["last_sell_at"] = self.exchange_for(bot).now_ms()
         if order_id and not paper and "#" not in order_id:
             # lets the next tick spot a trade that survived its sell (a fill reported short)
             state["last_live_sell"] = {"order_id": order_id, "position_id": position.id, "at": now_ms()}
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="sell",
             price=str(price), base_qty=str(sold), quote_amount=str(proceeds), fee=str(fee), pnl=str(pnl),
-            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, exchange=broker_of(bot),
         )
-        status = m("engine.sold", qty=qty(sold), base=pair.base, amount=money(proceeds, pair.quote), pnl=money(pnl, pair.quote))
+        status = m("engine.sold", qty=qty(sold), base=self._base(bot, pair), amount=money(proceeds, pair.quote),
+                   pnl=money(pnl, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
         return status
 
@@ -1055,6 +1157,8 @@ class Engine:
 
     def describe_bot(self, bot: dict[str, Any], stats: dict[int, dict[str, Any]], lang: str = "en") -> dict[str, Any]:
         base, quote = split_symbol(bot["symbol"])
+        broker = broker_of(bot)
+        instrument = self.exchange_for(broker).instrument(bot["symbol"])
         strategy = STRATEGIES.get(bot["strategy"])
         snap = self.snapshots.get(bot["symbol"])
         blocked = self.blocked_buy(bot, bot["state"]) if bot["enabled"] else None
@@ -1096,7 +1200,11 @@ class Engine:
             "strategy_name": strategy.name(lang) if strategy else bot["strategy"],
             "strategy_icon": strategy.icon if strategy else "questionmark.circle",
             "symbol": bot["symbol"],
-            "base_currency": base,
+            "exchange": broker,
+            # Revolut X: ETH-EUR / ETH. Trade Republic: the instrument's name and ticker instead of the ISIN
+            "display_symbol": bot["symbol"] if broker == REVOLUTX else instrument.get("name") or base,
+            "instrument_type": instrument.get("type"),
+            "base_currency": instrument.get("short") or base,
             "quote_currency": quote,
             "params": strategy.normalize(bot["params"]) if strategy else bot["params"],
             "enabled": bot["enabled"],
@@ -1119,15 +1227,17 @@ class Engine:
             "trades_count": int(s.get("trades") or 0),
             "wins": int(s.get("wins") or 0),
             "losses": int(s.get("losses") or 0),
-            "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+            "market": {"price": snap["price"], "change_24h": snap["change_24h"],
+                       "closed": render(snap["closed"], lang) if snap.get("closed") else None} if snap else None,
         }
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, broker: str = REVOLUTX) -> dict[str, Any]:
+        """The broker's result. Each broker has its own account, mode and limits – nothing is added up across them."""
         stats = self.db.trade_stats()
-        bots = [self.describe_bot(b, stats) for b in self.db.list_bots()]
+        bots = [self.describe_bot(b, stats) for b in self.db.list_bots() if broker_of(b) == broker]
         start_of_day = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
         # Paper and live results are kept apart: the card shows the active mode, the other one is a footnote
-        paper_mode = not self.live_trading_enabled()
+        paper_mode = not self.live_trading_enabled(broker)
 
         def totals_for(paper: bool) -> dict[str, dict[str, float]]:
             totals: dict[str, dict[str, float]] = {}
@@ -1135,11 +1245,11 @@ class Engine:
             def bucket(currency: str) -> dict[str, float]:
                 return totals.setdefault(currency, {"realized": 0.0, "unrealized": 0.0, "today": 0.0, "invested": 0.0, "fees": 0.0})
 
-            for row in self.db.realized_by_symbol(paper):
+            for row in self.db.realized_by_symbol(paper, broker):
                 bucket(split_symbol(row["symbol"])[1])["realized"] += row["pnl"] or 0.0
-            for row in self.db.fees_by_symbol(paper):
+            for row in self.db.fees_by_symbol(paper, broker):
                 bucket(split_symbol(row["symbol"])[1])["fees"] += row["fee"] or 0.0
-            for row in self.db.realized_since(start_of_day, paper):
+            for row in self.db.realized_since(start_of_day, paper, broker):
                 bucket(split_symbol(row["symbol"])[1])["today"] += row["pnl"] or 0.0
             for b in bots:
                 for position in b["positions"]:
@@ -1155,6 +1265,7 @@ class Engine:
             for c, v in sorted(active.items(), key=lambda kv: -abs(kv[1]["realized"]) - kv[1]["invested"])
         ]
         return {
+            "exchange": broker,
             "mode": "paper" if paper_mode else "live",
             "currencies": currencies,
             # the other mode's result per currency – only where something was traded or is open
@@ -1162,10 +1273,10 @@ class Engine:
                 {"currency": c, "total": v["realized"] + v["unrealized"], "realized": v["realized"], "unrealized": v["unrealized"]}
                 for c, v in other.items()
             ],
-            "other_mode_trades": self.db.trades_count(not paper_mode),
+            "other_mode_trades": self.db.trades_count(not paper_mode, broker),
             "bots_total": len(bots),
             "bots_active": sum(1 for b in bots if b["enabled"]),
             "open_positions": sum(len(b["positions"]) for b in bots),
-            "max_open_positions": int(self.db.get_limits()["max_open_positions"]),
-            "trades_count": self.db.trades_count(paper_mode),
+            "max_open_positions": int(self.db.get_limits(broker)["max_open_positions"]),
+            "trades_count": self.db.trades_count(paper_mode, broker),
         }

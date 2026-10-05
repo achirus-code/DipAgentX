@@ -2,9 +2,9 @@
 # The add-on uses the very same image Docker users pull; there is no separate Dockerfile here.
 # `version:` and CHANGELOG.md are written by scripts/sync-addon.py from agent/app/main.py – do not edit by hand.
 name: DipAgentX
-version: "1.19.0"
+version: "1.20.0"
 slug: dipagentx
-description: Trading bots for Revolut X, controlled from the DipAgentX macOS menu bar app
+description: Trading bots for Revolut X and Trade Republic, controlled from the DipAgentX apps
 url: https://github.com/achirus-code/DipAgentX
 image: ghcr.io/achirus-code/dipagentx
 arch:
@@ -27,6 +27,7 @@ options:
   taker_fee: 0.0009
   mock_speed: 1
   anthropic_api_key: ""
+  tr_app_version: ""
 schema:
   api_token: password?
   exchange: list(revolutx|mock)
@@ -34,3 +35,4 @@ schema:
   taker_fee: float(0,0.1)
   mock_speed: float(0.1,)
   anthropic_api_key: password?
+  tr_app_version: str?

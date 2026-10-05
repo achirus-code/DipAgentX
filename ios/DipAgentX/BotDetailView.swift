@@ -77,10 +77,14 @@ struct BotDetailView: View {
                     IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 48)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(bot.symbol).font(.title3.bold())
+                            Text(verbatim: bot.title).font(.title3.bold()).lineLimit(1)
                             ModeBadge(paper: bot.paper)
                         }
-                        Text(bot.strategyName).font(.subheadline).foregroundStyle(.secondary)
+                        // Trade Republic: the ISIN, so the instrument can be found in the TR app
+                        Text(verbatim: bot.title == bot.symbol ? bot.strategyName
+                             : "\(bot.strategyName) · \(bot.symbol.split(separator: "-").first ?? "")")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
                 }
                 if bot.enabled, bot.goal != nil || bot.targets?.note != nil {

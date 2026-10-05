@@ -9,8 +9,10 @@ they are formatted per language as well (``1,234.56`` vs. ``1.234,56``).
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 LANGUAGES = ("en", "de")
 DEFAULT_LANGUAGE = "en"
@@ -55,6 +57,14 @@ def dur(ms: int) -> dict:
 
 def num(value: float, decimals: int = 1) -> dict:
     return {"$": "num", "v": float(value), "d": decimals}
+
+
+def at(ms: int, tz: str = "Europe/Berlin") -> dict:
+    """A point in time, shown as weekday and time in ``tz`` – e.g. the next opening of a stock exchange."""
+    return {"$": "at", "v": int(ms), "tz": tz}
+
+
+WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "de": ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")}
 
 
 def m(key: str, **args: Any) -> dict:
@@ -108,6 +118,9 @@ def _format_arg(arg: Any, lang: str) -> str:
             return f"{hours} h {rest} min" if rest else f"{hours} h"
         if kind == "num":
             return _number(v, int(arg.get("d", 1)), lang)
+        if kind == "at":
+            when = datetime.fromtimestamp(int(v) / 1000, ZoneInfo(arg.get("tz") or "Europe/Berlin"))
+            return f"{WEEKDAYS['de' if lang == 'de' else 'en'][when.weekday()]} {when:%H:%M}"
         return str(arg)
     if isinstance(arg, list):
         return " / ".join(_format_arg(a, lang) for a in arg)
@@ -404,15 +417,99 @@ CATALOG: dict[str, L] = {
     "err.unknown_pair": L("Unknown trading pair: {symbol}", "Unbekanntes Handelspaar: {symbol}"),
     "err.no_ticker": L("No ticker for {symbol}", "Kein Ticker für {symbol}"),
     "err.not_enough": L("Not enough {currency}", "Nicht genug {currency}"),
+    "err.market_closed": L("{reason} – no order possible right now", "{reason} – gerade keine Order möglich"),
+    "exchange.unknown": L("Unknown broker “{broker}”", "Unbekannter Broker „{broker}“"),
     "exchange.key_file_missing": L("Revolut X not configured: {path} is missing", "Revolut X nicht konfiguriert: {path} fehlt"),
     "exchange.not_set_up": L(
         "Revolut X is not set up – connect it in the app under Settings → Revolut X",
         "Revolut X nicht eingerichtet – in der App unter Einstellungen → Revolut X verbinden",
     ),
+    # --- Trade Republic
+    "tr.market_closed": L("Market closed · opens {opens}", "Börse geschlossen · öffnet {opens}"),
+    "tr.no_quotes": L(
+        "No current quotes since {since} – the venue seems to be closed today",
+        "Keine aktuellen Kurse seit {since} – der Handelsplatz ist heute wohl geschlossen",
+    ),
+    "tr.exchange_closed": L("Trade Republic: the venue is closed right now", "Trade Republic: der Handelsplatz ist gerade geschlossen"),
+    "tr.login_required": L(
+        "Not logged in to Trade Republic – log in in the app under Settings → Trade Republic",
+        "Nicht bei Trade Republic angemeldet – in der App unter Einstellungen → Trade Republic anmelden",
+    ),
+    "tr.session_expired": L(
+        "The Trade Republic session has expired (after 24 hours) – please log in again",
+        "Die Trade-Republic-Sitzung ist abgelaufen (nach 24 Stunden) – bitte neu anmelden",
+    ),
+    "tr.phone_invalid": L(
+        "Please enter the phone number of your Trade Republic account, e.g. +49 171 1234567",
+        "Bitte die Telefonnummer deines Trade-Republic-Kontos eingeben, z. B. +49 171 1234567",
+    ),
+    "tr.pin_invalid": L("The PIN has four digits", "Die PIN hat vier Ziffern"),
+    "tr.code_invalid": L("Please enter the code from your authenticator app", "Bitte den Code aus deiner Authenticator-App eingeben"),
+    "tr.credentials_missing": L(
+        "Phone number and PIN are needed for the login",
+        "Für die Anmeldung werden Telefonnummer und PIN gebraucht",
+    ),
+    "tr.wrong_credentials": L("Trade Republic rejected phone number or PIN", "Trade Republic hat Telefonnummer oder PIN abgelehnt"),
+    "tr.saved_pin_rejected": L(
+        "Trade Republic rejected the saved PIN – it was deleted. Log in again in the app",
+        "Trade Republic hat die gespeicherte PIN abgelehnt – sie wurde gelöscht. Bitte in der App neu anmelden",
+    ),
+    "tr.too_many_attempts": L(
+        "Too many login attempts – Trade Republic asks to wait a while",
+        "Zu viele Anmeldeversuche – Trade Republic bittet, eine Weile zu warten",
+    ),
+    "tr.web_login_unavailable": L(
+        "Trade Republic doesn't allow the web login for this account",
+        "Trade Republic erlaubt für dieses Konto keine Anmeldung über das Web",
+    ),
+    "tr.version_outdated": L(
+        "Trade Republic refuses the login: the web app version DipAgentX reports is outdated – update the agent "
+        "(or set TR_APP_VERSION)",
+        "Trade Republic lehnt die Anmeldung ab: die Web-App-Version, die DipAgentX meldet, ist veraltet – Agent "
+        "aktualisieren (oder TR_APP_VERSION setzen)",
+    ),
+    "tr.login_failed": L("Trade Republic login failed: {error}", "Anmeldung bei Trade Republic fehlgeschlagen: {error}"),
+    "tr.login_not_confirmed": L(
+        "The login was not confirmed in the Trade Republic app in time",
+        "Die Anmeldung wurde nicht rechtzeitig in der Trade-Republic-App bestätigt",
+    ),
+    "tr.no_login_running": L("No login is running", "Es läuft keine Anmeldung"),
+    "tr.unreachable": L("Trade Republic is not reachable: {error}", "Trade Republic nicht erreichbar: {error}"),
+    "tr.unknown_instrument": L("Trade Republic doesn't know {symbol}", "Trade Republic kennt {symbol} nicht"),
+    "tr.not_tradable": L("{name} can't be traded on Trade Republic right now", "{name} ist auf Trade Republic gerade nicht handelbar"),
+    "tr.order_too_small": L(
+        "Order too small: {qty} {name} – Trade Republic needs at least {min}",
+        "Order zu klein: {qty} {name} – Trade Republic verlangt mindestens {min}",
+    ),
+    "event.tr_logged_in": L("Logged in to Trade Republic", "Bei Trade Republic angemeldet"),
+    "event.tr_logged_out": L("Logged out of Trade Republic", "Von Trade Republic abgemeldet"),
+    "event.live_off_tr_logout": L(
+        "Live trading on Trade Republic disabled (logged out)",
+        "Live-Handel auf Trade Republic deaktiviert (abgemeldet)",
+    ),
     # --- API
     "api.invalid_token": L("Invalid or missing API token", "Ungültiges oder fehlendes API-Token"),
     "api.unknown_strategy": L("Unknown strategy: {strategy}", "Unbekannte Strategie: {strategy}"),
     "api.pair_unavailable": L("Trading pair {symbol} is not available on Revolut X", "Handelspaar {symbol} ist auf Revolut X nicht verfügbar"),
+    "api.pair_unavailable_on": L("{symbol} is not available on {broker}", "{symbol} ist auf {broker} nicht verfügbar"),
+    "api.unknown_exchange": L("Unknown broker: {exchange}", "Unbekannter Broker: {exchange}"),
+    "api.broker_disabled": L(
+        "{broker} is switched off in the settings",
+        "{broker} ist in den Einstellungen ausgeschaltet",
+    ),
+    "api.last_broker": L("At least one broker has to stay on", "Mindestens ein Broker muss eingeschaltet bleiben"),
+    "api.broker_busy": L(
+        "{broker} still has open trades or orders – sell or close them first",
+        "{broker} hat noch offene Trades oder Orders – erst verkaufen oder schließen",
+    ),
+    "api.tr_logout_open_trades": L(
+        "Live Trade Republic trades are open – without a login they could not be sold, not even by the stop-loss. Sell them first",
+        "Es sind Live-Trades auf Trade Republic offen – ohne Anmeldung ließen sie sich nicht verkaufen, auch nicht per Stop-Loss. Bitte erst verkaufen",
+    ),
+    "api.locked_exchange": L(
+        "A bot stays with its broker – create a new bot for the other one",
+        "Ein Bot bleibt bei seinem Broker – für den anderen bitte einen neuen Bot anlegen",
+    ),
     "api.bot_not_found": L("Bot not found", "Bot nicht gefunden"),
     "api.demo_mode": L("The agent runs in demo mode (EXCHANGE=mock)", "Der Agent läuft im Demo-Modus (EXCHANGE=mock)"),
     "api.env_configured": L(
@@ -436,6 +533,11 @@ CATALOG: dict[str, L] = {
         "Im Demo-Markt (EXCHANGE=mock) gibt es keinen Live-Handel",
     ),
     "api.connect_revx_first": L("Please connect Revolut X first", "Bitte zuerst Revolut X verbinden"),
+    "api.connect_broker_first": L("Please connect {broker} first", "Bitte zuerst {broker} verbinden"),
+    "api.broker_unreachable_live": L(
+        "{broker} is not reachable – live trading stays off: {error}",
+        "{broker} nicht erreichbar – Live-Handel bleibt aus: {error}",
+    ),
     "api.confirm_live": L("Live trading must be confirmed explicitly", "Live-Handel muss ausdrücklich bestätigt werden"),
     "api.invalid_backup": L("Not a valid DipAgentX backup: {error}", "Kein gültiges DipAgentX-Backup: {error}"),
     "api.revx_unreachable_live": L(
@@ -457,12 +559,20 @@ CATALOG: dict[str, L] = {
     # --- statuses and events
     "status.starting": L("Starting …", "Wird gestartet …"),
     "status.stopped": L("Stopped", "Gestoppt"),
+    "status.broker_disabled": L("Stopped – {broker} is switched off", "Gestoppt – {broker} ist ausgeschaltet"),
+    "event.broker_disabled": L("{broker} switched off – its bots were stopped", "{broker} ausgeschaltet – seine Bots wurden gestoppt"),
+    "event.broker_enabled": L("{broker} switched on", "{broker} eingeschaltet"),
     "event.bot_created": L("Bot created ({strategy}, {symbol})", "Bot angelegt ({strategy}, {symbol})"),
     "event.settings_changed": L("Settings changed", "Einstellungen geändert"),
     "event.bot_started": L("Bot started", "Bot gestartet"),
     "event.bot_stopped": L("Bot stopped", "Bot gestoppt"),
     "event.limits_changed": L("Limits changed", "Limits geändert"),
+    "event.limits_changed_on": L("Limits for {broker} changed", "Limits für {broker} geändert"),
     "event.paper_fees_changed": L("Simulation fees changed – simulated trades rebooked", "Simulationsgebühren geändert – simulierte Trades neu berechnet"),
+    "event.paper_fees_changed_on": L(
+        "Simulation fees for {broker} changed – simulated trades rebooked",
+        "Simulationsgebühren für {broker} geändert – simulierte Trades neu berechnet",
+    ),
     "event.keypair": L("New Revolut X key pair generated", "Neues Revolut-X-Schlüsselpaar erzeugt"),
     "event.revx_connected": L("Revolut X connected", "Revolut X verbunden"),
     "event.revx_removed": L("Revolut X access removed", "Revolut-X-Zugang entfernt"),
@@ -472,6 +582,11 @@ CATALOG: dict[str, L] = {
     ),
     "event.live_on": L("Live trading ENABLED – real orders on Revolut X", "Live-Handel AKTIVIERT – echte Orders auf Revolut X"),
     "event.live_off": L("Live trading disabled – paper trading only", "Live-Handel deaktiviert – nur noch Paper-Trading"),
+    "event.broker_live_on": L("Live trading ENABLED – real orders on {broker}", "Live-Handel AKTIVIERT – echte Orders auf {broker}"),
+    "event.broker_live_off": L(
+        "Live trading on {broker} disabled – paper trading only",
+        "Live-Handel auf {broker} deaktiviert – nur noch Paper-Trading",
+    ),
     "event.bot_live": L("Switched to live (live trading enabled)", "Live geschaltet (Live-Handel aktiviert)"),
     "event.restored": L("Backup from {date} restored ({bots} bots, {trades} trades)", "Backup vom {date} wiederhergestellt ({bots} Bots, {trades} Trades)"),
     "event.live_off_restored": L(

@@ -53,7 +53,8 @@ struct ProfitHistoryView: View {
 
     // MARK: Data
 
-    private var trades: [Trade] { history ?? store.trades }
+    /// The selected broker's trades – each broker has its own result.
+    private var trades: [Trade] { (history ?? store.trades).filter { $0.broker == store.broker } }
 
     private var data: ProfitHistoryData {
         ProfitHistoryData(trades: trades, bots: store.bots, summary: store.summary, live: live, currency: currency,
@@ -113,6 +114,13 @@ struct ProfitHistoryView: View {
         }
         .onChange(of: live) { detail = nil; replay() }
         .onChange(of: currency) { detail = nil; replay() }
+        .onChange(of: store.broker) {
+            detail = nil
+            hidden = []
+            live = store.summary?.mode == "live"
+            currency = store.summary?.currencies.first?.currency ?? currencies.first ?? currency
+            replay()
+        }
     }
 
     /// Lets the curves grow out of the zero line again – when the window opens or other data is shown.
@@ -131,6 +139,15 @@ struct ProfitHistoryView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
+            if store.showsBrokerTabs {
+                // the same choice as the tabs above the statistics in the menu bar panel
+                Picker("Broker", selection: Binding(get: { store.selectedBroker }, set: { store.selectedBroker = $0 })) {
+                    ForEach(Broker.allCases) { Text(verbatim: $0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
             Picker("Mode", selection: $live) {
                 Text("Paper").tag(false)
                 Text("Live").tag(true)

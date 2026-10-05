@@ -13,12 +13,17 @@ struct BotsView: View {
             if !store.isConnected {
                 EmptyStateView(icon: "bolt.horizontal.circle", title: "Not connected", message: "Connect the app to your agent in the settings.")
             } else {
-                SectionLabel("My bots", trailing: store.bots.count > 1 ? AnyView(sortMenu) : nil)
-                if store.bots.isEmpty {
-                    EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first bot – e.g. a dip buyer for ETH-EUR.")
+                let bots = store.brokerBots
+                SectionLabel("My bots", trailing: bots.count > 1 ? AnyView(sortMenu) : nil)
+                if bots.isEmpty {
+                    if store.broker == .tradeRepublic {
+                        EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first Trade Republic bot – e.g. a savings plan for an MSCI World ETF or a dip buyer for a stock.")
+                    } else {
+                        EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first bot – e.g. a dip buyer for ETH-EUR.")
+                    }
                 } else {
-                    let active = sort.apply(store.bots.filter(\.enabled))
-                    let stopped = sort.apply(store.bots.filter { !$0.enabled })
+                    let active = sort.apply(bots.filter(\.enabled))
+                    let stopped = sort.apply(bots.filter { !$0.enabled })
                     if !active.isEmpty {
                         BotGroupLabel(title: "Active", count: active.count, color: .green)
                         ForEach(active) { bot in
@@ -36,7 +41,7 @@ struct BotsView: View {
                 newBotButton
             }
         }
-        .animation(.snappy(duration: 0.25), value: store.bots.map(\.enabled))
+        .animation(.snappy(duration: 0.25), value: store.brokerBots.map(\.enabled))
         .animation(.snappy(duration: 0.25), value: sortKey)
     }
 
@@ -132,8 +137,9 @@ struct BotCard: View {
                                 .lineLimit(1)
                             if bot.paper { Badge(text: "PAPER", color: .paper) } else { Badge(text: "LIVE", color: .profit, icon: "bolt.fill") }
                         }
-                        Text(verbatim: "\(bot.symbol) · \(bot.strategyName)")
+                        Text(verbatim: "\(bot.title) · \(bot.strategyName)")
                             .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     .opacity(bot.enabled ? 1 : 0.8)
                     Spacer()
@@ -370,10 +376,14 @@ struct BotDetailView: View {
                     IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 42)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
-                            Text(bot.symbol).font(.system(size: 15, weight: .bold, design: .rounded))
+                            Text(verbatim: bot.title).font(.system(size: 15, weight: .bold, design: .rounded)).lineLimit(1)
                             if bot.paper { Badge(text: "PAPER", color: .paper) } else { Badge(text: "LIVE", color: .profit, icon: "bolt.fill") }
                         }
-                        Text(bot.strategyName).font(.system(size: 11)).foregroundStyle(.secondary)
+                        // Trade Republic: the ISIN, so the instrument can be found in the TR app
+                        Text(verbatim: bot.title == bot.symbol ? bot.strategyName
+                             : "\(bot.strategyName) · \(bot.symbol.split(separator: "-").first ?? "")")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
                     Spacer()
                     Button {
