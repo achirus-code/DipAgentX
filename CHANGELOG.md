@@ -2,6 +2,14 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.25.0] – 2026-10-05
+
+### Added
+
+- **Reset paper values** – in paper mode, the settings have a "Reset values to zero" button per broker (Revolut X,
+  Trade Republic): all simulated trades of the broker are deleted and its open paper trades discarded, so result, fees
+  and trade count start at zero. Live trades are never touched. API: `POST /reset-paper?exchange=…`.
+
 ## [1.24.0] – 2026-10-05
 
 ### Added
