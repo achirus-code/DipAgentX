@@ -1125,6 +1125,22 @@ async def test_reset_paper_deletes_simulated_trades_only(tmp_path: Path):
     assert engine.describe_bot(bot, db.trade_stats())["realized_pnl"] == 0
 
 
+async def test_reset_paper_broker_zeroes_the_summary(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex)
+    db.create_bot("Paper", "dip", "ETH-EUR", {"sell_mode": "profit", "take_profit": 1}, True, True)
+    await engine.tick()
+    ex.price = Decimal("2000")
+    await engine.tick()  # sold with profit
+    before = engine.summary()
+    assert before["trades_count"] == 2 and before["currencies"][0]["realized"] != 0
+
+    assert await engine.reset_paper_broker() == 0  # the bot's reset already removed its trades
+    after = engine.summary()
+    assert after["trades_count"] == 0 and after["open_positions"] == 0
+    assert all(c["realized"] == 0 and c["fees"] == 0 for c in after["currencies"])
+
+
 async def test_reset_paper_refuses_with_an_open_live_trade(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex, live=True)

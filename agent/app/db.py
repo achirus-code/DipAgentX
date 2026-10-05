@@ -344,6 +344,12 @@ class Database:
         marks = ", ".join("?" for _ in t)
         return self._exec(f"INSERT INTO trades ({cols}) VALUES ({marks})", tuple(t.values()))
 
+    def delete_paper_trades_of_broker(self, broker: str) -> int:
+        """Removes all simulated trades on one broker (also those of deleted bots). Returns how many were deleted."""
+        count = self._one("SELECT COUNT(*) AS n FROM trades WHERE paper = 1 AND exchange = ?", (broker,))["n"]
+        self._exec("DELETE FROM trades WHERE paper = 1 AND exchange = ?", (broker,))
+        return int(count)
+
     def delete_paper_trades(self, bot_id: int) -> int:
         """Removes a bot's simulated trades (live trades stay). Returns how many were deleted."""
         count = self._one("SELECT COUNT(*) AS n FROM trades WHERE bot_id = ? AND paper = 1", (bot_id,))["n"]

@@ -737,6 +737,15 @@ async def reset_paper(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, A
     return _describe(bot_id, lang)
 
 
+@api.post("/reset-paper")
+async def reset_paper_broker(exchange: str | None = None, lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Reset the broker's paper result (all its bots) to zero. Live trades stay."""
+    broker = _broker(exchange, lang)
+    await engine.reset_paper_broker(broker)
+    engine.reset_caches()
+    return engine.summary(broker)
+
+
 @api.post("/bots/{bot_id}/ask")
 async def ask_claude_now(bot_id: int, lang: str = Depends(get_lang)) -> dict[str, Any]:
     """"AI decides" only: get a fresh decision from Claude right now instead of waiting for the next check."""

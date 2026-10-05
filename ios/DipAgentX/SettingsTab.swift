@@ -421,6 +421,7 @@ struct PaperFeesPage: View {
     let fees: PaperFees
     @State private var draft: PaperFees?
     @State private var saving = false
+    @State private var confirmingReset = false
     @State private var error: String?
 
     private var current: PaperFees { draft ?? fees }
@@ -450,7 +451,20 @@ struct PaperFeesPage: View {
                     Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
                 }
             }
+            Section {
+                Button("Reset values to zero", role: .destructive) { confirmingReset = true }
+            } footer: {
+                Text("Sets the result, fees and trade count of this broker back to zero. Simulated trades are deleted and open paper trades discarded; live trades stay as they are.")
+            }
             if let error { Section { ErrorLabel(message: error) } }
+        }
+        .confirmationDialog("Delete all paper trades on this broker and reset its values to zero? This cannot be undone.",
+                            isPresented: $confirmingReset, titleVisibility: .visible) {
+            Button("Reset values to zero", role: .destructive) {
+                Task {
+                    do { try await store.resetPaperBroker(); error = nil } catch { self.error = error.localizedDescription }
+                }
+            }
         }
         .navigationTitle(store.showsBrokerTabs ? Text("Paper mode fees") + Text(verbatim: " · \(store.broker.title)") : Text("Paper mode fees"))
         .navigationBarTitleDisplayMode(.inline)
