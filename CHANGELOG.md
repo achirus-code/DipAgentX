@@ -2,6 +2,15 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Dip buyer: sideways filter.** New option *Only buy while ADX (4h) below*: the bot buys a dip only while the trend
+  strength ADX (14) of the 4-hour candles is below the value – i.e. while the market moves sideways and dips tend to
+  recover. In a trend the bot shows "Dip, but the market trends (ADX 4h …)" and waits. Selling isn't affected; 0 (the
+  default) switches the filter off, so existing bots behave as before.
+
 ## [1.20.0] – 2026-10-05
 
 ### Added

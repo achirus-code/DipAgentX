@@ -78,7 +78,7 @@ SQLite).
 
 | Strategy | Buys … | Sells … |
 |---|---|---|
-| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss |
+| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %); optionally only while the market moves sideways (ADX of the 4-hour candles below a limit) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss |
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
@@ -92,6 +92,12 @@ SQLite).
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode
 > once the **minimum profit** (default 0.25 %, covers fees) is reached. It can't be set below 0 – to cut a loss, set a
 > **stop-loss**.
+
+> **Sideways filter (dip buyer):** a dip in a trending market often keeps falling. With *Only buy while ADX (4h)
+> below* set (e.g. 23), the bot buys a dip only while the trend strength ADX (14) of the 4-hour candles is below that
+> value – the market moves sideways. Selling isn't affected. In a backtest on 18 months of ETH-EUR and BTC-EUR
+> (April 2025 – October 2026) the filter together with a stop-loss turned a dip buyer that held its losers into one
+> that cut them early; past results don't predict future ones.
 
 ## Quick start
 
