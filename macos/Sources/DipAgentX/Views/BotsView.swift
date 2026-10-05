@@ -342,6 +342,13 @@ struct BotDetailView: View {
                         } else if let position = bot.position {
                             positionCard(bot, position)
                         }
+                        if bot.sliced == true, !bot.openTrades.isEmpty {
+                            // the trades the position is made of (momentum follower)
+                            VStack(alignment: .leading, spacing: 6) {
+                                SectionLabel("Opened trades \(String(bot.openTrades.count))")
+                                Card { SlicesList(bot: bot) }
+                            }
+                        }
                         if let signals = bot.signals {
                             VStack(alignment: .leading, spacing: 6) {
                                 SectionLabel("Signals")

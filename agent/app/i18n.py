@@ -506,6 +506,10 @@ CATALOG: dict[str, L] = {
         "Order {id} could not be found at the exchange – bot stopped. Check the order on Revolut X before starting the bot again",
         "Order {id} ist bei der Börse nicht auffindbar – Bot gestoppt. Bitte die Order auf Revolut X prüfen, bevor der Bot wieder gestartet wird",
     ),
+    "engine.mode_changed_restart": L(
+        "Live trading: paper trades closed (simulated) – starts afresh with its capital",
+        "Live-Handel: Paper-Trades geschlossen (simuliert) – startet neu mit seinem Kapital",
+    ),
     "engine.mode_changed_close": L(
         "Paper position closed – live trading enabled",
         "Paper-Position geschlossen – Live-Handel aktiviert",

@@ -38,7 +38,7 @@ async def four_hour_closes(market) -> dict[int, Decimal]:
     last = market.now // STEP_MS * STEP_MS - STEP_MS  # start of the last completed candle
     first = last - HISTORY_DAYS * DAY_MS
     if store and min(store) <= first:
-        since = max(store) + STEP_MS
+        since = max(store)  # the newest candle once more: fetched right after it closed, it may not have been final
     else:
         store.clear()
         since = first
@@ -119,13 +119,17 @@ class MomentumStrategy(Strategy):
     description = L(
         "For ETH and BTC: invests the more of its capital the more of six lookbacks (14 to 60 days) point up, in 10 % "
         "steps – fully invested in a clear uptrend, in cash in a downtrend. Very volatile markets get less, and while "
-        "the futures funding shows panic it keeps a floor. Rebalances about twice a week, each step is its own trade; "
-        "it also sells at a loss. Gains are reinvested.",
+        "the futures funding shows panic it keeps a floor. The position is held in up to 10 trades of 10 % of the capital "
+        "each – on entry they are bought one after the other within minutes; when the target falls e.g. to 80 %, two "
+        "of them are sold, so a change only costs the fee on the part that changes. Rebalances about twice a week, "
+        "also at a loss. Gains are reinvested.",
         "Für ETH und BTC: investiert umso mehr seines Kapitals, je mehr von sechs Zeitfenstern (14 bis 60 Tage) "
         "aufwärts zeigen, in 10-%-Stufen – im klaren Aufwärtstrend ganz, im Abwärtstrend in Cash. In sehr "
         "schwankenden Märkten weniger, und solange die Funding-Rate der Futures Panik zeigt, hält er eine "
-        "Untergrenze. Schichtet etwa zweimal pro Woche um, jede Stufe ist ein eigener Trade; verkauft auch mit "
-        "Verlust. Gewinne werden wieder angelegt.",
+        "Untergrenze. Die Position liegt in bis zu 10 Trades zu je 10 % des Kapitals – beim Einstieg kauft er sie "
+        "nacheinander innerhalb weniger Minuten; sinkt das Ziel z. B. auf 80 %, verkauft er 2 davon, so kostet jede "
+        "Änderung nur die Gebühr auf den geänderten Teil. Schichtet etwa zweimal pro Woche um, auch mit Verlust. "
+        "Gewinne werden wieder angelegt.",
     )
     icon = "chart.line.uptrend.xyaxis.circle"
     fixed_trades = 30
@@ -257,6 +261,8 @@ class MomentumStrategy(Strategy):
         invested = float(exposure / equity * 100) if equity > 0 else 0.0
         ctx.targets(note=m("momentum.target", target=num(level * 10, 0)))
         status = m("momentum.status", invested=num(invested, 0), target=num(level * 10, 0), detail=detail)
+        if st.get("held") is not None and sorted(x.id for x in positions) != st["held"]:
+            st.pop("level", None)  # trades sold or discarded by hand: back to the target
         if level == st.get("level") or equity <= 0:
             # trades only when the target step changes – in between the position rises and falls with the price
             return Decision(status)
@@ -281,4 +287,5 @@ class MomentumStrategy(Strategy):
             reason = m("momentum.buy_reason", target=num(level * 10, 0), detail=detail)
             return Decision(m("momentum.buying", target=num(level * 10, 0)), Buy(gap.quantize(Decimal("0.01")), reason))
         st["level"] = level  # reached (as close as whole trades allow)
+        st["held"] = sorted(x.id for x in positions)
         return Decision(status)

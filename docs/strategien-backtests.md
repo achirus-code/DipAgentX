@@ -612,6 +612,14 @@ er **Momentum-Trendfolger** (ab 1.23.0).
   sobald der Kurs darüber mehr als +5 % gestiegen ist (+2 %, solange die 90-Tage-Rendite über +20 % liegt), und als
   abwärts, sobald er gefallen ist. Dazwischen bleibt es, wie es war.
 - Investiert ist der Anteil der Fenster, die aufwärts zeigen, in 10-%-Stufen. Gewinne werden wieder angelegt.
+- Die Position liegt in bis zu 10 Trades zu je 10 % des Kapitals. Beim Einstieg kauft der Bot sie nacheinander
+  innerhalb weniger Minuten; sinkt das Ziel z. B. auf 80 %, verkauft er 2 davon. Die Engine verkauft einen Trade immer
+  ganz – mit einem einzigen großen Trade müsste der Bot bei jeder Stufe alles verkaufen und neu kaufen. Gebühren
+  kosten die Stufen nicht extra (0 % Kauf, 0,09 % auf den verkauften Teil, keine feste Gebühr pro Order). Die Apps
+  zeigen die Trades als eine Position.
+- Gehandelt wird nur, wenn sich die Zielstufe ändert: im Backtest etwa 130–150 Mal im Jahr, meist um eine Stufe. Eine
+  Stufe bleibt im Schnitt rund 15 Tage im Bestand; im Markt (mindestens 10 %) ist der Bot gut 80 % der Zeit, im
+  Schnitt zu 55 % investiert, die längste Phase ohne Pause dauerte rund 250 Tage.
 - Liegt die Schwankung der letzten 20 Tage über 100 % pro Jahr, wird der Anteil entsprechend kleiner.
 - Funding-Untergrenze: Liegt die Funding-Rate der Binance-Futures im 7-Tage-Schnitt unter 2 % pro Jahr (Panik),
   bleiben mindestens 50 % investiert.

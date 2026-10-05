@@ -39,6 +39,10 @@ struct BotDetailView: View {
                     Section { ErrorLabel(message: error) }
                 }
                 openTrades(bot)
+                if bot.sliced == true, !bot.openTrades.isEmpty {
+                    // the trades the position is made of (momentum follower)
+                    Section("Opened trades \(String(bot.openTrades.count))") { SlicesList(bot: bot).padding(.vertical, 4) }
+                }
                 if let signals = bot.signals {
                     Section("Signals") { SignalList(signals: signals, compact: false).padding(.vertical, 4) }
                 }
@@ -134,7 +138,7 @@ struct BotDetailView: View {
 
     @ViewBuilder
     private func openTrades(_ bot: Bot) -> some View {
-        let trades = bot.openTrades
+        let trades = bot.shownTrades
         if !trades.isEmpty {
             let several = bot.tradesMode
             ForEach(Array(trades.enumerated()), id: \.offset) { index, trade in
