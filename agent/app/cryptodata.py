@@ -24,7 +24,7 @@ FUNDING_CACHE_S = 3600  # a new rate every 8 hours
 FLOWS_CACHE_S = 3 * 3600  # a new day once a day, around 02:00 UTC
 RETRY_S = 15 * 60
 FUNDING_MAX_AGE_S = 2 * DAY_S  # an older last rate is not used any more
-FLOWS_MAX_AGE_S = 3 * DAY_S  # older flows only hurt – the brake needs them within about a day
+FLOWS_MAX_AGE_S = 2.5 * DAY_S  # older flows only hurt – the brake needs them within about a day
 PUBLISHED_AFTER_MS = 30 * 3_600_000  # a day's flows are used from 06:00 UTC the next morning
 
 

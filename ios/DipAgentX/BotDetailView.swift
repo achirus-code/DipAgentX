@@ -43,15 +43,6 @@ struct BotDetailView: View {
                     // the trades the position is made of (momentum follower)
                     Section("Opened trades \(String(bot.openTrades.count))") { SlicesList(bot: bot).padding(.vertical, 4) }
                 }
-                if let signals = bot.signals {
-                    Section("Signals") { SignalList(signals: signals, compact: false).padding(.vertical, 4) }
-                }
-                if let pillars = bot.pillars {
-                    Section("Pillars") {
-                        PillarList(pillars: pillars, currency: bot.quoteCurrency, current: bot.id, compact: false)
-                            .padding(.vertical, 4)
-                    }
-                }
                 result(bot)
                 if bot.strategy == "ai" { claude(bot) }
                 rules(bot)
@@ -90,14 +81,10 @@ struct BotDetailView: View {
                     IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 48)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(verbatim: bot.title).font(.title3.bold()).lineLimit(1)
+                            Text(bot.symbol).font(.title3.bold())
                             ModeBadge(paper: bot.paper)
                         }
-                        // Trade Republic: the ISIN, so the instrument can be found in the TR app
-                        Text(verbatim: bot.title == bot.symbol ? bot.strategyName
-                             : "\(bot.strategyName) · \(bot.symbol.split(separator: "-").first ?? "")")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                        Text(bot.strategyName).font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
                 if bot.enabled, bot.goal != nil || bot.targets?.note != nil {
@@ -138,14 +125,14 @@ struct BotDetailView: View {
 
     @ViewBuilder
     private func openTrades(_ bot: Bot) -> some View {
-        let trades = bot.shownTrades
+        let trades = bot.openTrades
         if !trades.isEmpty {
             let several = bot.tradesMode
             ForEach(Array(trades.enumerated()), id: \.offset) { index, trade in
                 // older agents: one position without an id – sold as a whole
                 let tradeId: String? = several ? (trade.id ?? "") : nil
                 Section {
-                    LabeledContent("Amount", value: "\(Fmt.qty(trade.qty)) \(trade.unit(of: bot))")
+                    LabeledContent("Amount", value: "\(Fmt.qty(trade.qty)) \(bot.baseCurrency)")
                     LabeledContent("Entry", value: Fmt.price(trade.entryPrice, bot.quoteCurrency))
                     LabeledContent("Invested", value: Fmt.money(trade.cost, bot.quoteCurrency))
                     LabeledContent("Value", value: Fmt.money(trade.value, bot.quoteCurrency))

@@ -7,8 +7,8 @@ struct TradesTab: View {
     @State private var botFilter: Int?
 
     private var filtered: [Trade] {
-        guard let botFilter else { return store.brokerTrades }
-        return store.brokerTrades.filter { $0.botId == botFilter }
+        guard let botFilter else { return store.trades }
+        return store.trades.filter { $0.botId == botFilter }
     }
 
     private var grouped: [(day: Date, trades: [Trade])] {
@@ -21,9 +21,6 @@ struct TradesTab: View {
             List {
                 if !store.isConnected {
                     Section { ConnectionLabel() }
-                }
-                if store.isConnected, store.showsBrokerTabs {
-                    Section { BrokerTabsRow() }
                 }
                 if store.isConnected && filtered.isEmpty {
                     EmptyStateView(icon: "tray", title: "No trades yet", message: "As soon as a bot buys or sells, it shows up here.")
@@ -50,7 +47,7 @@ struct TradesTab: View {
                     Menu {
                         Picker("Bot", selection: $botFilter) {
                             Text("All bots").tag(Int?.none)
-                            ForEach(store.brokerBots) { bot in
+                            ForEach(store.bots) { bot in
                                 Text(bot.name).tag(Int?.some(bot.id))
                             }
                         }
@@ -65,7 +62,6 @@ struct TradesTab: View {
                 }
             }
             .routeDestinations()
-            .onChange(of: store.broker) { botFilter = nil } // the other broker has other bots
         }
     }
 

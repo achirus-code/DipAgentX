@@ -79,18 +79,6 @@ MIGRATIONS: list[str] = [
     "CREATE INDEX IF NOT EXISTS trades_created ON trades(created_at);",
     # 2: the trade (position) a buy opened or added to and a sale closed – links each sale to its buys
     "ALTER TABLE trades ADD COLUMN position_id TEXT;",
-    # 3: a second broker (Trade Republic) – every bot and trade belongs to one; what existed is Revolut X.
-    # Instruments remembers what Trade Republic's ISINs stand for (name, ticker, trading venue), also offline.
-    """ALTER TABLE bots ADD COLUMN exchange TEXT NOT NULL DEFAULT 'revolutx';
-    ALTER TABLE trades ADD COLUMN exchange TEXT NOT NULL DEFAULT 'revolutx';
-    CREATE INDEX IF NOT EXISTS trades_exchange ON trades(exchange, created_at);
-    CREATE TABLE IF NOT EXISTS instruments (
-        exchange    TEXT    NOT NULL,
-        symbol      TEXT    NOT NULL,
-        data        TEXT    NOT NULL,
-        updated_at  INTEGER NOT NULL,
-        PRIMARY KEY (exchange, symbol)
-    );""",
 ]
 
 DEFAULT_LIMITS: dict[str, Any] = {
@@ -101,20 +89,12 @@ DEFAULT_LIMITS: dict[str, Any] = {
 
 
 # Revolut X: 0 % maker, 0.09 % taker. The simulation (paper mode) buys with a fee-free order and sells at the taker
-# rate. Trade Republic charges a flat 1 € per order ("Fremdkostenpauschale"). The user can change all of them.
-DEFAULT_PAPER_FEES: dict[str, dict[str, float]] = {
-    "revolutx": {"buy": 0.0, "sell": 0.0009, "fixed": 0.0},
-    "traderepublic": {"buy": 0.0, "sell": 0.0, "fixed": 1.0},
-}
+# rate; the user can change both rates in the settings.
+DEFAULT_PAPER_FEES: dict[str, float] = {"buy": 0.0, "sell": 0.0009}
 
 
 def now_ms() -> int:
     return int(time.time() * 1000)
-
-
-def scoped(key: str, broker: str) -> str:
-    """Settings of one broker. Revolut X keeps the keys it had before there was a second broker."""
-    return key if broker == "revolutx" else f"{key}.{broker}"
 
 
 class Database:
@@ -194,11 +174,10 @@ class Database:
     def get_bot(self, bot_id: int) -> dict[str, Any] | None:
         return self._bot(self._one("SELECT * FROM bots WHERE id = ?", (bot_id,)))
 
-    def create_bot(self, name: str, strategy: str, symbol: str, params: dict, enabled: bool, paper: bool,
-                   exchange: str = "revolutx") -> int:
+    def create_bot(self, name: str, strategy: str, symbol: str, params: dict, enabled: bool, paper: bool) -> int:
         return self._exec(
-            "INSERT INTO bots (name, strategy, symbol, params, enabled, paper, created_at, exchange) VALUES (?,?,?,?,?,?,?,?)",
-            (name, strategy, symbol, json.dumps(params), int(enabled), int(paper), now_ms(), exchange),
+            "INSERT INTO bots (name, strategy, symbol, params, enabled, paper, created_at) VALUES (?,?,?,?,?,?,?)",
+            (name, strategy, symbol, json.dumps(params), int(enabled), int(paper), now_ms()),
         )
 
     def update_bot(self, bot_id: int, **fields: Any) -> None:
@@ -232,87 +211,74 @@ class Database:
             (key, json.dumps(value)),
         )
 
-    def get_limits(self, broker: str = "revolutx") -> dict[str, Any]:
+    def get_limits(self) -> dict[str, Any]:
         stored = {r["key"]: json.loads(r["value"]) for r in self._all("SELECT key, value FROM settings")}
-        return {k: stored.get(scoped(k, broker), v) for k, v in DEFAULT_LIMITS.items()}
+        return {k: stored.get(k, v) for k, v in DEFAULT_LIMITS.items()}
 
-    def set_limits(self, limits: dict[str, Any], broker: str = "revolutx") -> None:
+    def set_limits(self, limits: dict[str, Any]) -> None:
         for key, value in limits.items():
             if key in DEFAULT_LIMITS:
-                self.set_setting(scoped(key, broker), value)
+                self._exec(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, json.dumps(value)),
+                )
 
     # --- Paper-mode fees --------------------------------------------------
 
-    def get_paper_fees(self, broker: str = "revolutx", default_sell: float | None = None) -> dict[str, float]:
-        """Fees the simulation charges: rates for buys and sells (0.0009 = 0.09 %) and a fixed amount per order."""
-        defaults = dict(DEFAULT_PAPER_FEES.get(broker, DEFAULT_PAPER_FEES["revolutx"]))
+    def get_paper_fees(self, default_sell: float | None = None) -> dict[str, float]:
+        """Fee rates (0.0009 = 0.09 %) the simulation charges for buys and sells."""
+        defaults = dict(DEFAULT_PAPER_FEES)
         if default_sell is not None:
             defaults["sell"] = default_sell
-        stored = self.get_setting(scoped("paper_fees", broker)) or {}
+        stored = self.get_setting("paper_fees") or {}
         return {side: float(stored.get(side, rate)) for side, rate in defaults.items()}
 
-    def set_paper_fees(self, fees: dict[str, float], broker: str = "revolutx") -> None:
-        self.set_setting(scoped("paper_fees", broker),
-                         {"buy": float(fees["buy"]), "sell": float(fees["sell"]), "fixed": float(fees.get("fixed") or 0)})
+    def set_paper_fees(self, fees: dict[str, float]) -> None:
+        self.set_setting("paper_fees", {"buy": float(fees["buy"]), "sell": float(fees["sell"])})
 
-    def reprice_paper(self, old: dict[str, float], new: dict[str, float], broker: str = "revolutx") -> int:
-        """Rebook the broker's simulated trades as if ``new`` fees had always applied (``old`` = what they were
-        booked with).
+    def reprice_paper(self, old: dict[str, float], new: dict[str, float]) -> int:
+        """Rebook all simulated trades as if ``new`` fees had always applied (``old`` = the rates they were booked with).
 
         The amount spent on a buy and the price of every trade stay as they are – what changes is how much of the
         money became coins (buys) and what a sale leaves after the fee. Open trades get the new coin quantity,
         sales their new proceeds and profit. Returns the number of rebooked trades.
         """
-        d = lambda x: Decimal(str(x or 0))  # noqa: E731
-        if all(d(old.get(k)) == d(new.get(k)) for k in ("buy", "sell", "fixed")):
+        if old == new:
             return 0
-        k = (1 - d(new["buy"])) / (1 - d(old["buy"]))  # coins per unit of money, new / old (without a fixed fee)
-        proportional = d(old.get("fixed")) == d(new.get("fixed")) == 0
+        d = lambda x: Decimal(str(x))  # noqa: E731
+        k = (1 - d(new["buy"])) / (1 - d(old["buy"]))  # coins per unit of money, new / old
         step = Decimal("0.00000001")
-        # per trade (position): coins of its buys before and after – its sales and its open rest change alike
-        bought: dict[tuple[int, str], list[Decimal]] = {}
-
-        def ratio(bot_id: int, position_id: str | None) -> Decimal:
-            old_qty, new_qty = bought.get((bot_id, position_id or ""), (Decimal(0), Decimal(0)))
-            return new_qty / old_qty if old_qty else k
-
         with self._lock:
             self._conn.execute("BEGIN")
             try:
-                rows = self._conn.execute(
-                    "SELECT * FROM trades WHERE paper = 1 AND exchange = ? ORDER BY id", (broker,)).fetchall()
-                for r in (r for r in rows if r["side"] == "buy"):
-                    price, qty_, amount = d(r["price"]), d(r["base_qty"]), d(r["quote_amount"])
-                    fee = amount * d(new["buy"]) + d(new.get("fixed"))
-                    if proportional:
-                        new_qty = (qty_ * k).quantize(step)
-                    else:  # a fixed fee doesn't scale with the amount – book every buy again from what it cost
-                        new_qty = max((amount - fee) / price, Decimal(0)).quantize(step) if price else qty_
-                    self._conn.execute("UPDATE trades SET base_qty = ?, fee = ? WHERE id = ?", (str(new_qty), str(fee), r["id"]))
-                    if r["position_id"]:
-                        acc = bought.setdefault((r["bot_id"], r["position_id"]), [Decimal(0), Decimal(0)])
-                        acc[0] += qty_
-                        acc[1] += new_qty
-                for r in (r for r in rows if r["side"] != "buy"):
+                rows = self._conn.execute("SELECT * FROM trades WHERE paper = 1").fetchall()
+                for r in rows:
                     price, qty_, amount, pnl = d(r["price"]), d(r["base_qty"]), d(r["quote_amount"]), r["pnl"]
-                    cost_part = amount - d(pnl) if pnl is not None else None
-                    new_qty = (qty_ * ratio(r["bot_id"], r["position_id"])).quantize(step)
-                    gross = new_qty * price
-                    fee = gross * d(new["sell"]) + d(new.get("fixed"))
-                    proceeds = gross - fee
-                    self._conn.execute(
-                        "UPDATE trades SET base_qty = ?, quote_amount = ?, fee = ?, pnl = ? WHERE id = ?",
-                        (str(new_qty), str(proceeds), str(fee),
-                         str(proceeds - cost_part) if cost_part is not None else None, r["id"]),
-                    )
-                for bot in self._conn.execute("SELECT id, state FROM bots WHERE exchange = ?", (broker,)).fetchall():
+                    if r["side"] == "buy":
+                        new_qty = (qty_ * k).quantize(step)
+                        self._conn.execute(
+                            "UPDATE trades SET base_qty = ?, fee = ? WHERE id = ?",
+                            (str(new_qty), str(amount * d(new["buy"])), r["id"]),
+                        )
+                    else:
+                        cost_part = amount - d(pnl) if pnl is not None else None
+                        new_qty = (qty_ * k).quantize(step)
+                        gross = new_qty * price
+                        fee = gross * d(new["sell"])
+                        proceeds = gross - fee
+                        self._conn.execute(
+                            "UPDATE trades SET base_qty = ?, quote_amount = ?, fee = ?, pnl = ? WHERE id = ?",
+                            (str(new_qty), str(proceeds), str(fee),
+                             str(proceeds - cost_part) if cost_part is not None else None, r["id"]),
+                        )
+                for bot in self._conn.execute("SELECT id, state FROM bots").fetchall():
                     state = json.loads(bot["state"])
                     changed = False
                     for key in ("positions", "position"):
                         raw = state.get(key)
                         for pos in ([raw] if isinstance(raw, dict) else raw or []):
                             if pos.get("paper", True):
-                                pos["qty"] = str((d(pos["qty"]) * ratio(bot["id"], pos.get("id"))).quantize(step))
+                                pos["qty"] = str((d(pos["qty"]) * k).quantize(step))
                                 changed = True
                     if changed:
                         self._conn.execute("UPDATE bots SET state = ? WHERE id = ?", (json.dumps(state), bot["id"]))
@@ -344,28 +310,18 @@ class Database:
         marks = ", ".join("?" for _ in t)
         return self._exec(f"INSERT INTO trades ({cols}) VALUES ({marks})", tuple(t.values()))
 
-    def delete_trades_of_broker(self, broker: str) -> int:
-        """Removes every trade (simulated and old live ones) on one broker, also those of deleted bots."""
-        count = self._one("SELECT COUNT(*) AS n FROM trades WHERE exchange = ?", (broker,))["n"]
-        self._exec("DELETE FROM trades WHERE exchange = ?", (broker,))
-        return int(count)
-
     def delete_paper_trades(self, bot_id: int) -> int:
         """Removes a bot's simulated trades (live trades stay). Returns how many were deleted."""
         count = self._one("SELECT COUNT(*) AS n FROM trades WHERE bot_id = ? AND paper = 1", (bot_id,))["n"]
         self._exec("DELETE FROM trades WHERE bot_id = ? AND paper = 1", (bot_id,))
         return int(count)
 
-    def list_trades(self, bot_id: int | None = None, limit: int = 200, exchange: str | None = None) -> list[dict[str, Any]]:
-        where, args = [], []
-        if bot_id is not None:
-            where.append("bot_id = ?")
-            args.append(bot_id)
-        if exchange is not None:
-            where.append("exchange = ?")
-            args.append(exchange)
-        clause = f"WHERE {' AND '.join(where)} " if where else ""
-        return self._all(f"SELECT * FROM trades {clause}ORDER BY created_at DESC, id DESC LIMIT ?", (*args, limit))
+    def list_trades(self, bot_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        if bot_id is None:
+            return self._all("SELECT * FROM trades ORDER BY created_at DESC, id DESC LIMIT ?", (limit,))
+        return self._all(
+            "SELECT * FROM trades WHERE bot_id = ? ORDER BY created_at DESC, id DESC LIMIT ?", (bot_id, limit)
+        )
 
     def trade_stats(self) -> dict[int, dict[str, Any]]:
         rows = self._all(
@@ -378,50 +334,29 @@ class Database:
         )
         return {r["bot_id"]: r for r in rows}
 
-    def realized_since(self, since_ms: int, paper: bool | None = None, exchange: str | None = None) -> list[dict[str, Any]]:
+    def realized_since(self, since_ms: int, paper: bool | None = None) -> list[dict[str, Any]]:
         return self._all(
             "SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades "
-            f"WHERE pnl IS NOT NULL AND created_at >= ? {self._mode(paper, exchange)} GROUP BY symbol",
+            f"WHERE pnl IS NOT NULL AND created_at >= ? {self._mode(paper)} GROUP BY symbol",
             (since_ms,),
         )
 
-    def realized_by_symbol(self, paper: bool | None = None, exchange: str | None = None) -> list[dict[str, Any]]:
+    def realized_by_symbol(self, paper: bool | None = None) -> list[dict[str, Any]]:
         return self._all(
-            "SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades "
-            f"WHERE pnl IS NOT NULL {self._mode(paper, exchange)} GROUP BY symbol"
+            f"SELECT symbol, SUM(CAST(pnl AS REAL)) AS pnl FROM trades WHERE pnl IS NOT NULL {self._mode(paper)} GROUP BY symbol"
         )
 
-    def fees_by_symbol(self, paper: bool | None = None, exchange: str | None = None) -> list[dict[str, Any]]:
+    def fees_by_symbol(self, paper: bool | None = None) -> list[dict[str, Any]]:
         """Exchange fees paid so far (buys and sells), in the quote currency."""
-        return self._all(
-            f"SELECT symbol, SUM(CAST(fee AS REAL)) AS fee FROM trades WHERE 1=1 {self._mode(paper, exchange)} GROUP BY symbol"
-        )
+        return self._all(f"SELECT symbol, SUM(CAST(fee AS REAL)) AS fee FROM trades WHERE 1=1 {self._mode(paper)} GROUP BY symbol")
 
-    def trades_count(self, paper: bool | None = None, exchange: str | None = None) -> int:
-        return int(self._one(f"SELECT COUNT(*) AS n FROM trades WHERE 1=1 {self._mode(paper, exchange)}")["n"])
+    def trades_count(self, paper: bool | None = None) -> int:
+        return int(self._one(f"SELECT COUNT(*) AS n FROM trades WHERE 1=1 {self._mode(paper)}")["n"])
 
     @staticmethod
-    def _mode(paper: bool | None, exchange: str | None = None) -> str:
-        """SQL filter for simulated (paper) or real trades – None means both – and for one broker's trades."""
-        clause = "" if paper is None else f"AND paper = {1 if paper else 0}"
-        if exchange is not None:
-            if not exchange.isalnum():
-                raise ValueError(f"invalid exchange {exchange!r}")
-            clause += f" AND exchange = '{exchange}'"
-        return clause
-
-    # --- Instruments (what a broker's symbols stand for) -----------------------
-
-    def instruments(self, exchange: str) -> dict[str, dict[str, Any]]:
-        rows = self._all("SELECT symbol, data FROM instruments WHERE exchange = ?", (exchange,))
-        return {r["symbol"]: json.loads(r["data"]) for r in rows}
-
-    def save_instrument(self, exchange: str, symbol: str, data: dict[str, Any]) -> None:
-        self._exec(
-            "INSERT INTO instruments (exchange, symbol, data, updated_at) VALUES (?,?,?,?) "
-            "ON CONFLICT(exchange, symbol) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
-            (exchange, symbol, json.dumps(data), now_ms()),
-        )
+    def _mode(paper: bool | None) -> str:
+        """SQL filter for simulated (paper) or real trades – None means both."""
+        return "" if paper is None else f"AND paper = {1 if paper else 0}"
 
     # --- Events -----------------------------------------------------------
 

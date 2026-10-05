@@ -15,7 +15,7 @@ struct BackupSection: View {
             SectionLabel("Backup")
             Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token and the Trade Republic login are not included.")
+                    Text("Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token is not included.")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {

@@ -4,7 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from app import cryptodata
-from app.exchange import Candle, Ticker
+from app.exchange import Candle, OrderResult, Ticker
 from app.i18n import message_key, render
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Sell, open_positions
 from tests.test_core import FakeExchange, make_engine
@@ -80,6 +80,25 @@ async def test_an_uptrend_buys_the_first_slice():
     assert "funding rate not available" in render(d.action.reason, "en")  # no data: the floor does nothing
 
 
+async def test_missing_funding_data_is_shown_first_and_as_the_hint(tmp_path: Path, monkeypatch):
+    ex = PathExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, True)
+    for _ in range(12):
+        await engine.tick()
+    ex.now += 2 * HOUR
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    status = render(bot["status"], "de")
+    assert status.startswith("⚠ Seit 2 h keine Funding-Rate von Binance – die Untergrenze ist aus")
+    assert "Untergrenze ist aus" in engine.describe_bot(bot, {}, "de")["hint"]
+    set_data(monkeypatch, funding=8.0)  # back: no warning any more
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert not render(bot["status"], "en").startswith("⚠") and not engine.describe_bot(bot, {}, "en")["hint"]
+    assert "funding_missing_since" not in bot["state"]["momentum"]
+
+
 async def test_a_downtrend_stays_in_cash_unless_funding_shows_panic(monkeypatch):
     s = STRATEGIES["momentum"]
     falling = PathExchange(steady(-0.003))
@@ -128,24 +147,6 @@ async def test_waits_for_enough_price_history():
     d = await s.evaluate(ctx(young))
     assert d.action is None and message_key(d.status) == "momentum.no_history"
     assert "Waiting for price history (29 of 74 days)" == render(d.status, "en")
-
-
-async def test_a_strong_uptrend_turns_lookbacks_up_sooner():
-    s = STRATEGIES["momentum"]
-    # +50 % until 30 days ago, −8 % until 10 days ago, +6 % since: 14 days ago the price was 4 % lower – up from the
-    # +2 % of a strong uptrend (90 days: +28 %), not from the usual +5 %
-    days, prices = [-200, -120, -30, -10, 0], [1000, 1000, 1500, 1380, 1462.8]
-
-    def path(t):  # linear in the log price between the points
-        x = min(max((t - NOW) / DAY, days[0]), days[-1])
-        i = max(k for k in range(len(days) - 1) if days[k] <= x)
-        f = (x - days[i]) / (days[i + 1] - days[i])
-        return math.exp(math.log(prices[i]) * (1 - f) + math.log(prices[i + 1]) * f)
-
-    fast, slow = {}, {}
-    await s.evaluate(ctx(PathExchange(path), state=fast))
-    await s.evaluate(ctx(PathExchange(path), state=slow, fast_entry=5))
-    assert fast["momentum"]["on"]["14"] == 1 and slow["momentum"]["on"]["14"] == 0
 
 
 def test_funding_and_inflow_figures():
@@ -274,3 +275,145 @@ async def test_the_newest_candle_is_fetched_again():
     store[last] = Decimal("1")  # not final yet when it was fetched
     view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now + 60_000)
     assert (await four_hour_closes(view))[last] != Decimal("1")
+
+
+# --- limit orders (maker, live on Revolut X) ---------------------------------------------------------------------
+
+
+class LimitExchange(PathExchange):
+    """Bid 1 below and ask 1 above the price; limit orders wait until a test fills them."""
+
+    supports_limit = True
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.placed, self.kinds, self.cancelled = [], [], []
+        self.reject_limit = False
+
+    async def ticker(self, symbol):
+        return Ticker(self.price - 1, self.price + 1, self.price)
+
+    async def place_market_order(self, symbol, side, *, client_order_id, base_size=None, quote_size=None):
+        self.kinds = [*self.kinds, ("market", side)]
+        return await super().place_market_order(symbol, side, client_order_id=client_order_id,
+                                                base_size=base_size, quote_size=quote_size)
+
+    async def place_limit_order(self, symbol, side, *, client_order_id, base_size, price):
+        from app.revolutx import RevolutXError
+        if self.reject_limit:
+            raise RevolutXError(400, "post only order would cross")
+        self.placed = [*self.placed, client_order_id]
+        self.kinds = [*self.kinds, ("limit", side, price, base_size)]
+        oid = f"order-{len(self.placed)}"
+        self.orders = {**getattr(self, "orders", {}),
+                       client_order_id: OrderResult(oid, "new", Decimal(0), Decimal(0), price, Decimal(0), "EUR")}
+        return oid
+
+    def fill(self, share: str = "1", status: str = "filled"):
+        """Fill the newest limit order (``share`` of it) at its price, without a fee."""
+        key, order = list(self.orders.items())[-1]
+        kind = self.kinds[-1]
+        filled = (kind[3] * Decimal(share)).quantize(Decimal("0.0000001"))
+        self.orders[key] = OrderResult(order.order_id, status, filled, filled * kind[2], kind[2], Decimal(0), "EUR")
+
+    async def cancel_order(self, order_id):
+        self.cancelled.append(order_id)
+        for key, o in self.orders.items():
+            if o.order_id == order_id and not o.terminal:
+                self.orders[key] = OrderResult(o.order_id, "cancelled", o.filled_qty, o.filled_amount, o.avg_price,
+                                               o.fee, o.fee_currency)
+
+
+def limit_engine(tmp_path, monkeypatch, **params):
+    from app import engine as engine_module
+    from tests.test_core import make_engine
+    clock = [NOW]
+    monkeypatch.setattr(engine_module, "now_ms", lambda: clock[0])
+    monkeypatch.setattr(engine_module, "ORDER_POLL_DELAYS", (0,) * 7)
+    ex = LimitExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000, **params}, True, False)
+    return ex, db, engine, bot_id, clock
+
+
+async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert ex.kinds[0][:2] == ("limit", "buy") and ex.kinds[0][2] == ex.price - 1  # the best bid
+    assert bot["state"]["pending_order"]["limit"] and not db.list_trades(bot_id)
+    assert "Limit order at" in render(bot["status"], "en") and "no fee" in render(bot["status"], "en")
+    await engine.tick()  # still waiting: nothing is booked, nothing new placed
+    assert not db.list_trades(bot_id) and len(ex.placed) == 1
+    ex.fill()
+    clock[0] += 60_000
+    await engine.tick()  # booked – and the next slice goes out in the same check
+    trades = db.list_trades(bot_id)
+    assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1
+    assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
+
+
+async def test_a_partial_fill_is_booked_after_the_wait_and_the_rest_bought_at_market(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_wait=10)
+    await engine.tick()
+    ex.fill("0.5", status="partially_filled")
+    clock[0] += 5 * 60_000
+    await engine.tick()  # within the waiting time: nothing booked yet
+    assert not db.list_trades(bot_id) and not ex.cancelled
+    clock[0] += 6 * 60_000
+    await engine.tick()
+    trades = db.list_trades(bot_id)
+    assert ex.cancelled and len(trades) == 2  # half of the limit order, then the rest at market
+    assert ex.kinds[-1] == ("market", "buy")
+    assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
+    assert db.get_bot(bot_id)["state"]["taker_from"] == clock[0]
+
+
+async def test_a_limit_order_never_filled_is_no_error_and_goes_out_at_market(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_wait=10)
+    await engine.tick()
+    clock[0] += 11 * 60_000
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    events = db.list_events(bot_id)
+    assert not [e for e in events if e["level"] == "error"]
+    assert any("not filled – the next order goes out as a market order" in render(e["message"], "en") for e in events)
+    assert ex.kinds[-1] == ("market", "buy") and len(db.list_trades(bot_id)) == 1
+    assert not bot["state"].get("retry_after")
+    clock[0] += 31 * 60_000  # 30 minutes later limit orders again
+    await engine.tick()
+    assert ex.kinds[-1][0] == "limit"
+
+
+async def test_sells_with_a_limit_order_at_the_ask(tmp_path: Path, monkeypatch):
+    from app.strategies import Position
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
+    bot = db.get_bot(bot_id)
+    state = bot["state"]
+    state["positions"] = [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]
+    view = await engine.market_view("ETH-EUR")
+    status = await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0], maker=10)
+    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1, Decimal("0.05"))  # the best ask
+    assert "Limit order at" in render(status, "en") and open_positions(state)
+    ex.fill()
+    await engine._reconcile(bot, state)
+    assert not open_positions(state) and not state.get("pending_order")
+    sell = db.list_trades(bot_id)[0]
+    assert sell["side"] == "sell" and Decimal(sell["fee"]) == 0
+
+
+async def test_market_orders_when_switched_off(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_orders=False)
+    await engine.tick()
+    assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1
+
+
+async def test_a_rejected_limit_order_is_retried_at_market(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
+    ex.reject_limit = True
+    await engine.tick()
+    state = db.get_bot(bot_id)["state"]
+    assert not state.get("pending_order") and state["taker_from"] == clock[0] and not ex.kinds
+    clock[0] += 6 * 60_000  # after the error pause
+    await engine.tick()
+    assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1

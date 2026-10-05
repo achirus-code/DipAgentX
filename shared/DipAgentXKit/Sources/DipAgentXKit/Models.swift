@@ -47,64 +47,6 @@ public enum JSONValue: Codable, Hashable {
     }
 }
 
-/// The brokers the agent trades on. Every bot belongs to one; results, limits, fees and the trading mode are kept
-/// per broker. The app shows one at a time – the tabs above the statistics switch between them.
-public enum Broker: String, CaseIterable, Identifiable, Codable {
-    case revolutX = "revolutx"
-    case tradeRepublic = "traderepublic"
-
-    public var id: String { rawValue }
-
-    public var title: String {
-        switch self {
-        case .revolutX: return "Revolut X"
-        case .tradeRepublic: return "Trade Republic"
-        }
-    }
-
-    public var icon: String {
-        switch self {
-        case .revolutX: return "bitcoinsign.circle"
-        case .tradeRepublic: return "building.columns"
-        }
-    }
-
-    /// Bots and trades from agents before 1.20 carry no broker – they are Revolut X's.
-    public init(id: String?) {
-        self = Broker(rawValue: id ?? "") ?? .revolutX
-    }
-}
-
-/// One broker as the agent sees it (agent 1.20+).
-public struct ExchangeStatus: Codable, Identifiable, Equatable {
-    public struct FeeInfo: Codable, Equatable {
-        public let rate: Double
-        public let fixed: Double
-    }
-
-    public let id: String
-    public let title: String
-    /// The agent runs the demo market (EXCHANGE=mock) – no live trading.
-    public let simulated: Bool
-    /// Credentials or a session exist – the broker can be asked for prices.
-    public let configured: Bool
-    public let ok: Bool
-    public let error: String?
-    public let liveTradingAllowed: Bool
-    /// Switched on in the settings (nil: agent 1.20 before the switch existed – on).
-    public let enabled: Bool?
-    /// What a live order costs on this broker.
-    public let fees: FeeInfo?
-
-    public var broker: Broker { Broker(id: id) }
-    public var isEnabled: Bool { enabled ?? true }
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, simulated, configured, ok, error, fees, enabled
-        case liveTradingAllowed = "live_trading_allowed"
-    }
-}
-
 public struct ServerStatus: Codable {
     public let version: String
     public let exchange: String
@@ -118,21 +60,9 @@ public struct ServerStatus: Codable {
     public let takerFee: Double?
     /// Whether the agent has an Anthropic API key for the "AI decides" strategy (nil: older agent).
     public let aiConfigured: Bool?
-    /// Every broker (agent 1.20+); nil: an older agent that only knows Revolut X.
-    public let exchanges: [ExchangeStatus]?
-
-    public func exchange(_ broker: Broker) -> ExchangeStatus? { exchanges?.first { $0.id == broker.rawValue } }
-
-    /// Live trading on the broker – older agents only have Revolut X's switch.
-    public func liveTradingAllowed(_ broker: Broker) -> Bool {
-        exchange(broker)?.liveTradingAllowed ?? (broker == .revolutX && liveTradingAllowed)
-    }
-
-    /// The agent runs the simulated demo market instead of the real brokers.
-    public var isDemo: Bool { exchange == "mock" }
 
     enum CodingKeys: String, CodingKey {
-        case version, exchange, exchanges
+        case version, exchange
         case exchangeOk = "exchange_ok"
         case exchangeError = "exchange_error"
         case engineError = "engine_error"
@@ -162,8 +92,6 @@ public struct OtherModeTotal: Codable {
 }
 
 public struct Summary: Codable {
-    /// The broker these numbers belong to (agent 1.20+).
-    public let exchange: String?
     public let currencies: [CurrencyTotal]
     /// "paper" or "live" – the mode the numbers above belong to (older agents mix both and send nothing).
     public let mode: String?
@@ -177,7 +105,7 @@ public struct Summary: Codable {
     public let tradesCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case exchange, currencies, mode
+        case currencies, mode
         case otherMode = "other_mode"
         case otherModeTrades = "other_mode_trades"
         case botsTotal = "bots_total"
@@ -203,20 +131,9 @@ public struct BotPosition: Codable, Equatable, Identifiable {
     public let sellPrice: Double?
     public let stopPrice: Double?
     public let note: String?
-    // agent 1.22+: the instrument the trade holds when it isn't the bot's own (the monthly trend follower's
-    // currency-hedged share class, or the bonds it parks in)
-    public let heldSymbol: String?
-    public let heldName: String?
-    public let heldUnit: String?
-
-    /// The unit of `qty`: the held instrument's ticker, else the bot's.
-    public func unit(of bot: Bot) -> String { heldUnit ?? bot.baseCurrency }
 
     enum CodingKeys: String, CodingKey {
         case id, qty, cost, value, paper, note
-        case heldSymbol = "symbol"
-        case heldName = "display_symbol"
-        case heldUnit = "base_currency"
         case entryPrice = "entry_price"
         case sellPrice = "sell_price"
         case stopPrice = "stop_price"
@@ -229,11 +146,9 @@ public struct BotPosition: Codable, Equatable, Identifiable {
 public struct MarketInfo: Codable, Equatable {
     public let price: Double
     public let change24h: Double
-    /// Why the instrument can't be traded right now, e.g. outside the trading hours of a stock (agent 1.20+).
-    public let closed: String?
 
     enum CodingKeys: String, CodingKey {
-        case price, closed
+        case price
         case change24h = "change_24h"
     }
 }
@@ -259,47 +174,6 @@ public struct BotTargets: Codable, Equatable {
     }
 }
 
-/// What a strategy looks at, line by line – the monthly trend follower's trend, recession signs, dollar and bonds.
-public struct BotSignals: Codable, Equatable {
-    public struct Row: Codable, Equatable, Identifiable {
-        public let label: String
-        public let value: String
-        /// on/off: a trend signal · ok/warn: a recession sign · neutral · unknown: no data
-        public let state: String?
-        /// How far it is from turning, e.g. "Today 112 € – off below 103 € (−8 %) at the month end".
-        public let note: String?
-        public var id: String { label }
-    }
-
-    public struct Month: Codable, Equatable, Identifiable {
-        public let month: String // "2026-10"
-        public let label: String // "Oct 2026"
-        public let state: String // in, hedged, parked, cash
-        public let name: String? // the instrument it parked in or the hedged share class
-        public var id: String { month }
-    }
-
-    public let rows: [Row]
-    public let history: [Month]
-}
-
-/// The trend followers as one portfolio: the share each should have (by its amount) and has (by its value).
-public struct BotPillars: Codable, Equatable {
-    public struct Share: Codable, Equatable, Identifiable {
-        public let id: Int
-        public let name: String
-        public let value: Double
-        public let target: Double // %
-        public let actual: Double // %
-        public let rebalanced: Double // the amount that would restore the target share
-    }
-
-    public let shares: [Share]
-    public let total: Double
-    public let drift: Double // the largest deviation in percentage points
-    public let due: Bool
-}
-
 /// How far the price still has to move until the bot trades – what the card shows first.
 public struct BotGoal {
     public enum Kind { case buy, sell, trailingStart, trailingStop }
@@ -317,12 +191,6 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let strategyName: String
     public let strategyIcon: String
     public let symbol: String
-    /// The broker the bot trades on (agent 1.20+; older agents: Revolut X).
-    public let exchange: String?
-    /// What the app shows instead of the symbol – Trade Republic: the instrument's name instead of its ISIN.
-    public let displaySymbol: String?
-    /// crypto, stock, fund … (agent 1.20+).
-    public let instrumentType: String?
     public let baseCurrency: String
     public let quoteCurrency: String
     public let params: [String: JSONValue]
@@ -339,24 +207,17 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let position: BotPosition? // all open trades summed up
     public let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
     public let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
-    /// The trades are slices of one position (momentum follower, agent 1.27+) – shown as one position.
+    /// The trades are slices of one position (momentum follower, agent 1.20+) – shown as one position.
     public let sliced: Bool?
     public let realizedPnl: Double
     public let tradesCount: Int
     public let wins: Int
     public let losses: Int
     public let market: MarketInfo?
-    /// The signals behind the decision, each with its value and how far it is from turning (agent 1.24+).
-    public let signals: BotSignals?
-    /// The running trend followers of the broker side by side – their shares and whether to rebalance (agent 1.24+).
-    public let pillars: BotPillars?
 
     enum CodingKeys: String, CodingKey {
         case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
-        case signals, pillars, sliced
-        case exchange
-        case displaySymbol = "display_symbol"
-        case instrumentType = "instrument_type"
+        case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
         case strategyIcon = "strategy_icon"
@@ -373,16 +234,8 @@ public struct Bot: Codable, Identifiable, Equatable {
 
     public var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
 
-    public var broker: Broker { Broker(id: exchange) }
-
-    /// The instrument as people know it: "ETH-EUR" on Revolut X, "Apple" on Trade Republic.
-    public var title: String { displaySymbol ?? symbol }
-
     /// The open trades one by one – older agents only send the single position.
     public var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
-
-    /// The trades as the apps list them: a sliced position (momentum follower) as one, its total.
-    public var shownTrades: [BotPosition] { sliced == true ? (position.map { [$0] } ?? openTrades) : openTrades }
 
     /// True when the bot may hold more than one trade (or does) – the card then lists them.
     public var tradesMode: Bool { sliced != true && ((maxTrades ?? 1) > 1 || openTrades.count > 1) }
@@ -442,16 +295,9 @@ public struct Trade: Codable, Identifiable, Equatable {
     public let createdAt: Int64
     /// The trade (position) a buy opened or added to and a sale closed – agent 1.17+; nil for older trades.
     public let positionId: String?
-    /// The broker (agent 1.20+; older agents: Revolut X).
-    public let exchange: String?
-    /// Trade Republic: the ticker and the name instead of the ISIN.
-    public let baseName: String?
-    public let displaySymbol: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, symbol, side, price, fee, pnl, paper, reason, exchange
-        case baseName = "base_name"
-        case displaySymbol = "display_symbol"
+        case id, symbol, side, price, fee, pnl, paper, reason
         case positionId = "position_id"
         case botId = "bot_id"
         case botName = "bot_name"
@@ -462,8 +308,7 @@ public struct Trade: Codable, Identifiable, Equatable {
     }
 
     public var isBuy: Bool { side == "buy" }
-    public var broker: Broker { Broker(id: exchange) }
-    public var base: String { baseName ?? String(symbol.split(separator: "-").first ?? "") }
+    public var base: String { String(symbol.split(separator: "-").first ?? "") }
     public var quote: String { String(symbol.split(separator: "-").last ?? "EUR") }
     public var date: Date { Date(ms: createdAt) }
 }
@@ -556,40 +401,6 @@ public struct ExchangeInfo: Codable, Equatable {
 
 public struct PublicIP: Codable { public let ip: String }
 
-/// The Trade Republic login on the agent (agent 1.20+). Prices work without it (paper trading); live trading needs
-/// it. A login lasts 24 hours and is confirmed in the Trade Republic app.
-public struct TradeRepublicInfo: Codable, Equatable {
-    /// logged_out | waiting (for the confirmation in the TR app) | code (authenticator code needed) | logged_in
-    public let state: String
-    public let connected: Bool
-    public let phoneMasked: String?
-    public let pinSaved: Bool
-    public let loggedInAt: Int64?
-    /// When the 24-hour login ends.
-    public let sessionExpiresAt: Int64?
-    /// Until when the agent waits for the confirmation in the app.
-    public let waitingUntil: Int64?
-    /// The agent started the daily login itself.
-    public let automatic: Bool
-    public let error: String?
-    public let marketError: String?
-    /// "mock": the demo market – no login.
-    public let mode: String
-
-    public var isDemo: Bool { mode == "mock" }
-    public var waiting: Bool { state == "waiting" || state == "code" }
-
-    enum CodingKeys: String, CodingKey {
-        case state, connected, automatic, error, mode
-        case phoneMasked = "phone_masked"
-        case pinSaved = "pin_saved"
-        case loggedInAt = "logged_in_at"
-        case sessionExpiresAt = "session_expires_at"
-        case waitingUntil = "waiting_until"
-        case marketError = "market_error"
-    }
-}
-
 /// Response of restoring a backup on the agent.
 public struct RestoreResult: Decodable {
     public let bots: Int
@@ -655,50 +466,15 @@ public struct Limits: Codable, Equatable {
     }
 }
 
-/// Fees the simulation (paper mode) charges, as fractions (0.0009 = 0.09 %), plus a fixed amount per order in the
-/// quote currency (Trade Republic: 1 €; agent 1.20+, nil with older agents).
+/// Fees the simulation (paper mode) charges, as fractions (0.0009 = 0.09 %).
 public struct PaperFees: Codable, Equatable {
     public var buy: Double
     public var sell: Double
-    public var fixed: Double?
 
-    public init(buy: Double, sell: Double, fixed: Double? = nil) {
+    public init(buy: Double, sell: Double) {
         self.buy = buy
         self.sell = sell
-        self.fixed = fixed
     }
-
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(buy, forKey: .buy)
-        try c.encode(sell, forKey: .sell)
-        try c.encodeIfPresent(fixed, forKey: .fixed)
-    }
-}
-
-/// Something a broker trades – Trade Republic identifies it by its ISIN (symbol "<ISIN>-EUR").
-public struct Instrument: Codable, Identifiable, Hashable {
-    public let symbol: String
-    public let name: String
-    /// Ticker or code used for amounts, e.g. AAPL or BTC.
-    public let short: String?
-    /// crypto, stock, fund, bond, derivative …
-    public let type: String?
-    public let isin: String?
-    public var id: String { symbol }
-
-    public init(symbol: String, name: String, short: String?, type: String?, isin: String?) {
-        self.symbol = symbol
-        self.name = name
-        self.short = short
-        self.type = type
-        self.isin = isin
-    }
-
-    /// Where a new Trade Republic bot starts – suits a savings plan as well as a dip buyer.
-    public static let tradeRepublicStart = Instrument(
-        symbol: "IE00B4L5Y983-EUR", name: "iShares Core MSCI World", short: "EUNL", type: "fund", isin: "IE00B4L5Y983"
-    )
 }
 
 public struct BotInput: Encodable {
@@ -708,17 +484,14 @@ public struct BotInput: Encodable {
     public var params: [String: JSONValue]
     public var enabled: Bool
     public var paper: Bool
-    public var exchange: String
 
-    public init(name: String, strategy: String, symbol: String, params: [String: JSONValue], enabled: Bool, paper: Bool,
-                broker: Broker = .revolutX) {
+    public init(name: String, strategy: String, symbol: String, params: [String: JSONValue], enabled: Bool, paper: Bool) {
         self.name = name
         self.strategy = strategy
         self.symbol = symbol
         self.params = params
         self.enabled = enabled
         self.paper = paper
-        self.exchange = broker.rawValue
     }
 }
 

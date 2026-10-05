@@ -27,7 +27,6 @@ enum Route: Equatable {
     case bot(Int)
     case editor(Int?) // nil = new bot
     case exchangeSetup
-    case tradeRepublicSetup
     case trade(Int, from: Int?) // from: the bot whose view it was opened in – "Back" returns there
 }
 
@@ -57,8 +56,7 @@ struct RootView: View {
         .frame(minHeight: StatusPanel.minHeight, maxHeight: .infinity) // height follows the panel (resizable at its bottom edge)
         .animation(.snappy(duration: 0.28), value: route)
         .onChange(of: route, initial: true) { _, newRoute in
-            // setting up a broker means switching to its website or app – the panel stays open meanwhile
-            store.keepPanelOpen = newRoute == .exchangeSetup || newRoute == .tradeRepublicSetup
+            store.keepPanelOpen = newRoute == .exchangeSetup
         }
         .onChange(of: store.isVisible) { _, visible in
             // The first time the panel opens: bots when the agent is (being) connected, otherwise the settings.
@@ -102,8 +100,6 @@ struct RootView: View {
             BotDetailView(botId: id, open: navigate)
         case .exchangeSetup:
             ExchangeSetupView(close: { navigate(nil) })
-        case .tradeRepublicSetup:
-            TradeRepublicSetupView(close: { navigate(nil) })
         case .trade(let id, let from):
             TradeDetailPage(tradeId: id, back: { navigate(from.map { .bot($0) }) })
         case .editor(let id):
@@ -199,25 +195,17 @@ struct HeaderView: View {
             if confirmingQuit {
                 quitConfirmation
             }
-            // the two broker tabs above the statistics – they also choose what the bots, trades and the
-            // broker settings show
-            if store.isConnected, store.showsBrokerTabs {
-                BrokerTabs(selection: Binding(get: { store.selectedBroker }, set: { store.selectedBroker = $0 }),
-                           summaries: store.summaries, isLive: store.isLive, attention: store.needsAttention)
-            }
             if showSummary, store.isConnected, let summary = store.summary {
                 SummaryCard(
                     summary: summary,
-                    liveAllowed: store.isLive,
+                    liveAllowed: store.status?.liveTradingAllowed ?? false,
                     balances: store.balances,
-                    bots: store.brokerBots,
-                    trades: store.brokerTrades,
+                    bots: store.bots,
+                    trades: store.trades,
                     limits: store.limits,
-                    isDemo: store.status?.isDemo == true,
-                    broker: store.broker,
+                    isDemo: store.status?.exchange == "mock",
                     showHistory: { ProfitWindow.show(store: store) }
                 )
-                .id(store.broker) // no animation of the numbers from one broker to the other
             }
         }
     }
@@ -250,20 +238,11 @@ struct HeaderView: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
-    /// What the selected broker reports as a problem (older agents: Revolut X's error).
-    private var brokerError: String? {
-        guard let status = store.status else { return nil }
-        if let exchange = status.exchange(store.broker) {
-            return exchange.ok ? nil : (exchange.error ?? String(localized: "no data"))
-        }
-        return status.exchangeOk ? nil : (status.exchangeError ?? String(localized: "no data"))
-    }
-
     private var statusColor: Color {
         switch store.connection {
         case .connected:
             if store.status?.engineError != nil { return .red }
-            return brokerError != nil ? .orange : .green
+            return store.status?.exchangeOk == false ? .orange : .green
         case .connecting: return .yellow
         case .failed: return .red
         case .notConfigured: return .gray
@@ -274,12 +253,13 @@ struct HeaderView: View {
         switch store.connection {
         case .connected:
             if let engineError = store.status?.engineError { return engineError }
-            if let error = brokerError {
-                return String(localized: "Agent connected · \(store.broker.title): \(error)")
+            if let status = store.status, !status.exchangeOk {
+                let error = status.exchangeError ?? String(localized: "no data")
+                return String(localized: "Agent connected · Exchange: \(error)")
             }
-            return store.status?.isDemo == true
+            return store.status?.exchange == "mock"
                 ? String(localized: "Connected · Demo market")
-                : String(localized: "Connected · \(store.broker.title)")
+                : String(localized: "Connected · Revolut X")
         case .connecting: return String(localized: "Connecting …")
         case .failed(let message): return message
         case .notConfigured: return String(localized: "Not connected")

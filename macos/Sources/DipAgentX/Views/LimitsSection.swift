@@ -1,7 +1,7 @@
 import DipAgentXKit
 import SwiftUI
 
-/// Risk limits of the selected broker: how many positions may be open, how much capital, one bot per pair.
+/// Global risk limits: how many positions may be open, how much capital, one bot per pair.
 struct LimitsSection: View {
     @Environment(AppStore.self) private var store
     let limits: Limits
@@ -16,7 +16,7 @@ struct LimitsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel("Risk & limits", trailing: store.showsBrokerTabs ? AnyView(BrokerName(broker: store.broker)) : nil)
+            SectionLabel("Risk & limits")
             Card {
                 VStack(alignment: .leading, spacing: 12) {
                     row(

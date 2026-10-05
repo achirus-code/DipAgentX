@@ -9,18 +9,21 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from ..exchange import FIAT, Candle, Exchange, Fees, Ticker, dec
+from ..exchange import Candle, Exchange, Ticker, dec
 from ..i18n import L, Problem
 
 CANDLE_INTERVALS = [5, 15, 30, 60, 240, 1440]  # minutes, as supported by Revolut X
 HOUR_MS = 3_600_000
 DAY_MS = 24 * HOUR_MS
-MAX_CANDLES = 98  # per request – every candle series stays below this
+FIAT = {"EUR", "USD", "GBP", "CHF", "PLN"}
 
 
-def sell_fee(gross: Decimal, fees: Fees | float, quote: str) -> Decimal:
-    """Fee for a sale of ``gross`` (a plain number is a rate without a fixed part)."""
-    return (fees if isinstance(fees, Fees) else Fees(float(fees))).of(gross, quote)
+def sell_fee(gross: Decimal, fee_rate: float, quote: str) -> Decimal:
+    """Fee for a sale of ``gross`` – Revolut X rounds fees in fiat up to a full cent, which matters for tiny orders."""
+    fee = gross * Decimal(str(fee_rate))
+    if quote in FIAT:
+        fee = (fee * 100).to_integral_value(rounding="ROUND_CEILING") / 100
+    return fee
 
 
 @dataclass
@@ -90,9 +93,6 @@ class Position:
     order_id: str | None = None  # the live buy order that opened it (a late fill of that order is added here)
     # the high since a strategy's sell signal armed a trailing stop (dip buyer); None = not armed. Raised like peak.
     trail_peak: Decimal | None = None
-    # the instrument held when it is not the bot's own symbol (the monthly trend follower's currency-hedged ETF or
-    # the bonds it parks in); None = the bot's symbol
-    symbol: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -110,16 +110,16 @@ class Position:
             return 0.0
         return float((self.value(price) - self.cost) / self.cost * 100)
 
-    def net_proceeds(self, price: Decimal, fees: Fees | float, quote: str) -> Decimal:
+    def net_proceeds(self, price: Decimal, fee_rate: float, quote: str) -> Decimal:
         """What selling everything at ``price`` leaves after the exchange fee."""
         gross = self.value(price)
-        return gross - sell_fee(gross, fees, quote)
+        return gross - sell_fee(gross, fee_rate, quote)
 
-    def break_even_price(self, fees: Fees | float, quote: str) -> Decimal:
+    def break_even_price(self, fee_rate: float, quote: str) -> Decimal:
         """The price at which a sale just recovers the cost (buy fee included) after the sell fee."""
         if not self.qty:
             return Decimal(0)
-        return (self.cost + sell_fee(self.cost, fees, quote)) / self.qty
+        return (self.cost + sell_fee(self.cost, fee_rate, quote)) / self.qty
 
     def to_state(self) -> dict[str, Any]:
         return {
@@ -132,7 +132,6 @@ class Position:
             "id": self.id,
             "order_id": self.order_id,
             "trail_peak": str(self.trail_peak) if self.trail_peak is not None else None,
-            **({"symbol": self.symbol} if self.symbol else {}),
         }
 
     @classmethod
@@ -144,7 +143,6 @@ class Position:
             int(raw.get("buys", 1)), bool(raw.get("paper", True)),
             str(raw.get("id") or "p1"), raw.get("order_id"),
             dec(raw["trail_peak"]) if raw.get("trail_peak") else None,
-            raw.get("symbol") or None,
         )
 
 
@@ -195,7 +193,6 @@ Message = dict  # an i18n message, see app.i18n.m()
 class Buy:
     quote_amount: Decimal
     reason: Message
-    symbol: str | None = None  # another instrument than the bot's own (see Position.symbol)
 
 
 @dataclass
@@ -213,48 +210,21 @@ class Decision:
 
 
 CandleFetch = Callable[[str, int, int, int], Awaitable[list[Candle]]]  # (symbol, interval, since, until)
-DailyFetch = Callable[[str, int, int], Awaitable[list[Candle]]]  # (symbol, days, now)
-
-
-async def fetch_daily_candles(fetch: CandleFetch, symbol: str, days: int, now: int,
-                              chunk: int = MAX_CANDLES) -> list[Candle]:
-    """Daily candles of the last ``days`` completed UTC days, oldest first – fewer when the pair is younger
-    (days without trading, like weekends on a stock exchange, have no candle).
-
-    Long windows (a 200-day average) are fetched in chunks of at most ``chunk`` daily candles."""
-    today = now - now % DAY_MS
-    since = today - days * DAY_MS
-    candles: dict[int, Candle] = {}
-    start = since
-    while start < today:
-        end = min(start + chunk * DAY_MS, today)
-        for c in await fetch(symbol, 1440, start, end - 1):
-            if since <= c.start < today:  # not the forming candle of today
-                candles[c.start] = c
-        start = end
-    return [candles[t] for t in sorted(candles)]
 
 
 class MarketView:
     """Market data for one symbol during one engine tick (candles fetched lazily and cached).
 
     ``fetch`` lets the engine plug in a cache that survives ticks; by default candles come from the exchange.
-    ``daily`` does the same for the daily candles of long averages (they change once a day).
     """
 
-    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int, fetch: CandleFetch | None = None,
-                 daily: DailyFetch | None = None):
+    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int, fetch: CandleFetch | None = None):
         self.exchange = exchange
         self.symbol = symbol
         self.ticker = ticker
         self.now = now
         self._fetch = fetch or exchange.candles
-        self._daily = daily
         self._cache: dict[tuple[int, float], list[Candle]] = {}
-        self._daily_cache: dict[int, list[Candle]] = {}
-        # name and type of the instrument (a coin, a stock, an ETF …) and why it can't be traded right now, if so
-        self.instrument: dict[str, Any] = exchange.instrument(symbol)
-        self.closed: dict | None = exchange.market_closed(symbol, ticker)
 
     @property
     def price(self) -> Decimal:
@@ -270,7 +240,7 @@ class MarketView:
 
     async def candles(self, hours: float) -> tuple[list[Candle], int]:
         minutes = hours * 60
-        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= MAX_CANDLES), CANDLE_INTERVALS[-1])
+        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= 98), CANDLE_INTERVALS[-1])
         key = (interval, hours)
         if key not in self._cache:
             since = self.now - int(hours * HOUR_MS) - interval * 60_000
@@ -300,48 +270,6 @@ class MarketView:
         candles, _ = await self.candles(hours)
         return min([c.low for c in candles] + [self.price])
 
-    async def daily_candles(self, days: int) -> list[Candle]:
-        if days not in self._daily_cache:
-            if self._daily:
-                self._daily_cache[days] = await self._daily(self.symbol, days, self.now)
-            else:
-                self._daily_cache[days] = await fetch_daily_candles(
-                    self._fetch, self.symbol, days, self.now, self.exchange.max_candles)
-        return self._daily_cache[days]
-
-    async def daily_closes(self, days: int) -> list[Decimal]:
-        return [c.close for c in await self.daily_candles(days)]
-
-    async def adx(self, interval: int, period: int = 14) -> float | None:
-        """Trend strength ADX of the completed ``interval``-minute candles (about 98 of them, one request).
-        None while there are too few candles."""
-        candles, got = await self.candles(98 * interval / 60)
-        if got != interval:
-            return None
-        return adx([c for c in candles if c.start + interval * 60_000 <= self.now], period)
-
-
-def adx(candles: list[Candle], period: int = 14) -> float | None:
-    """Average directional index (Wilder): below ~25 the market moves sideways, above it trends – up or down."""
-    if len(candles) < 3 * period:
-        return None
-    a = 1 / period
-    atr = plus = minus = value = None
-    for prev, c in zip(candles, candles[1:]):
-        high, low, close = float(c.high), float(c.low), float(prev.close)
-        up, down = high - float(prev.high), float(prev.low) - low
-        tr = max(high - low, abs(high - close), abs(low - close))
-        pdm = up if up > down and up > 0 else 0.0
-        ndm = down if down > up and down > 0 else 0.0
-        if atr is None:
-            atr, plus, minus = tr, pdm, ndm
-        else:
-            atr, plus, minus = atr + a * (tr - atr), plus + a * (pdm - plus), minus + a * (ndm - minus)
-        pdi, ndi = (100 * plus / atr, 100 * minus / atr) if atr else (0.0, 0.0)
-        dx = 100 * abs(pdi - ndi) / (pdi + ndi) if pdi + ndi else 0.0
-        value = dx if value is None else value + a * (dx - value)
-    return value
-
 
 @dataclass
 class Context:
@@ -350,31 +278,13 @@ class Context:
     state: dict[str, Any]
     market: MarketView
     quote: str = "EUR"
-    fees: Fees = Fees()  # what a sale costs (rate and fixed part) – for break-even and net profit
+    fee_rate: float = 0.0009  # exchange fee per order, e.g. 0.09 %
     # set by the engine: strategies can persist a journal entry (used by "AI decides" for Claude's answers)
     journal: Callable[[dict[str, Any]], None] | None = None
-    # set by the engine: market data of another instrument of the same broker (the position's, or one a strategy
-    # may switch to); None in tests that don't need it
-    view_of: Callable[[str], Awaitable["MarketView"]] | None = None
-    # the market of the position's instrument when it is not the bot's symbol (else ``market``)
-    held: "MarketView | None" = None
 
     @property
     def now(self) -> int:
         return self.market.now
-
-    @property
-    def held_market(self) -> "MarketView":
-        return self.held or self.market
-
-    async def market_of(self, symbol: str) -> "MarketView":
-        if symbol == self.market.symbol:
-            return self.market
-        if self.held is not None and symbol == self.held.symbol:
-            return self.held
-        if self.view_of is None:
-            raise Problem("err.no_market_data", error=symbol)
-        return await self.view_of(symbol)
 
     def targets(self, buy: Decimal | float | None = None, sell: Decimal | float | None = None,
                 stop: Decimal | float | None = None, note: dict | None = None) -> None:
@@ -398,8 +308,8 @@ class Strategy:
     accumulates: bool = False
     # True = offers "Max. open trades": the bot may hold several positions (trades) at once, each sold on its own
     multi_trades: bool = False
-    # > 0: the strategy decides itself which trades to open and close (no spacing, no "Max. open trades" option) –
-    # at most this many at once
+    # > 0 = the strategy manages its trades itself (slices of one position): the engine allows this many, without
+    # spacing or min. time between them, and the limits count the bot as one open position
     fixed_trades: int = 0
 
     def normalize(self, raw: dict[str, Any] | None) -> dict[str, Any]:

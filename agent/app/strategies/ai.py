@@ -49,18 +49,16 @@ SENTIMENT_CONTRARIAN = (
     "timing signal."
 )
 
-SYSTEM_PROMPT = """You manage one small spot position – a crypto coin, a stock or an ETF – for a retail trading bot. The
-brief names the broker (Revolut X or Trade Republic) and the instrument.
+SYSTEM_PROMPT = """You manage one small crypto spot position for a retail trading bot on Revolut X.
 
-Every few minutes you receive a market brief for one instrument and decide on ONE action:
+Every few minutes you receive a market brief for one trading pair and decide on ONE action:
 - without a position: "buy" (open a position with the configured amount) or "wait"
 - with a position: "sell" (close the whole position at market) or "hold"
 
 Judge for yourself which circumstances matter: the trend over the last hours and days, how volatile the market has
 been recently, momentum, whether the price sits near a recent high or low, and – when news are provided or you can
 search for them – the current market sentiment. Weigh them as an experienced, patient trader would:
-- Fees are paid on every buy and sell (a share of the order value and/or a fixed amount per order, see "fees");
-  do not churn. Only buy when you see a real edge, only sell when the profit is
+- Fees are paid on every buy and sell; do not churn. Only buy when you see a real edge, only sell when the profit is
   worth taking or the picture has clearly turned.
 - The bot never realizes a loss on your say-so: a "sell" below break-even is blocked by the engine (only the
   configured stop-loss may sell at a loss). If the position is under water, "hold" and explain what you wait for.
@@ -90,8 +88,6 @@ class MarketBrief:
 
     symbol: str
     quote: str
-    broker: str
-    instrument: dict[str, Any]  # name, type (crypto, stock, fund …), ISIN where there is one
     price: float
     bid: float
     ask: float
@@ -102,7 +98,7 @@ class MarketBrief:
     distance_to_high_72h: float  # price vs. the 72 h high, in %
     distance_to_low_72h: float
     hourly_closes: list[float]  # last 12 hours
-    fees: dict[str, float]  # rate = share of the order value, fixed_per_order in the quote currency
+    fee_rate: float
     position: dict[str, Any] | None
     amount: float
     stop_loss: float
@@ -199,11 +195,9 @@ class AiStrategy(Strategy):
             Option("contrarian", L("As a contrarian signal at extremes", "Als Kontrasignal an Extremen")),
         ], help=L(
             "The Crypto Fear & Greed index (0–100) of the market as a whole. Contrarian: below 25 Claude leans towards "
-            "patient buying, above 75 towards taking profits; in between the index is ignored. Crypto only – ignored "
-            "for stocks and ETFs.",
+            "patient buying, above 75 towards taking profits; in between the index is ignored.",
             "Der Crypto Fear & Greed Index (0–100) für den Gesamtmarkt. Kontrasignal: unter 25 neigt Claude zu "
-            "geduldigem Kaufen, über 75 zum Gewinnmitnehmen; dazwischen wird der Index ignoriert. Nur für Krypto – "
-            "bei Aktien und ETFs ohne Wirkung.",
+            "geduldigem Kaufen, über 75 zum Gewinnmitnehmen; dazwischen wird der Index ignoriert.",
         )),
         Param("instructions", L("Additional instructions", "Zusätzliche Anweisungen"), "text", "",
               L("Optional. Your own rules or focus for Claude, e.g. “only buy on strong dips” – sent with every check.",
@@ -279,8 +273,7 @@ class AiStrategy(Strategy):
         hourly = [float(c.close) for c in candles_24h[::step]][-12:]
 
         sentiment = None
-        # the index describes the crypto market – it says nothing about a stock or an ETF
-        if p.get("sentiment") in ("info", "contrarian") and market.instrument.get("type", "crypto") == "crypto":
+        if p.get("sentiment") in ("info", "contrarian"):
             index = await fetch_fear_greed()
             if index:
                 sentiment = {"mode": p["sentiment"], **index}
@@ -291,15 +284,14 @@ class AiStrategy(Strategy):
                 "qty": float(pos.qty),
                 "cost": float(pos.cost),
                 "entry_price": float(pos.entry_price),
-                "break_even_price": float(pos.break_even_price(ctx.fees, ctx.quote)),
+                "break_even_price": float(pos.break_even_price(ctx.fee_rate, ctx.quote)),
                 "profit_pct": round(pos.pnl_pct(market.bid), 2),
                 "held_hours": round((ctx.now - pos.opened_at) / 3_600_000, 1),
                 "peak_price_since_buy": float(pos.peak),
                 "note": "a sell below break_even_price is blocked by the engine",
             }
         return MarketBrief(
-            symbol=market.symbol, quote=ctx.quote, broker=market.exchange.title,
-            instrument=market.instrument,
+            symbol=market.symbol, quote=ctx.quote,
             price=float(market.price), bid=float(market.bid), ask=float(market.ask),
             changes=changes,
             volatility_4h=round(_returns_stdev([c.close for c in candles_4h]), 3),
@@ -308,7 +300,7 @@ class AiStrategy(Strategy):
             distance_to_high_72h=round(float((market.price / high_72h - 1) * 100), 2) if high_72h else 0.0,
             distance_to_low_72h=round(float((market.price / low_72h - 1) * 100), 2) if low_72h else 0.0,
             hourly_closes=hourly,
-            fees={"rate": ctx.fees.rate, "fixed_per_order": ctx.fees.fixed},
+            fee_rate=ctx.fee_rate,
             position=position,
             amount=float(p["amount"]),
             stop_loss=float(p["stop_loss"]),

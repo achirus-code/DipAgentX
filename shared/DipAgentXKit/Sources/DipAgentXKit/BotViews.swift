@@ -183,7 +183,7 @@ public struct PositionStrip: View {
                 // how big the position is: its current value and what went in
                 Text("Value \(Fmt.money(position.value, bot.quoteCurrency)) · invested \(Fmt.money(position.cost, bot.quoteCurrency))")
                     .font(.ui(10.5, weight: .medium)).monospacedDigit()
-                Text("\(Fmt.qty(position.qty)) \(position.unit(of: bot)) · entry \(Fmt.price(position.entryPrice, bot.quoteCurrency))")
+                Text("\(Fmt.qty(position.qty)) \(bot.baseCurrency) · entry \(Fmt.price(position.entryPrice, bot.quoteCurrency))")
                     .font(.ui(9.5)).foregroundStyle(.secondary).monospacedDigit()
             }
             Spacer()
@@ -243,7 +243,7 @@ public struct SlicesList: View {
                         .frame(width: 16, height: 16)
                         .background(Circle().fill(Color.primary.opacity(0.08)))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(verbatim: "\(Fmt.qty(trade.qty)) \(trade.unit(of: bot))")
+                        Text(verbatim: "\(Fmt.qty(trade.qty)) \(bot.baseCurrency)")
                             .font(.ui(10.5, weight: .medium))
                         Text(Date(ms: trade.openedAt).formatted(date: .abbreviated, time: .shortened))
                             .font(.ui(9.5)).foregroundStyle(.secondary)

@@ -20,8 +20,6 @@ import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .errors import ExchangeError
-
 API_PREFIX = "/api/1.0"
 # idempotent GETs are retried on network errors, 429 and 5xx; orders (POST) are never resent
 RETRY_DELAYS = (0.5, 1.0, 2.0)
@@ -29,8 +27,16 @@ RETRY_DELAYS = (0.5, 1.0, 2.0)
 log = logging.getLogger("dipagentx.revolutx")
 
 
-class RevolutXError(ExchangeError):
-    venue = "Revolut X"
+class RevolutXError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(f"Revolut X {status}: {message}")
+        self.status = status
+        self.message = message
+
+    @property
+    def transient(self) -> bool:
+        """Rate limit or server-side problem – worth retrying, says nothing about the request itself."""
+        return self.status == 429 or self.status >= 500
 
 
 class RevolutXClient:
@@ -137,6 +143,23 @@ class RevolutXClient:
             "order_configuration": {"market": market},
         }
         return (await self.request("POST", "/orders", body=body))["data"]
+
+    async def place_limit_order(
+        self, symbol: str, side: str, *, client_order_id: str | None = None, base_size: str, price: str,
+    ) -> dict:
+        """Post-only: the exchange rejects the order instead of filling it as a taker."""
+        body = {
+            "client_order_id": client_order_id or str(uuid.uuid4()),
+            "symbol": symbol,
+            "side": side,
+            "order_configuration": {
+                "limit": {"base_size": base_size, "price": price, "execution_instructions": ["post_only"]},
+            },
+        }
+        return (await self.request("POST", "/orders", body=body))["data"]
+
+    async def cancel_order(self, venue_order_id: str) -> None:
+        await self.request("DELETE", f"/orders/{venue_order_id}")
 
     async def get_order(self, venue_order_id: str) -> dict:
         return (await self.request("GET", f"/orders/{venue_order_id}"))["data"]

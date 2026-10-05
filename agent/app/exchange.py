@@ -1,8 +1,4 @@
-"""Exchange abstraction: the real Revolut X exchange and a mock market for demos/tests.
-
-The agent trades on several brokers side by side (Revolut X and Trade Republic). Every bot belongs to one of them –
-``Exchange.broker`` is that slot, whether the exchange behind it is the real one or the simulated demo market.
-"""
+"""Exchange abstraction: the real Revolut X exchange and a mock market for demos/tests."""
 
 from __future__ import annotations
 
@@ -27,40 +23,11 @@ def dec(value: object, default: Decimal = D0) -> Decimal:
     return Decimal(str(value))
 
 
-FIAT = {"EUR", "USD", "GBP", "CHF", "PLN"}
-
-
-@dataclass(frozen=True)
-class Fees:
-    """What an order costs: a share of its value (Revolut X: 0.09 %) plus a fixed amount per order in the quote
-    currency (Trade Republic: 1 €)."""
-
-    rate: float = 0.0009
-    fixed: float = 0.0
-
-    def of(self, gross: Decimal, quote: str) -> Decimal:
-        """Fee for an order of ``gross`` – fees in fiat are rounded up to a full cent, which matters for tiny orders."""
-        fee = gross * Decimal(str(self.rate))
-        if quote in FIAT:
-            fee = (fee * 100).to_integral_value(rounding="ROUND_CEILING") / 100
-        return fee + Decimal(str(self.fixed))
-
-    def to_json(self) -> dict[str, float]:
-        return {"rate": self.rate, "fixed": self.fixed}
-
-
-REVOLUTX = "revolutx"
-TRADEREPUBLIC = "traderepublic"
-BROKERS = (REVOLUTX, TRADEREPUBLIC)
-BROKER_TITLES = {REVOLUTX: "Revolut X", TRADEREPUBLIC: "Trade Republic"}
-
-
 @dataclass
 class Ticker:
     bid: Decimal
     ask: Decimal
     last: Decimal
-    time: int | None = None  # ms of the quote, where the exchange tells (Trade Republic: stale outside trading hours)
 
     @property
     def mid(self) -> Decimal:
@@ -105,38 +72,8 @@ class OrderResult:
 
 class Exchange:
     name = "base"
-    broker = REVOLUTX  # the slot the bots of this exchange belong to
-    # Revolut X can report "filled" before the fill data is complete – the engine then keeps re-reading the order.
-    # Exchanges that fill a market order completely or not at all don't need that.
-    partial_fills = True
-    # what a live sale costs, if the exchange knows it better than the agent's TAKER_FEE setting (Trade Republic: 1 €)
-    live_fees: Fees | None = None
-    # an order whose placement answer got lost and that can't be found for this long stops the bot (None: the
-    # engine's default)
-    order_lookup_grace_ms: int | None = None
-    # candles per request – longer daily series are fetched in chunks of this size
-    max_candles = 98
-
-    @property
-    def title(self) -> str:
-        return BROKER_TITLES.get(self.broker, self.broker)
-
-    def instrument(self, symbol: str) -> dict:
-        """What the symbol stands for: name, type (crypto, stock, fund …) and a short code for amounts."""
-        base = symbol.partition("-")[0]
-        return {"name": base, "short": base, "type": "crypto"}
-
-    def market_closed(self, symbol: str, ticker: Ticker) -> dict | None:
-        """A message when the instrument can't be traded right now (outside trading hours), else None."""
-        return None
-
-    async def idle(self) -> None:
-        """Called on every tick – exchanges with open streams drop the ones nobody needs any more."""
-
-    def paper_buy(self, pair: "PairInfo", amount: Decimal, fee: Decimal, price: Decimal) -> tuple[Decimal, Decimal]:
-        """A simulated buy for ``amount`` (fee included): (quantity, money spent). Exchanges that only sell whole
-        units round the quantity down – the money spent is then less than the amount."""
-        return (amount - fee) / price, amount
+    max_candles = 98  # candles per request (Revolut X: about 100)
+    supports_limit = False  # post-only limit orders (place_limit_order / cancel_order)
 
     def now_ms(self) -> int:
         return int(time.time() * 1000)
@@ -158,14 +95,18 @@ class Exchange:
         base_size: Decimal | None = None,
         quote_size: Decimal | None = None,
     ) -> str: ...
+    async def place_limit_order(
+        self, symbol: str, side: str, *, client_order_id: str, base_size: Decimal, price: Decimal,
+    ) -> str:
+        """A post-only limit order (maker) – only where ``supports_limit``."""
+        raise NotImplementedError
+
+    async def cancel_order(self, order_id: str) -> None:
+        raise NotImplementedError
+
     async def get_order(self, order_id: str) -> OrderResult: ...
     async def find_order(self, symbol: str, client_order_id: str, since: int) -> OrderResult | None:
         """Look up an order by our own client_order_id (used when the placement response got lost)."""
-
-    async def find_lost_order(self, symbol: str, pending: dict) -> OrderResult | None:
-        """The order of ``pending`` (side, sizes, client_order_id, placed_at) whose placement answer got lost."""
-        return await self.find_order(symbol, pending["client_order_id"], pending["placed_at"] - 60_000)
-
     async def close(self) -> None: ...
 
     def invalidate_balances(self) -> None:
@@ -178,28 +119,6 @@ class Exchange:
         return pairs[symbol]
 
 
-class UnconfiguredExchange(Exchange):
-    """Placeholder until a broker is connected: every exchange call fails with a helpful message."""
-
-    def __init__(self, reason: dict, broker: str = REVOLUTX):
-        self.reason = reason
-        self.broker = broker
-        self.name = broker
-
-    def __getattribute__(self, item: str):
-        if item in {"ticker", "tickers", "candles", "pairs", "balances", "place_market_order", "get_order", "find_order", "pair"}:
-            reason = object.__getattribute__(self, "reason")
-
-            async def fail(*_, **__):
-                raise Problem(reason["k"], **reason.get("a", {}))
-
-            return fail
-        return object.__getattribute__(self, item)
-
-    async def close(self) -> None:
-        return None
-
-
 # ---------------------------------------------------------------------------
 # Revolut X
 # ---------------------------------------------------------------------------
@@ -207,6 +126,7 @@ class UnconfiguredExchange(Exchange):
 
 class RevolutXExchange(Exchange):
     name = "revolutx"
+    supports_limit = True
 
     # Balances only change through our own orders (trades the user makes directly on Revolut X are deliberately
     # not tracked), so they are cached and dropped whenever we place an order. The app, the holdings check and the
@@ -293,6 +213,15 @@ class RevolutXExchange(Exchange):
             quote_size=str(quote_size) if quote_size is not None else None,
         )
         return result["venue_order_id"]
+
+    async def place_limit_order(self, symbol, side, *, client_order_id, base_size, price) -> str:
+        result = await self.client.place_limit_order(
+            symbol, side, client_order_id=client_order_id, base_size=str(base_size), price=str(price),
+        )
+        return result["venue_order_id"]
+
+    async def cancel_order(self, order_id: str) -> None:
+        await self.client.cancel_order(order_id)
 
     async def get_order(self, order_id: str) -> OrderResult:
         return self._parse_order(await self.client.get_order(order_id))

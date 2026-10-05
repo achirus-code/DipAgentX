@@ -63,6 +63,7 @@
 "Mode" = "Modus";
 "Paper trading" = "Paper-Trading";
 "Simulated orders with real prices – no real money." = "Simulierte Orders mit echten Kursen – kein echtes Geld.";
+"Attention: this bot trades with real money on Revolut X." = "Achtung: Dieser Bot handelt mit echtem Geld auf Revolut X.";
 "Live trading is off in the settings (Trading mode) – until then the bot trades simulated." = "Der Live-Handel ist in den Einstellungen (Handelsmodus) aus – der Bot handelt bis dahin simuliert.";
 "Bot active" = "Bot aktiv";
 
@@ -167,33 +168,45 @@
 "Trading mode" = "Handelsmodus";
 "Live trading active" = "Live-Handel aktiv";
 "Paper mode (demo)" = "Paper-Modus (Demo)";
+"Real orders with real money on Revolut X" = "Echte Orders mit echtem Geld auf Revolut X";
 "Real prices, orders are only simulated" = "Echte Kurse, Orders werden nur simuliert";
 "Connect Revolut X first – then live trading can be switched on." = "Verbinde zuerst Revolut X – danach lässt sich der Live-Handel einschalten.";
 "When switching back to paper mode, all open live positions are sold immediately." = "Beim Zurückwechseln in den Paper-Modus werden alle offenen Live-Positionen sofort verkauft.";
 "%@ live position(s) could not be sold and are still managed live – sell them manually in the bot view." = "%@ Live-Position(en) konnten nicht verkauft werden und werden weiter live verwaltet – in der Bot-Ansicht manuell verkaufen.";
 "1/2 · Attention: real money" = "1/2 · Achtung: echtes Geld";
+"All bots you create afterwards buy and sell with your real balance on Revolut X." = "Alle Bots, die du danach anlegst, kaufen und verkaufen mit deinem echten Guthaben auf Revolut X.";
+"All existing bots are switched to live as well and then trade with your real balance on Revolut X: %@." = "Alle bestehenden Bots werden ebenfalls live geschaltet und handeln dann mit deinem echten Guthaben auf Revolut X: %@.";
 "If a bot should not trade with real money, you have to delete it first (Bots tab)." = "Soll ein Bot nicht mit echtem Geld handeln, musst du ihn vorher löschen (Tab „Bots“).";
 "Open paper positions (%@) are still sold simulated, afterwards the bot buys live." = "Offene Paper-Positionen (%@) werden noch simuliert verkauft, danach kauft der Bot live.";
 "Losses are possible. “Risk & limits” caps open positions and capital." = "Verluste sind möglich. „Risiko & Limits“ begrenzt offene Positionen und Kapital.";
 "I understand that real money is used." = "Ich habe verstanden, dass echtes Geld eingesetzt wird.";
 "Continue" = "Weiter";
 "2/2 · Final confirmation" = "2/2 · Letzte Bestätigung";
+"Enable live trading now? Bots place real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Bots platzieren ab dem nächsten Kaufsignal echte Orders.";
+"Enable live trading now? Your bot is switched to live and places real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Dein Bot wird live geschaltet und platziert ab dem nächsten Kaufsignal echte Orders.";
+"Enable live trading now? All %@ bots are switched to live and place real orders from the next buy signal on." = "Live-Handel jetzt aktivieren? Alle %@ Bots werden live geschaltet und platzieren ab dem nächsten Kaufsignal echte Orders.";
 "Yes, enable live trading" = "Ja, Live-Handel aktivieren";
 "Back to paper mode" = "Zurück in den Paper-Modus";
 "No live position is open right now – nothing will be sold." = "Aktuell ist keine Live-Position offen – es wird nichts verkauft.";
+"All open live trades are closed immediately, i.e. sold at the current market price on Revolut X:" = "Alle offenen Live-Trades werden sofort geschlossen, d. h. zum aktuellen Marktpreis auf Revolut X verkauft:";
 "This locks in the result – even if a position is currently at a loss." = "Das Ergebnis steht damit fest – auch wenn eine Position gerade im Minus ist.";
+"Afterwards all bots only trade simulated (paper)." = "Danach handeln alle Bots nur noch simuliert (Paper).";
 "Switch to paper mode" = "Paper-Modus aktivieren";
 "Sell everything & paper mode" = "Alles verkaufen & Paper-Modus";
+"%@ live position(s) sold. All bots now trade in paper mode." = "%@ Live-Position(en) verkauft. Alle Bots handeln jetzt im Paper-Modus.";
 
 /* RootView.swift */
 "Settings" = "Einstellungen";
 "Refresh" = "Aktualisieren";
 "no data" = "keine Daten";
+"Agent connected · Exchange: %@" = "Agent verbunden · Börse: %@";
 "Connected · Demo market" = "Verbunden · Demo-Markt";
+"Connected · Revolut X" = "Verbunden · Revolut X";
 "Connecting …" = "Verbinde …";
 "Total result" = "Gesamtergebnis";
 "Live trading is active – bots trade with real money" = "Live-Handel ist aktiv – Bots handeln mit echtem Geld";
 "PAPER MODE" = "PAPER-MODUS";
+"All orders are only simulated. Live trading: Settings → Trading mode" = "Alle Orders werden nur simuliert. Live-Handel: Einstellungen → Handelsmodus";
 "Open" = "Offen";
 "Today" = "Heute";
 "%@/%@ bots active" = "%@/%@ Bots aktiv";
@@ -202,6 +215,7 @@
 
 /* SettingsView.swift */
 "Balance (demo)" = "Guthaben (Demo)";
+"Balance on Revolut X" = "Guthaben auf Revolut X";
 "Notifications" = "Mitteilungen";
 "Launch at login" = "Bei der Anmeldung starten";
 "Language" = "Sprache";
@@ -228,6 +242,7 @@
 
 /* BackupSection.swift */
 "Backup" = "Backup";
+"Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token is not included." = "Bots, Trades, Einstellungen und der Revolut-X-Schlüssel des Agents als Datei – z. B. für den Umzug auf einen anderen Agent. Das API-Token ist nicht enthalten.";
 "Export …" = "Exportieren …";
 "Import …" = "Importieren …";
 "Importing replaces all bots, trades, settings and the Revolut X key on the agent." = "Der Import ersetzt alle Bots, Trades, Einstellungen und den Revolut-X-Schlüssel auf dem Agent.";
@@ -278,8 +293,6 @@
 "Zones" = "Zonen";
 "AI" = "KI";
 "Savings plan" = "Sparplan";
-"Trend" = "Trend";
-"Momentum" = "Momentum";
 "Decisions" = "Entscheidungen";
 "Claude's answers and how sure it was" = "Claudes Antworten und wie sicher es sich war";
 "Claude's decisions" = "Claudes Entscheidungen";
@@ -437,89 +450,5 @@
 "Export backup …" = "Backup exportieren …";
 "Import backup …" = "Backup importieren …";
 "Filter" = "Filter";
-
-/* Trade Republic and the broker tabs (1.20) */
-"Broker" = "Broker";
-"Instrument" = "Instrument";
-"Small orders: the fixed fee per order makes every trade expensive. Use larger orders." = "Kleine Orders: Die feste Gebühr pro Order macht jeden Trade teuer. Größere Orders nutzen.";
-"Attention: this bot trades with real money on %@." = "Achtung: Dieser Bot handelt mit echtem Geld auf %@.";
-"Nothing found" = "Nichts gefunden";
-"Search name, ticker or ISIN" = "Name, Kürzel oder ISIN suchen";
-"Create your first Trade Republic bot – e.g. a savings plan for an MSCI World ETF or a dip buyer for a stock." = "Lege deinen ersten Trade-Republic-Bot an – z. B. einen Sparplan für einen MSCI-World-ETF oder einen Dip-Käufer für eine Aktie.";
-"Agent connected · %@: %@" = "Agent verbunden · %@: %@";
-"Connected · %@" = "Verbunden · %@";
-"Trading mode, limits, fees and the connection below belong to this broker." = "Handelsmodus, Limits, Gebühren und die Verbindung darunter gehören zu diesem Broker.";
-"%@ per order" = "%@ pro Order";
-"Real orders with real money on %@" = "Echte Orders mit echtem Geld auf %@";
-"Log in to Trade Republic first – then live trading can be switched on." = "Melde dich zuerst bei Trade Republic an – danach lässt sich der Live-Handel einschalten.";
-"%@ live position(s) sold. All %@ bots now trade in paper mode." = "%@ Live-Position(en) verkauft. Alle %@-Bots handeln jetzt im Paper-Modus.";
-"All %@ bots you create afterwards buy and sell with your real balance on %@." = "Alle %@-Bots, die du danach anlegst, kaufen und verkaufen mit deinem echten Guthaben auf %@.";
-"All existing %@ bots are switched to live as well and then trade with your real balance: %@." = "Alle bestehenden %@-Bots werden ebenfalls live geschaltet und handeln dann mit deinem echten Guthaben: %@.";
-"Trade Republic ends every login after 24 hours – confirm the new one in the Trade Republic app. While logged out the bots can't trade, not even sell at the stop-loss." = "Trade Republic beendet jede Anmeldung nach 24 Stunden – die neue bestätigst du in der Trade-Republic-App. Solange du abgemeldet bist, können die Bots nicht handeln, auch nicht per Stop-Loss verkaufen.";
-"Stocks and ETFs only trade Monday to Friday, 07:30–23:00. Every order costs 1 €." = "Aktien und ETFs werden nur Montag bis Freitag, 07:30–23:00 Uhr gehandelt. Jede Order kostet 1 €.";
-"Trade Republic offers no official interface for programs – DipAgentX uses the one of its web app. Trade Republic's terms don't allow that; it may block the access or the account." = "Trade Republic bietet keine offizielle Schnittstelle für Programme – DipAgentX nutzt die der Web-App. Die Bedingungen von Trade Republic erlauben das nicht; Trade Republic kann den Zugang oder das Konto sperren.";
-"Enable live trading on %@ now? Bots place real orders from the next buy signal on." = "Live-Handel auf %@ jetzt aktivieren? Bots platzieren ab dem nächsten Kaufsignal echte Orders.";
-"Enable live trading on %@ now? Your bot is switched to live and places real orders from the next buy signal on." = "Live-Handel auf %@ jetzt aktivieren? Dein Bot wird live geschaltet und platziert ab dem nächsten Kaufsignal echte Orders.";
-"Enable live trading on %@ now? All %@ bots are switched to live and place real orders from the next buy signal on." = "Live-Handel auf %@ jetzt aktivieren? Alle %@ Bots werden live geschaltet und platzieren ab dem nächsten Kaufsignal echte Orders.";
-"Fee per order" = "Gebühr pro Order";
-"Trade Republic charges 1 € per order (buy and sale) and no percentage. Changing a fee rebooks all simulated Trade Republic trades; live trades stay as they are." = "Trade Republic berechnet 1 € pro Order (Kauf und Verkauf) und keinen Prozentsatz. Eine geänderte Gebühr berechnet alle simulierten Trade-Republic-Trades neu; Live-Trades bleiben, wie sie sind.";
-"Bots, trades, settings and the Revolut X key of the agent as a file – e.g. to move to another agent. The API token and the Trade Republic login are not included." = "Bots, Trades, Einstellungen und der Revolut-X-Schlüssel des Agents als Datei – z. B. für den Umzug auf einen anderen Agent. Das API-Token und die Trade-Republic-Anmeldung sind nicht enthalten.";
-"Logged in" = "Angemeldet";
-"Waiting for the confirmation" = "Warte auf die Bestätigung";
-"Not logged in" = "Nicht angemeldet";
-"Phone number" = "Telefonnummer";
-"Logged in until" = "Angemeldet bis";
-"Prices, charts and paper trading work without a login. For live trading the agent logs in to your Trade Republic account like the web app: with your phone number and PIN, confirmed in the Trade Republic app on your phone." = "Kurse, Charts und Paper-Trading funktionieren ohne Anmeldung. Für den Live-Handel meldet sich der Agent wie die Web-App bei deinem Trade-Republic-Konto an: mit Telefonnummer und PIN, bestätigt in der Trade-Republic-App auf deinem Handy.";
-"Market data: %@" = "Marktdaten: %@";
-"Trade Republic has no official interface for programs. Its customer agreement doesn't allow access through other programs – Trade Republic may block the access or terminate the account. Use it at your own risk." = "Trade Republic hat keine offizielle Schnittstelle für Programme. Die Kundenvereinbarung erlaubt keinen Zugriff über andere Programme – Trade Republic kann den Zugang sperren oder das Konto kündigen. Nutzung auf eigenes Risiko.";
-"Logs out and forgets phone number and PIN on the agent. Live trading on Trade Republic is switched off." = "Meldet ab und löscht Telefonnummer und PIN auf dem Agent. Der Live-Handel auf Trade Republic wird ausgeschaltet.";
-"Log out" = "Abmelden";
-"Phone number, e.g. +49 171 1234567" = "Telefonnummer, z. B. +49 171 1234567";
-"PIN (4 digits)" = "PIN (4 Ziffern)";
-"Remember PIN for the daily login" = "PIN für die tägliche Anmeldung merken";
-"Log in" = "Anmelden";
-"Trade Republic ends every login after 24 hours. With the PIN saved on the agent (file only readable by the agent), it starts the next login itself while live trading is on – you only confirm it in the Trade Republic app." = "Trade Republic beendet jede Anmeldung nach 24 Stunden. Mit gespeicherter PIN (Datei nur für den Agent lesbar) startet der Agent die nächste Anmeldung selbst, solange der Live-Handel an ist – du bestätigst sie nur in der Trade-Republic-App.";
-"The agent logs in again for the next 24 hours. Open the Trade Republic app on your phone and confirm the login." = "Der Agent meldet sich für die nächsten 24 Stunden neu an. Öffne die Trade-Republic-App auf deinem Handy und bestätige die Anmeldung.";
-"Open the Trade Republic app on your phone and confirm the login." = "Öffne die Trade-Republic-App auf deinem Handy und bestätige die Anmeldung.";
-"Still %@ s" = "Noch %@ s";
-"Cancel login" = "Anmeldung abbrechen";
-"Confirm in the Trade Republic app" = "In der Trade-Republic-App bestätigen";
-"Code from the authenticator app" = "Code aus der Authenticator-App";
-"Your account uses an authenticator app – enter its current code." = "Dein Konto nutzt eine Authenticator-App – gib ihren aktuellen Code ein.";
-"Log in again now" = "Jetzt neu anmelden";
-"The agent starts the next login itself shortly before this one ends – as long as live trading is on or live trades are open. You only confirm it in the Trade Republic app." = "Der Agent startet die nächste Anmeldung selbst, kurz bevor diese endet – solange der Live-Handel an ist oder Live-Trades offen sind. Du bestätigst sie nur in der Trade-Republic-App.";
-"The PIN is not saved: log in here again every 24 hours while the bots trade live." = "Die PIN ist nicht gespeichert: Melde dich hier alle 24 Stunden neu an, solange die Bots live handeln.";
-"All open live trades are closed immediately, i.e. sold at the current market price on %@:" = "Alle offenen Live-Trades werden sofort geschlossen, d. h. zum aktuellen Marktpreis auf %@ verkauft:";
-"Afterwards all %@ bots only trade simulated (paper)." = "Danach handeln alle %@-Bots nur noch simuliert (Paper).";
-"Prices and paper trading work without a login – live trading needs it." = "Kurse und Paper-Trading funktionieren ohne Anmeldung – der Live-Handel braucht sie.";
-"Confirm the Trade Republic login" = "Trade-Republic-Anmeldung bestätigen";
-"DipAgentX logs in again for the next 24 hours – confirm it in the Trade Republic app." = "DipAgentX meldet sich für die nächsten 24 Stunden neu an – bestätige es in der Trade-Republic-App.";
-"Trade Republic logged out" = "Von Trade Republic abgemeldet";
-"Log in again in the settings so the bots can trade live." = "Melde dich in den Einstellungen neu an, damit die Bots live handeln können.";
-"Live trading is active" = "Live-Handel ist aktiv";
-"Stock" = "Aktie";
-"Crypto" = "Krypto";
-"Bond" = "Anleihe";
-"Derivative" = "Derivat";
-"Of it %@ fee per order – %@ are invested" = "Davon %@ Gebühr pro Order – %@ werden investiert";
-"All orders of this broker are only simulated. Live trading: Settings → Trading mode" = "Alle Orders dieses Brokers werden nur simuliert. Live-Handel: Einstellungen → Handelsmodus";
-"Balance on %@" = "Guthaben auf %@";
-"Brokers" = "Broker";
-"Stocks, ETFs and crypto" = "Aktien, ETFs und Krypto";
-"A broker that is switched off is left alone: its bots stop, no prices, no login. With only one broker on, the tabs above the statistics disappear. A broker with open trades can't be switched off." = "Ein ausgeschalteter Broker bleibt unberührt: Seine Bots stoppen, keine Kurse, keine Anmeldung. Ist nur ein Broker eingeschaltet, verschwinden die Tabs über der Statistik. Ein Broker mit offenen Trades lässt sich nicht ausschalten.";
-
-/* Reset the broker's values and trades (paper mode) */
-"Reset all values and trades" = "Alle Werte und Trades zurücksetzen";
-"Delete all trades of this broker and reset its values to zero? This cannot be undone." = "Alle Trades dieses Brokers löschen und die Werte auf null setzen? Das lässt sich nicht rückgängig machen.";
-"Values and trades reset." = "Werte und Trades zurückgesetzt.";
-
-/* Signal overview of the monthly trend follower */
-"Signals" = "Signale";
-"Pillars" = "Säulen";
-"Hedged" = "Gesichert";
-"Bonds" = "Anleihen";
-"Cash" = "Cash";
-"Drifted %@ pp from the target shares – the amounts after the arrow restore them (a new amount applies from the bot's next buy)." = "%@ Pp von den Soll-Anteilen abgewichen – die Beträge nach dem Pfeil stellen sie wieder her (ein neuer Betrag gilt ab dem nächsten Kauf des Bots).";
-"Close to the target shares (actual / target) – rebalance once a year." = "Nah an den Soll-Anteilen (Ist / Soll) – einmal im Jahr angleichen.";
 "Opened trades %@" = "Eröffnete Trades %@";
 "Entry %@" = "Einstieg %@";
