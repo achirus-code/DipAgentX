@@ -225,6 +225,14 @@ CATALOG: dict[str, L] = {
     "dip.buy_signal": L("Buy signal · {window}", "Kaufsignal · {window}"),
     "dip.buy_reason": L("{hours}h change {change} ≤ {threshold}", "{hours}h-Veränderung {change} ≤ {threshold}"),
     "dip.waiting": L("Waiting for a dip · {window} (buy at ≤ {threshold})", "Warte auf Dip · {window} (Kauf ≤ {threshold})"),
+    "dip.trending": L(
+        "Dip, but the market trends (ADX 4h {adx}, buys below {max}) · {window}",
+        "Dip, aber der Markt trendet (ADX 4h {adx}, Kauf unter {max}) · {window}",
+    ),
+    "dip.adx_missing": L(
+        "Dip, but too few candles for the ADX yet · {window}",
+        "Dip, aber noch zu wenige Kerzen für den ADX · {window}",
+    ),
     "dip.recovered": L("Recovered", "Erholung erreicht"),
     "dip.recovered.reason": L(
         "{hours}h change {change} ≥ {threshold}, profit {profit}",

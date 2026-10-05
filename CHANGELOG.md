@@ -22,6 +22,10 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   sells open trades right away – also at a loss, like a stop-loss. A backtest on BTC and ETH (2018–2026) worked best
   with 200 and 60 days, a 3 % buffer, trend exit and a wide trailing stop (10 %). The daily closes for the averages
   are fetched once a day (in chunks of at most 98 candles). Without enough history (a young pair) the bot doesn't buy.
+- **Dip buyer: sideways filter.** New option *Only buy while ADX (4h) below*: the bot buys a dip only while the trend
+  strength ADX (14) of the 4-hour candles is below the value – i.e. while the market moves sideways and dips tend to
+  recover. In a trend the bot shows "Dip, but the market trends (ADX 4h …)" and waits. Selling isn't affected; 0 (the
+  default) switches the filter off, so existing bots behave as before.
 
 ### Fixed
 
