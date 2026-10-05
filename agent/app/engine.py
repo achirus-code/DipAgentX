@@ -1447,7 +1447,7 @@ class Engine:
             "other_mode_trades": self.db.trades_count(not paper_mode, broker),
             "bots_total": len(bots),
             "bots_active": sum(1 for b in bots if b["enabled"]),
-            "open_positions": sum(len(b["positions"]) for b in bots),
+            "open_positions": self.exposure(broker=broker)[0],  # counted like the limit (sliced bots as one)
             "max_open_positions": int(self.db.get_limits(broker)["max_open_positions"]),
             "trades_count": self.db.trades_count(paper_mode, broker),
         }

@@ -115,6 +115,9 @@ struct ProfitHistoryView: View {
         .onChange(of: live) { detail = nil; replay() }
         .onChange(of: currency) { detail = nil; replay() }
         .onChange(of: store.broker) {
+            // the history was loaded for the broker selected before – load the new one's
+            history = nil
+            Task { await load() }
             detail = nil
             hidden = []
             live = store.summary?.mode == "live"

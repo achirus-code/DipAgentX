@@ -521,3 +521,5 @@
 "Cash" = "Cash";
 "Drifted %@ pp from the target shares – the amounts after the arrow restore them (a new amount applies from the bot's next buy)." = "%@ Pp von den Soll-Anteilen abgewichen – die Beträge nach dem Pfeil stellen sie wieder her (ein neuer Betrag gilt ab dem nächsten Kauf des Bots).";
 "Close to the target shares (actual / target) – rebalance once a year." = "Nah an den Soll-Anteilen (Ist / Soll) – einmal im Jahr angleichen.";
+"Opened trades %@" = "Eröffnete Trades %@";
+"Entry %@" = "Einstieg %@";

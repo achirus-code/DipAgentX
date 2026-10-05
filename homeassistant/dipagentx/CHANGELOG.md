@@ -17,6 +17,11 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   target with the next check (to stay out, stop the bot) – before, the bot waited for the next change of the target
   step, in a long trend for months. The newest 4-hour candle is fetched once more on the next check, in case it wasn't
   final yet. The iPhone's bot page listed every slice as "Open position" – it shows the one position now.
+- **The bot page lists the opened trades** of a momentum bot under the position: when each was bought, how much, at
+  what price and what it is worth now (macOS and iPhone).
+- **Statistics (macOS):** switching the broker in the profit history loads that broker's trades – before, it kept
+  showing the trades loaded for the broker selected when the window opened, e.g. "No trades yet" for Revolut X.
+- The summary counts open positions like the limit does (a momentum bot's slices as one) – it showed "20 of 6".
 
 ## [1.26.0] – 2026-10-05
 
