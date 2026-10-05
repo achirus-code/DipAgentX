@@ -506,6 +506,14 @@ CATALOG: dict[str, L] = {
         "Order {id} could not be found at the exchange – bot stopped. Check the order on Revolut X before starting the bot again",
         "Order {id} ist bei der Börse nicht auffindbar – Bot gestoppt. Bitte die Order auf Revolut X prüfen, bevor der Bot wieder gestartet wird",
     ),
+    "engine.limit_waiting": L(
+        "Limit order at {price} waiting (no fee) – what hasn't filled goes out at market from {at}",
+        "Limit-Order zu {price} wartet (ohne Gebühr) – was bis {at} nicht ausgeführt ist, geht als Market-Order raus",
+    ),
+    "engine.limit_unfilled": L(
+        "Limit order at {price} not filled – the next order goes out at market",
+        "Limit-Order zu {price} nicht ausgeführt – die nächste Order geht als Market-Order raus",
+    ),
     "engine.mode_changed_restart": L(
         "Live trading: paper trades closed (simulated) – starts afresh with its capital",
         "Live-Handel: Paper-Trades geschlossen (simuliert) – startet neu mit seinem Kapital",

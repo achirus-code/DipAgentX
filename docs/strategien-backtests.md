@@ -164,7 +164,7 @@ Zum Vergleich 100.000 € World halten nach 10 Jahren: typisch 267.900 €, schl
 ## 7. Ergänzung: Kurzfristiger Krypto-Bot (ETH/BTC auf Revolut X)
 
 Getrennt von den drei Säulen wurde geprüft, ob sich ein Dip-Bot mit kurzem Zeithorizont (Stunden bis Tage) für
-ETH-EUR und BTC-EUR auf Revolut X lohnt (Gebühren 0 % Kauf / 0,09 % Verkauf). Er gehört nicht zur 40/30/30-Aufteilung,
+ETH-EUR und BTC-EUR auf Revolut X lohnt (gerechnet mit 0 % Kauf / 0,09 % Verkauf – tatsächlich kosten Market-Käufe ebenfalls 0,09 %, siehe Abschnitt 14). Er gehört nicht zur 40/30/30-Aufteilung,
 sondern wäre – wenn überhaupt – ein kleiner, spekulativer Zusatz.
 
 **Datenbasis und Vorgehen:** Minutenkurse April 2025 – Oktober 2026 (18 Monate, Binance-EUR-Preise als Ersatz für
@@ -602,7 +602,7 @@ Sparplan (gleicher Monatsbetrag, 10 Jahre): C7 im Median 1,77-fach der Einzahlun
 ## 14. Krypto: Momentum-Trendfolger statt Dip-Bot (ETH/BTC, Oktober 2026)
 
 Der Dip-Käufer aus Abschnitt 7 war auf 18 Monaten optimiert. Mit Stundenkursen seit Januar 2020 (ETH-EUR, BTC-EUR,
-Gebühren 0 % Kauf / 0,09 % Verkauf, 0,03 % Spread) hielt er nicht: rund +7 % pro Jahr, Bullenmärkte verpasst. Die
+Gebühren wie damals angenommen 0 % Kauf / 0,09 % Verkauf, 0,03 % Spread) hielt er nicht: rund +7 % pro Jahr, Bullenmärkte verpasst. Die
 Suche über mehr als 2.000 Varianten mit jährlichen Blindtests ergab stattdessen einen Trendfolger. In DipAgentX heißt
 er **Momentum-Trendfolger** (ab 1.23.0).
 
@@ -615,7 +615,7 @@ er **Momentum-Trendfolger** (ab 1.23.0).
 - Die Position liegt in bis zu 10 Trades zu je 10 % des Kapitals. Beim Einstieg kauft der Bot sie nacheinander
   innerhalb weniger Minuten; sinkt das Ziel z. B. auf 80 %, verkauft er 2 davon. Die Engine verkauft einen Trade immer
   ganz – mit einem einzigen großen Trade müsste der Bot bei jeder Stufe alles verkaufen und neu kaufen. Gebühren
-  kosten die Stufen nicht extra (0 % Kauf, 0,09 % auf den verkauften Teil, keine feste Gebühr pro Order). Die Apps
+  kosten die Stufen nicht extra (0,09 % auf den gehandelten Teil, keine feste Gebühr pro Order). Die Apps
   zeigen die Trades als eine Position.
 - Gehandelt wird nur, wenn sich die Zielstufe ändert: im Backtest etwa 130–150 Mal im Jahr, meist um eine Stufe. Eine
   Stufe bleibt im Schnitt rund 15 Tage im Bestand; im Markt (mindestens 10 %) ist der Bot gut 80 % der Zeit, im
@@ -633,6 +633,9 @@ er **Momentum-Trendfolger** (ab 1.23.0).
 | Blindtest 2022 – Okt. 2026 (Einstellungen nur mit den Jahren davor gewählt) | ×3,46 | ×3,50 | ×0,74 | ×1,87 |
 | Echte Engine im Replay ab 2022 (Simulation) | ×3,74 (×3,73) | ×3,42 (×3,44) | | |
 | mit Zufluss-Bremse, echte Engine ab 2022 | ×4,68 | ×3,85 | | |
+| **Gebühren korrigiert** (Market-Kauf 0,09 % statt 0 %), 2022 – Okt. 2026 | ×3,60 | ×3,32 | | |
+| … zusätzlich 0,1 % Spread und Slippage | ×3,45 | ×3,18 | | |
+| … nur Limit-Orders (Maker 0 %, alle gefüllt – Obergrenze) | ×4,09 | ×3,78 | | |
 | 2022 | −10 % | −16 % | −66 % | −62 % |
 | größter Rückgang 2020–2026 | 38–39 % | 27–29 % | 77 % | 74 % |
 
@@ -643,6 +646,18 @@ Zum Vergleich ein Portfolio aus 3.000 € ETH und 2.000 € BTC, frisch gestarte
 | Momentum-Trendfolger | 88 % | +5.379 € | 99 % | +10.183 € |
 | mit Zufluss-Bremse | 92 % | +5.668 € | 100 % | +10.604 € |
 | Halten | 61 % | +6.100 € | 68 % | +7.463 € |
+
+**Gebühren:** Revolut X verlangt 0 % nur für Maker-Orders (Limit-Orders, die im Orderbuch warten), Market-Orders kosten
+auf beiden Seiten 0,09 %. Die Werte oben bis „echte Engine“ wurden mit 0 % beim Kauf gerechnet und liegen etwa 5 %
+zu hoch, der Blindtest ebenso. Der Bot stellt seine Live-Orders deshalb zuerst als Post-Only-Limit-Order zum besten
+Geld- bzw. Briefkurs (ohne Gebühr); was nach 10 Minuten nicht ausgeführt ist, wird storniert und als Market-Order
+nachgeholt – jede Order wird ausgeführt. Der Gewinn liegt damit zwischen ×3,60 und der Obergrenze ×4,09 (ETH).
+
+**Reihenfolge der Regeln:** Trend × Schwankungsfaktor, dann die Funding-Untergrenze, dann die Zufluss-Bremse (halbiert
+auch die Untergrenze), zuletzt die Rundung auf 10-%-Stufen (zur geraden Stufe bei genau der Hälfte). Untergrenze nach
+der Bremse war im Backtest nicht besser (ETH 2022–26 ×4,11 statt ×4,49). Die Zuflussdaten zählen nur, solange der
+neueste Tag höchstens 2,5 Tage zurückliegt – schon einen Tag verspätet schadete die Bremse mehr, als sie nützte
+(BTC 2020–26 ×19,4 statt ×22,0 ohne Bremse).
 
 ### Erkenntnisse
 

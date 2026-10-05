@@ -274,3 +274,145 @@ async def test_the_newest_candle_is_fetched_again():
     store[last] = Decimal("1")  # not final yet when it was fetched
     view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now + 60_000)
     assert (await four_hour_closes(view))[last] != Decimal("1")
+
+
+class BookExchange(PathExchange):
+    """Live orders: market orders fill at once, limit orders rest in the book until the test fills them."""
+
+    supports_limit = True
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.placed, self.limits, self.cancelled = [], {}, []
+
+    async def ticker(self, symbol):
+        return Ticker(self.price - Decimal("1"), self.price + Decimal("1"), self.price)  # bid / ask one euro apart
+
+    async def place_limit_order(self, symbol, side, *, client_order_id, base_size, price):
+        oid = f"limit-{len(self.limits) + 1}"
+        self.limits[oid] = {"side": side, "qty": base_size, "price": price, "filled": Decimal(0), "status": "new"}
+        return oid
+
+    def fill(self, oid, share=Decimal(1)):
+        o = self.limits[oid]
+        o["filled"] = o["qty"] * share
+        o["status"] = "filled" if share == 1 else "partially_filled"
+
+    async def cancel_order(self, order_id):
+        self.cancelled.append(order_id)
+        self.limits[order_id]["status"] = "cancelled"
+
+    async def get_order(self, order_id):
+        if o := self.limits.get(order_id):
+            from app.exchange import OrderResult
+            return OrderResult(order_id, o["status"], o["filled"], o["filled"] * o["price"], o["price"], Decimal(0), "EUR")
+        return await super().get_order(order_id)
+
+
+def clock(monkeypatch, start=NOW):
+    import app.engine as engine_module
+    now = {"t": start}
+    monkeypatch.setattr(engine_module, "now_ms", lambda: now["t"])
+    return now
+
+
+async def test_live_orders_go_out_as_limit_orders_at_the_bid_and_cost_no_fee(tmp_path: Path, monkeypatch):
+    now = clock(monkeypatch)
+    ex = BookExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, False)
+    await engine.tick()
+    order = ex.limits["limit-1"]
+    assert order["side"] == "buy" and order["price"] == ex.price - 1 and not ex.placed  # at the bid, no market order
+    assert order["qty"] == Decimal("100") / order["price"] // Decimal("0.0000001") * Decimal("0.0000001")
+    bot = db.get_bot(bot_id)
+    assert bot["state"]["pending_order"]["limit"] and "Limit order at" in render(bot["status"], "en")
+    await engine.tick()  # still resting: nothing booked, no second order
+    assert len(ex.limits) == 1 and not open_positions(db.get_bot(bot_id)["state"])
+    ex.fill("limit-1")
+    await engine.tick()
+    [position] = open_positions(db.get_bot(bot_id)["state"])
+    assert position.qty == order["qty"] and position.cost == order["qty"] * order["price"]  # no fee
+    await engine.tick()
+    assert "limit-2" in ex.limits  # the next slice again as a limit order
+
+
+async def test_an_unfilled_limit_order_is_cancelled_and_the_rest_goes_out_at_market(tmp_path: Path, monkeypatch):
+    now = clock(monkeypatch)
+    ex = BookExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000, "maker_wait": 10}, True, False)
+    await engine.tick()
+    ex.fill("limit-1", Decimal("0.4"))  # 40 % filled within the wait
+    now["t"] += 9 * 60_000
+    await engine.tick()
+    assert not ex.cancelled
+    now["t"] += 2 * 60_000  # the wait is over: cancelled, the filled part booked – the rest at market right away
+    await engine.tick()
+    assert ex.cancelled == ["limit-1"]
+    state = db.get_bot(bot_id)["state"]
+    part, rest = open_positions(state)
+    assert part.qty == ex.limits["limit-1"]["qty"] * Decimal("0.4") and "pending_order" not in state
+    assert len(ex.placed) == 1 and len(ex.limits) == 1  # the rest of the slice at market: it surely executes
+    assert rest.order_id == "order-1" and rest.cost == 100  # the next slice towards the target, at market
+    now["t"] += 31 * 60_000  # later orders try the limit order again
+    await engine.tick()
+    assert len(ex.limits) == 2
+
+
+async def test_a_limit_order_that_never_fills_costs_no_error(tmp_path: Path, monkeypatch):
+    now = clock(monkeypatch)
+    ex = BookExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, False)
+    await engine.tick()
+    now["t"] += 11 * 60_000
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    events = [render(e["message"], "en") for e in db.list_events(bot_id)]
+    assert any("not filled – the next order goes out at market" in e for e in events)
+    assert not bot["state"].get("retry_after") and not any(e["level"] == "error" for e in db.list_events(bot_id))
+    assert len(ex.placed) == 1 and len(open_positions(bot["state"])) == 1  # bought at market instead
+
+
+async def test_limit_sells_at_the_ask_and_market_when_switched_off(tmp_path: Path, monkeypatch):
+    from app.strategies import Position
+    clock(monkeypatch)
+    ex = BookExchange(steady(-0.003))  # downtrend: the target is 0 %
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, False)
+    state = {"positions": [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()],
+             "momentum": {"level": 10}}
+    db.update_bot(bot_id, state=state)
+    await engine.tick()
+    order = ex.limits["limit-1"]
+    assert order["side"] == "sell" and order["price"] == ex.price + 1 and order["qty"] == Decimal("0.05")
+    ex.fill("limit-1")
+    await engine.tick()
+    assert not open_positions(db.get_bot(bot_id)["state"])
+    # switched off: market orders
+    bot2 = db.create_bot("Momentum 2", "momentum", "ETH-EUR", {"amount": 1000, "maker_orders": False}, True, False)
+    db.update_bot(bot2, state={"positions": [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False,
+                                                      id="p2").to_state()], "momentum": {"level": 10}})
+    await engine.tick()
+    assert len(ex.placed) == 1 and len(ex.limits) == 1
+
+
+async def test_a_refused_limit_order_is_retried_at_market(tmp_path: Path, monkeypatch):
+    from app.errors import ExchangeError
+    clock(monkeypatch)
+    ex = BookExchange(steady(0.003))
+
+    async def refuse(*args, **kwargs):
+        raise ExchangeError(400, "post-only order would take liquidity")
+
+    ex.place_limit_order = refuse
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, False)
+    await engine.tick()
+    state = db.get_bot(bot_id)["state"]
+    assert state.get("taker_from") and not ex.placed
+    state.pop("retry_after", None)
+    db.update_bot(bot_id, state=state)
+    await engine.tick()
+    assert len(ex.placed) == 1 and len(open_positions(db.get_bot(bot_id)["state"])) == 1

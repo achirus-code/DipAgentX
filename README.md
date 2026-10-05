@@ -96,10 +96,11 @@ SQLite).
 > **stop-loss**.
 
 > **Momentum trend follower:** the strategy that held up best in the ETH/BTC backtests (hourly prices January 2020 –
-> October 2026, fees 0 % buy / 0.09 % sell): it follows the trend instead of buying dips, and keeps most of the
+> October 2026, fees 0.09 % per market order): it follows the trend instead of buying dips, and keeps most of the
 > crashes away – 2022 −10 % (ETH) / −16 % (BTC) instead of −66 % / −62 % when holding – but keeps only about 55–70 % of
-> a strong rally. Blind test (settings chosen only with the years before, 2022 – October 2026): ETH ×3.5, BTC ×3.5 vs.
-> holding ×0.74 / ×1.87. Replayed through the real engine it matches the simulation (ETH ×3.74 vs. ×3.73 from 2022).
+> a strong rally. From 2022 to October 2026 with the real fees: ETH ×3.6, BTC ×3.3 (up to ×4.1 / ×3.8 with fee-free limit orders) vs.
+> holding ×0.74 / ×1.87. Replayed through the real engine it matches the simulation. Live orders first rest as a
+> post-only limit order at the best bid/ask (no fee on Revolut X); what hasn't filled after 10 minutes goes out at market.
 > The bot rebalances about twice a week; under a month the result is a coin flip. It needs the funding rate (Binance,
 > public) at runtime – without it the floor does nothing. The exchange-inflow brake (*Halve on exchange inflows*) added
 > to the backtest result, but only with data at most a day old, and Coin Metrics revises its daily "flash" values later –

@@ -158,6 +158,17 @@ class Exchange:
         base_size: Decimal | None = None,
         quote_size: Decimal | None = None,
     ) -> str: ...
+    # Limit orders as a maker (no fee on Revolut X): post-only at the best bid/ask, cancelled when they don't fill
+    supports_limit = False
+
+    async def place_limit_order(
+        self, symbol: str, side: str, *, client_order_id: str, base_size: Decimal, price: Decimal,
+    ) -> str:
+        raise NotImplementedError
+
+    async def cancel_order(self, order_id: str) -> None:
+        raise NotImplementedError
+
     async def get_order(self, order_id: str) -> OrderResult: ...
     async def find_order(self, symbol: str, client_order_id: str, since: int) -> OrderResult | None:
         """Look up an order by our own client_order_id (used when the placement response got lost)."""
@@ -293,6 +304,17 @@ class RevolutXExchange(Exchange):
             quote_size=str(quote_size) if quote_size is not None else None,
         )
         return result["venue_order_id"]
+
+    supports_limit = True
+
+    async def place_limit_order(self, symbol, side, *, client_order_id, base_size, price) -> str:
+        result = await self.client.place_limit_order(
+            symbol, side, client_order_id=client_order_id, base_size=str(base_size), price=str(price),
+        )
+        return result["venue_order_id"]
+
+    async def cancel_order(self, order_id: str) -> None:
+        await self.client.cancel_order(order_id)
 
     async def get_order(self, order_id: str) -> OrderResult:
         return self._parse_order(await self.client.get_order(order_id))

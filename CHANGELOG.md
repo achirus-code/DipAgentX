@@ -2,6 +2,28 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.28.0] – 2026-10-05
+
+### Added
+
+- **Momentum trend follower: limit orders first, without fee.** Live buys and sales are placed as a post-only limit
+  order at the best bid (buy) or ask (sell) – a maker order costs nothing on Revolut X instead of the 0.09 % taker fee.
+  What hasn't filled after *Wait for the limit order* (default 10 minutes) is cancelled; the filled part is booked
+  and the rest goes out at market right away, so every order is executed. After a limit order that didn't fill, the
+  bot's orders go out at market for 30 minutes. A refused limit order (e.g. it would have crossed) is retried at
+  market. *Limit orders first* is on by default; paper trades keep simulating market orders. Manual sales and
+  closing everything when switching back to paper always use market orders.
+- The engine supports limit orders for exchanges that offer them (`supports_limit`, `place_limit_order`,
+  `cancel_order`) – Revolut X.
+
+### Changed
+
+- **Exchange inflow brake:** the flows only count while the newest day started at most 2.5 days ago (was 3) – a day
+  late, the brake did more harm than good in the backtest.
+- **Fees in the docs corrected:** Revolut X charges 0.09 % on market buys too (0 % only for maker orders). The backtest
+  figures with the right fees are in `docs/strategien-backtests.md`, section 14 (ETH ×3.60, BTC ×3.32 from 2022), as is
+  the order of the rules (floor, then brake, then rounding).
+
 ## [1.27.0] – 2026-10-05
 
 ### Changed

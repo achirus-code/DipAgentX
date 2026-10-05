@@ -180,6 +180,17 @@ class MomentumStrategy(Strategy):
                 "Schwelle unten von ihrem Bestand, über 7 Tage (Coin Metrics, täglich). Half in den Backtests, aber "
                 "nur mit höchstens einen Tag alten Daten – ohne frische Daten tut sie nichts.")),
         Param("inflow_above", L("Inflow threshold", "Zufluss-Schwelle"), "percent", 1.0, min=0.1, max=10, step=0.1),
+        Param("maker_orders", L("Limit orders first (no fee)", "Erst Limit-Orders (ohne Gebühr)"), "bool", True,
+              L("Live trades are first placed as a limit order at the best bid (buy) or ask (sell) that only waits in "
+                "the order book (post-only) – no fee on Revolut X instead of 0.09 %. What hasn't filled after the wait "
+                "below is cancelled and goes out at market, so every order is executed. Paper trades always simulate "
+                "market orders.",
+                "Live-Trades gehen zuerst als Limit-Order zum besten Geld- (Kauf) bzw. Briefkurs (Verkauf) raus, die nur "
+                "im Orderbuch wartet (Post-Only) – ohne Gebühr bei Revolut X statt 0,09 %. Was nach der Wartezeit "
+                "unten nicht ausgeführt ist, wird storniert und als Market-Order nachgeholt – jede Order wird also "
+                "ausgeführt. Paper-Trades rechnen immer mit Market-Orders.")),
+        Param("maker_wait", L("Wait for the limit order", "Wartezeit der Limit-Order"), "int", 10,
+              min=1, max=240, unit="min"),
     ]
 
     async def target(self, ctx: Context) -> tuple[int | None, dict]:

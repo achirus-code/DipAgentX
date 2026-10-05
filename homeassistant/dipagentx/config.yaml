@@ -2,7 +2,7 @@
 # The add-on uses the very same image Docker users pull; there is no separate Dockerfile here.
 # `version:` and CHANGELOG.md are written by scripts/sync-addon.py from agent/app/main.py – do not edit by hand.
 name: DipAgentX
-version: "1.27.0"
+version: "1.28.0"
 slug: dipagentx
 description: Trading bots for Revolut X and Trade Republic, controlled from the DipAgentX apps
 url: https://github.com/achirus-code/DipAgentX
