@@ -326,13 +326,13 @@ async def test_login_waits_for_the_confirmation_in_the_app(tmp_path: Path, monke
     # the session survives a restart of the agent
     again = TradeRepublicSession(tmp_path, transport=httpx.MockTransport(fake))
     assert again.logged_in and again.pin == "1234"
-    again.refreshed_at = 0
+    again.refreshed_at = float("-inf")
     await again.ensure_fresh()
     assert again.cookies["tr_session"] == "s3"
 
     # the 24 h refresh token is gone: logged out, phone and PIN are kept for the next login
     fake.refresh_ok = False
-    again.refreshed_at = 0
+    again.refreshed_at = float("-inf")
     with pytest.raises(Problem):
         await again.ensure_fresh()
     assert again.state == "logged_out" and again.phone and render(again.error, "en").startswith("The Trade Republic session has expired")
@@ -588,7 +588,7 @@ async def test_an_expiring_session_keeps_the_new_login_waiting(tmp_path: Path, m
     await session.maintain_once()
     assert session.process is not None
     fake.refresh_ok = False
-    session.refreshed_at = 0
+    session.refreshed_at = float("-inf")
     with pytest.raises(Problem):
         await session.ensure_fresh()
     assert session.process is not None and session.state == "waiting"  # still waiting for the confirmation

@@ -1174,7 +1174,7 @@ class TradeRepublicExchange(Exchange):
             if exc.status != 401:
                 raise
             # the socket was opened with an older session: renew it and try once more
-            self.session.refreshed_at = 0
+            self.session.refreshed_at = float("-inf")
             await self.session.ensure_fresh()
             return await self.account.request(payload, **kwargs)
 
