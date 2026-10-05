@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength) // only as wide as the icon
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         statusItem = item
@@ -158,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func icon(_ symbol: String, rotatedBy angle: CGFloat = 0) -> NSImage? {
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "DipAgentX") else { return nil }
         base.isTemplate = true
+        if symbol.hasPrefix("chart") { return withX(base) }
         guard angle != 0 else { return base }
         let size = NSSize(width: 18, height: 18) // the menu bar renders the symbol at this size anyway
         let image = NSImage(size: size, flipped: false) { rect in
@@ -170,6 +171,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         image.isTemplate = true
+        return image
+    }
+
+    /// The chart with the X of Revolut X over its bottom-right corner – as narrow as the chart allows.
+    private static func withX(_ chart: NSImage) -> NSImage {
+        let canvas = NSSize(width: 18, height: 16)
+        let image = NSImage(size: canvas, flipped: false) { _ in
+            let scale = min(15 / chart.size.width, 13 / chart.size.height)
+            let size = NSSize(width: chart.size.width * scale, height: chart.size.height * scale)
+            chart.draw(in: NSRect(x: 0, y: canvas.height - size.height, width: size.width, height: size.height))
+            let box = NSRect(x: canvas.width - 6.5, y: 0, width: 6.5, height: 7)
+            // a thin gap around the X where it overlaps the chart
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            for dx in [-1.0, 0, 1] { for dy in [-1.0, 0, 1] { revolutX(in: box.offsetBy(dx: dx, dy: dy)) } }
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            revolutX(in: box)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "DipAgentX"
         return image
     }
 
@@ -250,5 +272,28 @@ final class StatusPanel: NSPanel {
         image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
         image.resizingMode = .stretch
         return image
+    }
+}
+
+/// The X of Revolut X, filled with the current color: flat horizontal ends, one continuous stroke from top left to
+/// bottom right, the other one broken – its upper right arm stands apart from the main stroke.
+func revolutX(in r: NSRect) {
+    let t = 0.24, gap = 0.1 // stroke width and gap, as a fraction of the width
+    func p(_ x: Double, _ y: Double) -> NSPoint { NSPoint(x: r.minX + x * r.width, y: r.maxY - y * r.height) }
+    func poly(_ points: [NSPoint]) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.move(to: points[0])
+        points.dropFirst().forEach(path.line(to:))
+        path.close()
+        return path
+    }
+    poly([p(0, 0), p(t, 0), p(1, 1), p(1 - t, 1)]).fill()
+    let other = poly([p(1 - t, 0), p(1, 0), p(t, 1), p(0, 1)])
+    for side in [poly([p(t / 2, 0), p(1 - t / 2, 1), p(0, 1)]),          // lower left arm, runs into the main stroke
+                 poly([p(t + gap, 0), p(1 + gap, 1), p(2, 1), p(2, 0)])] { // upper right arm, apart from it
+        NSGraphicsContext.saveGraphicsState()
+        side.addClip()
+        other.fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 }
