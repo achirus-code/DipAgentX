@@ -80,6 +80,25 @@ async def test_an_uptrend_buys_the_first_slice():
     assert "funding rate not available" in render(d.action.reason, "en")  # no data: the floor does nothing
 
 
+async def test_missing_funding_data_is_shown_first_and_as_the_hint(tmp_path: Path, monkeypatch):
+    ex = PathExchange(steady(0.003))
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Momentum", "momentum", "ETH-EUR", {"amount": 1000}, True, True)
+    for _ in range(12):
+        await engine.tick()
+    ex.now += 2 * HOUR
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    status = render(bot["status"], "de")
+    assert status.startswith("⚠ Seit 2 h keine Funding-Rate von Binance – die Untergrenze ist aus")
+    assert "Untergrenze ist aus" in engine.describe_bot(bot, {}, "de")["hint"]
+    set_data(monkeypatch, funding=8.0)  # back: no warning any more
+    await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert not render(bot["status"], "en").startswith("⚠") and not engine.describe_bot(bot, {}, "en")["hint"]
+    assert "funding_missing_since" not in bot["state"]["momentum"]
+
+
 async def test_a_downtrend_stays_in_cash_unless_funding_shows_panic(monkeypatch):
     s = STRATEGIES["momentum"]
     falling = PathExchange(steady(-0.003))
@@ -128,24 +147,6 @@ async def test_waits_for_enough_price_history():
     d = await s.evaluate(ctx(young))
     assert d.action is None and message_key(d.status) == "momentum.no_history"
     assert "Waiting for price history (29 of 74 days)" == render(d.status, "en")
-
-
-async def test_a_strong_uptrend_turns_lookbacks_up_sooner():
-    s = STRATEGIES["momentum"]
-    # +50 % until 30 days ago, −8 % until 10 days ago, +6 % since: 14 days ago the price was 4 % lower – up from the
-    # +2 % of a strong uptrend (90 days: +28 %), not from the usual +5 %
-    days, prices = [-200, -120, -30, -10, 0], [1000, 1000, 1500, 1380, 1462.8]
-
-    def path(t):  # linear in the log price between the points
-        x = min(max((t - NOW) / DAY, days[0]), days[-1])
-        i = max(k for k in range(len(days) - 1) if days[k] <= x)
-        f = (x - days[i]) / (days[i + 1] - days[i])
-        return math.exp(math.log(prices[i]) * (1 - f) + math.log(prices[i + 1]) * f)
-
-    fast, slow = {}, {}
-    await s.evaluate(ctx(PathExchange(path), state=fast))
-    await s.evaluate(ctx(PathExchange(path), state=slow, fast_entry=5))
-    assert fast["momentum"]["on"]["14"] == 1 and slow["momentum"]["on"]["14"] == 0
 
 
 def test_funding_and_inflow_figures():

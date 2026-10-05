@@ -1168,6 +1168,8 @@ class Engine:
         snap = self.snapshots.get(bot["symbol"])
         blocked = self.blocked_buy(bot, bot["state"]) if bot["enabled"] else None
         hint = render(m("engine.buy_blocked", reason=blocked), lang) if blocked else None
+        if not hint and bot["enabled"] and (warning := bot["state"].get("warning")):
+            hint = render(warning, lang)  # e.g. the momentum follower without funding data
         s = stats.get(bot["id"], {})
         positions = open_positions(bot["state"])
         position_targets = bot["state"].get("position_targets") or {}

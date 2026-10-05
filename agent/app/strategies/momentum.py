@@ -15,15 +15,14 @@ from bisect import bisect_right
 from decimal import Decimal
 
 from .. import cryptodata
-from ..i18n import L, m, num, pct
+from ..i18n import L, dur, m, num, pct
 from .base import DAY_MS, HOUR_MS, Buy, Context, Decision, Param, Sell, Strategy, open_positions
 
 LOOKBACKS = (14, 21, 30, 40, 50, 60)  # days
 STEP_MS = 4 * HOUR_MS  # the trend is judged on the 4-hour closes
-REGIME_DAYS = 90  # "strong uptrend": the return over this many days (daily closes)
 VOL_DAYS = 20  # realized volatility of this many daily returns
 WARMUP_DAYS = 14  # the lookbacks' up/down states are rebuilt from this many days (a new bot, a long outage)
-HISTORY_DAYS = REGIME_DAYS + WARMUP_DAYS + 2
+HISTORY_DAYS = max(LOOKBACKS) + WARMUP_DAYS + 2
 SLICE = Decimal("0.1")  # one step: 10 % of the capital per trade
 MIN_BUY = Decimal("0.025")  # a smaller gap to the target (in capital) isn't bought – avoids crumbs
 MIN_ORDER = Decimal("10")  # nor below this amount of the quote currency
@@ -82,15 +81,6 @@ def realized_vol(h: History, now: int) -> float | None:
     return math.sqrt(sum((x - mean) ** 2 for x in r) / (len(r) - 1) * 365)
 
 
-def strong_uptrend(h: History, close_time: int, p: dict) -> bool:
-    """The last completed daily close before ``close_time`` is ``fast_after`` % above the one 90 days earlier."""
-    if p["fast_entry"] >= p["entry"]:
-        return False
-    day_end = close_time // DAY_MS * DAY_MS
-    now, then = h.daily(day_end), h.daily(day_end - REGIME_DAYS * DAY_MS)
-    return bool(now and then and now / then - 1 > p["fast_after"] / 100)
-
-
 def update_lookbacks(h: History, st: dict, p: dict, last: int) -> None:
     """Brings the up/down state of every lookback up to the candle starting at ``last`` – candle by candle."""
     done = st.get("at")
@@ -100,13 +90,12 @@ def update_lookbacks(h: History, st: dict, p: dict, last: int) -> None:
     on = st["on"]
     for start in [t for t in h.starts if done < t <= last]:
         close = h.at(start)
-        entry = p["fast_entry"] if strong_uptrend(h, start + STEP_MS, p) else p["entry"]
         for n in LOOKBACKS:
             ref = h.at(start - n * DAY_MS)
             if not ref or not close:
                 continue
             change = (close / ref - 1) * 100
-            if change > entry:
+            if change > p["entry"]:
                 on[str(n)] = 1
             elif change < p["exit"]:
                 on[str(n)] = 0
@@ -147,15 +136,6 @@ class MomentumStrategy(Strategy):
               L("… and as down once the price is below its level of then. In between it stays as it was.",
                 "… und als abwärts, sobald der Kurs unter seinem damaligen Stand liegt. Dazwischen bleibt es, wie es "
                 "war."), min=-30, max=30, step=0.5),
-        Param("fast_entry", L("In a strong uptrend: up above", "Im starken Aufwärtstrend: aufwärts über"), "percent",
-              2.0,
-              L("While the price is far above its level of 90 days ago (see below), a lookback already turns up "
-                "above this – the bot gets back in sooner after a pullback. Same as above = off.",
-                "Solange der Kurs weit über seinem Stand von vor 90 Tagen liegt (siehe unten), zählt ein Zeitfenster "
-                "schon ab hier als aufwärts – nach einem Rücksetzer ist der Bot schneller wieder drin. Gleich wie "
-                "oben = aus."), min=0, max=30, step=0.5),
-        Param("fast_after", L("Strong uptrend: 90-day return above", "Starker Aufwärtstrend: 90-Tage-Rendite über"),
-              "percent", 20.0, min=0, max=200, step=5),
         Param("vol_target", L("Less when volatility is above", "Weniger, wenn die Schwankung über"), "percent", 100.0,
               L("Annualized volatility of the last 20 days. Above it the bot holds proportionally less: at 125 % "
                 "volatility at most 80 %. 0 = off.",
@@ -214,8 +194,7 @@ class MomentumStrategy(Strategy):
         update_lookbacks(h, st, p, last)
         up = sum(st["on"].values())
         share = up / len(LOOKBACKS)
-        parts = [m("momentum.trend" if not strong_uptrend(h, last + STEP_MS, p) else "momentum.trend_strong",
-                   up=up, n=len(LOOKBACKS), entry=pct(p["fast_entry"]))]
+        parts = [m("momentum.trend", up=up, n=len(LOOKBACKS))]
         scale = 1.0
         vol = realized_vol(h, market.now)
         if vol is not None:
@@ -225,17 +204,23 @@ class MomentumStrategy(Strategy):
                            limit=num(p["vol_target"], 0)))
         weight = share * scale
         base = ctx.market.symbol.split("-")[0]
-        if p["funding_floor"] > 0:
+        if p["funding_floor"] <= 0:
+            st.pop("funding_missing_since", None)
+        else:
             rate = await cryptodata.funding(base, market.now)
             if rate is None:
+                # shown in front of the status and as the card's hint (see evaluate): without the rate the floor is off
+                st.setdefault("funding_missing_since", market.now)
                 parts.append(m("momentum.funding_missing"))
-            elif rate < p["funding_below"]:
-                floor = p["funding_floor"] / 100 * scale
-                parts.append(m("momentum.funding_floor", rate=pct(rate), limit=pct(p["funding_below"]),
-                               floor=num(round(floor * 100), 0)))
-                weight = max(weight, floor)
             else:
-                parts.append(m("momentum.funding", rate=pct(rate)))
+                st.pop("funding_missing_since", None)
+                if rate < p["funding_below"]:
+                    floor = p["funding_floor"] / 100 * scale
+                    parts.append(m("momentum.funding_floor", rate=pct(rate), limit=pct(p["funding_below"]),
+                                   floor=num(round(floor * 100), 0)))
+                    weight = max(weight, floor)
+                else:
+                    parts.append(m("momentum.funding", rate=pct(rate)))
         if p["inflow_brake"]:
             flow = await cryptodata.exchange_inflow(base, market.now)
             if flow is None:
@@ -271,6 +256,13 @@ class MomentumStrategy(Strategy):
         invested = float(exposure / equity * 100) if equity > 0 else 0.0
         ctx.targets(note=m("momentum.target", target=num(level * 10, 0)))
         status = m("momentum.status", invested=num(invested, 0), target=num(level * 10, 0), detail=detail)
+        ctx.state.pop("warning", None)
+        if (since := st.get("funding_missing_since")) is not None:
+            # without the funding rate the floor can't protect – say so first (and as the card's hint), not hidden
+            # in the details
+            warning = m("momentum.funding_down", since=dur(ctx.now - since))
+            ctx.state["warning"] = warning
+            status = m("momentum.warn", warning=warning, status=status)
         if st.get("held") is not None and sorted(x.id for x in positions) != st["held"]:
             st.pop("level", None)  # trades sold or discarded by hand: back to the target
         if level == st.get("level") or equity <= 0:
