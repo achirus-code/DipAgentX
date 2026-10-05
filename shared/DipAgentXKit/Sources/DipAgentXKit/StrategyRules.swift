@@ -38,6 +38,20 @@ private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
+/// Rules that only matter together with another one stay hidden in the editor until that one is set.
+public enum ParamVisibility {
+    public static func isShown(_ key: String, values: [String: JSONValue]) -> Bool {
+        switch key {
+        case "trade_spacing":
+            return (values["max_trades"]?.double ?? 1) > 1
+        case "trend_buffer", "trend_exit":
+            return (values["trend_days"]?.double ?? 0) > 0 || (values["trend_fast_days"]?.double ?? 0) > 0
+        default:
+            return true
+        }
+    }
+}
+
 /// What a buy + sell costs for the given rules, and whether the rules' profit target covers it.
 public struct TradeCostCheck {
     public static let defaultFeeRate = 0.0009 // Revolut X taker fee: 0.09 %

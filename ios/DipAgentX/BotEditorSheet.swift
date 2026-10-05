@@ -129,7 +129,7 @@ struct BotEditorSheet: View {
         if let strategy {
             Section("Rules") {
                 // the distance between trades only matters when there can be more than one
-                ForEach(strategy.params.filter { $0.key != "trade_spacing" || (values["max_trades"]?.double ?? 1) > 1 }) { param in
+                ForEach(strategy.params.filter { ParamVisibility.isShown($0.key, values: values) }) { param in
                     ParamRow(
                         param: param,
                         value: Binding(get: { values[param.key] ?? param.default }, set: { values[param.key] = $0 }),

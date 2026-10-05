@@ -14,6 +14,8 @@ from ..i18n import L, Problem
 
 CANDLE_INTERVALS = [5, 15, 30, 60, 240, 1440]  # minutes, as supported by Revolut X
 HOUR_MS = 3_600_000
+DAY_MS = 24 * HOUR_MS
+MAX_CANDLES = 98  # per request – every candle series stays below this
 FIAT = {"EUR", "USD", "GBP", "CHF", "PLN"}
 
 
@@ -209,21 +211,43 @@ class Decision:
 
 
 CandleFetch = Callable[[str, int, int, int], Awaitable[list[Candle]]]  # (symbol, interval, since, until)
+DailyFetch = Callable[[str, int, int], Awaitable[list[Decimal]]]  # (symbol, days, now)
+
+
+async def fetch_daily_closes(fetch: CandleFetch, symbol: str, days: int, now: int) -> list[Decimal]:
+    """Closes of the last ``days`` completed UTC days, oldest first – fewer when the pair is younger.
+
+    Long windows (a 200-day average) are fetched in chunks of at most ``MAX_CANDLES`` daily candles."""
+    today = now - now % DAY_MS
+    since = today - days * DAY_MS
+    closes: dict[int, Decimal] = {}
+    start = since
+    while start < today:
+        end = min(start + MAX_CANDLES * DAY_MS, today)
+        for c in await fetch(symbol, 1440, start, end - 1):
+            if since <= c.start < today:  # not the forming candle of today
+                closes[c.start] = c.close
+        start = end
+    return [closes[t] for t in sorted(closes)]
 
 
 class MarketView:
     """Market data for one symbol during one engine tick (candles fetched lazily and cached).
 
     ``fetch`` lets the engine plug in a cache that survives ticks; by default candles come from the exchange.
+    ``daily`` does the same for the daily closes of long averages (they change once a day).
     """
 
-    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int, fetch: CandleFetch | None = None):
+    def __init__(self, exchange: Exchange, symbol: str, ticker: Ticker, now: int, fetch: CandleFetch | None = None,
+                 daily: DailyFetch | None = None):
         self.exchange = exchange
         self.symbol = symbol
         self.ticker = ticker
         self.now = now
         self._fetch = fetch or exchange.candles
+        self._daily = daily
         self._cache: dict[tuple[int, float], list[Candle]] = {}
+        self._daily_cache: dict[int, list[Decimal]] = {}
 
     @property
     def price(self) -> Decimal:
@@ -239,7 +263,7 @@ class MarketView:
 
     async def candles(self, hours: float) -> tuple[list[Candle], int]:
         minutes = hours * 60
-        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= 98), CANDLE_INTERVALS[-1])
+        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= MAX_CANDLES), CANDLE_INTERVALS[-1])
         key = (interval, hours)
         if key not in self._cache:
             since = self.now - int(hours * HOUR_MS) - interval * 60_000
@@ -268,6 +292,14 @@ class MarketView:
     async def low(self, hours: float) -> Decimal:
         candles, _ = await self.candles(hours)
         return min([c.low for c in candles] + [self.price])
+
+    async def daily_closes(self, days: int) -> list[Decimal]:
+        if days not in self._daily_cache:
+            if self._daily:
+                self._daily_cache[days] = await self._daily(self.symbol, days, self.now)
+            else:
+                self._daily_cache[days] = await fetch_daily_closes(self._fetch, self.symbol, days, self.now)
+        return self._daily_cache[days]
 
 
 @dataclass

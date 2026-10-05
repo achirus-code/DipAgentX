@@ -73,7 +73,7 @@ class FakeExchange(Exchange):
 def ctx(ex, position=None, state=None, **params):
     s = STRATEGIES["dip"]
     view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
-    return Context(s.normalize(params), position, state or {}, view)
+    return Context(s.normalize(params), position, {} if state is None else state, view)
 
 
 @pytest.mark.asyncio
@@ -221,6 +221,100 @@ def test_position_state_keeps_the_trailing_high():
     assert Position.from_state(p.to_state()).trail_peak == Decimal("105.5")
     old = {"qty": "1", "cost": "100", "opened_at": 0, "peak": "100"}  # stored before the option existed
     assert Position.from_state(old).trail_peak is None
+
+
+DAY = 24 * HOUR
+
+
+class TrendExchange(FakeExchange):
+    """Like FakeExchange, plus daily candles closing at `daily` (the last `history` days only)."""
+
+    def __init__(self, ref: str, price: str, daily: str, history: int = 1000):
+        super().__init__(ref, price)
+        self.now = 1000 * DAY + 5 * HOUR
+        self.daily, self.history = Decimal(daily), history
+        self.daily_requests: list[tuple[int, int]] = []
+
+    async def candles(self, symbol, interval, since, until):
+        if interval != 1440:
+            return await super().candles(symbol, interval, since, until)
+        self.daily_requests.append((since, until))
+        first = self.now - self.now % DAY - self.history * DAY
+        return [Candle(t, self.daily, self.daily, self.daily, self.daily)
+                for t in range(since - since % DAY, until + 1, DAY) if t >= first]
+
+
+TREND = {"trend_days": 200, "trend_fast_days": 60}
+
+
+async def test_daily_closes_come_in_chunks_without_the_forming_day():
+    ex = TrendExchange("2000", "1970", daily="1800")
+    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
+    closes = await view.daily_closes(200)
+    assert len(closes) == 200 and closes[-1] == Decimal("1800")
+    assert len(ex.daily_requests) == 3  # 98 + 98 + 4 candles
+    assert all((until - since) // DAY < 98 for since, until in ex.daily_requests)
+    assert max(until for _, until in ex.daily_requests) < ex.now - ex.now % DAY  # today's candle isn't complete yet
+
+
+async def test_dip_trend_filter_blocks_buys_in_a_downtrend():
+    s = STRATEGIES["dip"]
+    # −1.5 % in 24 h, but the price is below its 200- and 60-day average: no buy
+    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="2100"), **TREND))
+    assert d.action is None and "No uptrend" in render(d.status, "en") and "200-day average" in render(d.status, "en")
+    # well above both averages (> 3 % buffer): the dip is bought
+    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="1800"), **TREND))
+    assert isinstance(d.action, Buy)
+    # without the filter the same dip is bought in the downtrend
+    assert isinstance((await s.evaluate(ctx(TrendExchange("2000", "1970", daily="2100")))).action, Buy)
+
+
+async def test_dip_trend_filter_keeps_its_state_inside_the_buffer():
+    s = STRATEGIES["dip"]
+    state: dict = {}
+    # 1970 is 1 % above the 200-day average 1950: inside the 3 % buffer – no uptrend yet
+    ex = TrendExchange("2000", "1970", daily="1950")
+    assert (await s.evaluate(ctx(ex, state=state, trend_days=200))).action is None and state["trend_up"] is False
+    state["trend_up"] = True  # came from above: stays an uptrend until the price leaves the buffer downwards
+    assert isinstance((await s.evaluate(ctx(ex, state=state, trend_days=200))).action, Buy)
+    ex = TrendExchange("2000", "1970", daily="2050")  # 3.9 % below the average: downtrend
+    assert (await s.evaluate(ctx(ex, state=state, trend_days=200))).action is None and state["trend_up"] is False
+
+
+async def test_dip_trend_filter_waits_for_enough_history():
+    s = STRATEGIES["dip"]
+    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="1800", history=120), **TREND))
+    assert d.action is None and "120 of 200 days" in render(d.status, "en")
+
+
+async def test_dip_trend_exit_sells_at_a_loss():
+    s = STRATEGIES["dip"]
+    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2000"))  # entry 2000
+    ex = TrendExchange("2000", "1900", daily="2100")  # −5 % and below both averages
+    d = await s.evaluate(ctx(ex, pos, state={"trend_up": True}, trend_exit=True, **TREND))
+    assert isinstance(d.action, Sell) and d.action.stop and "Trend broken" in render(d.action.reason, "en")
+    # only with "Sell when the trend breaks"; and not without enough history to judge the trend
+    assert (await s.evaluate(ctx(ex, pos, **TREND))).action is None
+    ex = TrendExchange("2000", "1900", daily="2100", history=30)
+    assert (await s.evaluate(ctx(ex, pos, trend_exit=True, **TREND))).action is None
+
+
+async def test_dip_trend_exit_in_the_engine_fetches_daily_closes_once_a_day(tmp_path: Path):
+    ex = TrendExchange("2000", "1970", daily="1800")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("Trend", "dip", "ETH-EUR", {**TREND, "trend_exit": True}, True, True)
+    await engine.tick()
+    assert pos(db.get_bot(bot_id))
+    requests = len(ex.daily_requests)
+    ex.now += HOUR
+    await engine.tick()
+    assert len(ex.daily_requests) == requests  # cached until the next day
+    ex.price, ex.daily = Decimal("1700"), Decimal("1900")  # the next day: below both averages
+    ex.now += DAY
+    await engine.tick()
+    assert pos(db.get_bot(bot_id)) is None
+    trade = db.list_trades(bot_id)[0]
+    assert Decimal(trade["pnl"]) < 0
 
 
 @pytest.mark.asyncio

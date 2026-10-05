@@ -58,7 +58,7 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 
 | Strategy | Buys … | Sells … |
 |---|---|---|
-| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss |
+| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %); optionally only in an uptrend (trend filter: price above its 200- and/or 60-day average) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss; optionally as soon as the trend filter reports a downtrend (trend exit, also at a loss) |
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |

@@ -4,6 +4,16 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Added
+
+- **Dip buyer: trend filter and trend exit.** New rules *Trend filter: long average* and *short average* (in days,
+  0 = off, the default) with a *buffer* (default 3 %): the bot only buys while the price is above both averages – the
+  long one by at least the buffer. It counts as a downtrend once the price falls below the short average or more than
+  the buffer below the long one; in between the last state stays. *Sell when the trend breaks* (off by default) then
+  sells open trades right away – also at a loss, like a stop-loss. A backtest on BTC and ETH (2018–2026) worked best
+  with 200 and 60 days, a 3 % buffer, trend exit and a wide trailing stop (10 %). The daily closes for the averages
+  are fetched once a day (in chunks of at most 98 candles). Without enough history (a young pair) the bot doesn't buy.
+
 ### Changed
 
 - **New icon with the X of Revolut X** in the bottom-right corner – app icon (macOS, iPhone), menu bar icon,

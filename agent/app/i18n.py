@@ -178,6 +178,7 @@ CATALOG: dict[str, L] = {
     "targets.next_buy": L("Next buy in {left}", "Nächster Kauf in {left}"),
     "targets.trailing": L("Trailing stop", "Trailing-Stop"),
     "targets.trailing_from": L("Trailing starts here", "Trailing startet hier"),
+    "targets.trend": L("Waiting for an uptrend", "Warte auf Aufwärtstrend"),
     "targets.ai": L("Claude decides", "Claude entscheidet"),
     "cooldown": L("Cooling down for {left}", "Pause noch {left}"),
     "cooldown.window": L("Cooling down for {left} · {window}", "Pause noch {left} · {window}"),
@@ -213,6 +214,19 @@ CATALOG: dict[str, L] = {
     "dip.trailing_hold": L(
         "Trailing stop {stop} reached, but profit {profit} < minimum {min} · holding",
         "Trailing-Stop {stop} erreicht, aber Gewinn {profit} < Mindestgewinn {min} · halte",
+    ),
+    "dip.trend_down": L(
+        "No uptrend – buys only above {level} · {detail}",
+        "Kein Aufwärtstrend – Käufe erst über {level} · {detail}",
+    ),
+    "dip.trend_exit": L("Trend broken", "Trendbruch"),
+    "dip.trend_exit.reason": L("Trend broken ({detail}), result {profit}", "Trendbruch ({detail}), Ergebnis {profit}"),
+    # --- trend filter
+    "trend.detail": L("price {price} · {averages}", "Kurs {price} · {averages}"),
+    "trend.average": L("{days}-day average {avg}", "{days}-Tage-Schnitt {avg}"),
+    "trend.no_history": L(
+        "Not enough price history for the trend filter ({days} of {need} days) – no buys",
+        "Zu wenig Kursverlauf für den Trendfilter ({days} von {need} Tagen) – keine Käufe",
     ),
     # --- price zones
     "zones.no_price": L("No buy price set", "Kein Kaufpreis eingestellt"),
