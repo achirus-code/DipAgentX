@@ -14,7 +14,7 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_UP, Decimal
 from typing import Any
 
 import httpx
@@ -44,6 +44,8 @@ HOLDINGS_CHECK_MS = 30 * 60_000  # plus right after every own fill
 MARKET_DATA_CONCURRENCY = 4
 # candles are re-fetched when a new candle starts or after this long, not on every tick
 CANDLE_MAX_AGE_MS = 6 * 3_600_000  # safety net only – candles are normally reused until the next candle starts
+# after a limit order that wasn't (completely) filled, the strategy's orders go out as market orders for this long
+MAKER_PAUSE_MS = 30 * 60_000
 
 Message = dict | str
 
@@ -52,6 +54,12 @@ def round_down(value: Decimal, step: Decimal) -> Decimal:
     if step <= 0:
         return value
     return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
+
+
+def round_up(value: Decimal, step: Decimal) -> Decimal:
+    if step <= 0:
+        return value
+    return (value / step).to_integral_value(rounding=ROUND_UP) * step
 
 
 def split_symbol(symbol: str) -> tuple[str, str]:
@@ -330,8 +338,8 @@ class Engine:
             try:
                 if state.get("pending_order"):
                     status = await self._reconcile(bot, state) or status
-                    if state.get("pending_order"):
-                        status = m("engine.waiting_for_order")
+                    if pending := state.get("pending_order"):
+                        status = self._waiting_status(bot, pending)
                         return
                     if not bot["enabled"]:  # stopped by the reconciliation – needs a human look
                         return
@@ -361,6 +369,8 @@ class Engine:
         if strategy is None:
             return m("engine.unknown_strategy", strategy=bot["strategy"])
         positions = open_positions(state)
+        if strategy.fixed_trades and not self.is_paper(bot) and any(p.paper for p in positions):
+            return await self._close_paper_slices(bot, state, view, positions)
         if positions:
             for position in positions:
                 position.peak = max(position.peak, view.price)
@@ -370,6 +380,7 @@ class Engine:
 
         _, quote = split_symbol(bot["symbol"])
         params = strategy.normalize(bot["params"])
+        maker = self._maker_wait(params, state)
 
         def context(position: Position | None) -> Context:
             return Context(params, position, state, view, quote, self.sell_fee_rate(bot),
@@ -381,9 +392,9 @@ class Engine:
             if position:
                 store_positions(state, positions)  # the strategy may have changed the trade (an armed trailing stop)
             if isinstance(decision.action, Buy):
-                return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
+                return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason, maker)
             if isinstance(decision.action, Sell) and position:
-                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
                 return sold[1]
             state.pop("position_targets", None)
             if not self.blocked_buy(bot, state):
@@ -401,7 +412,7 @@ class Engine:
             position_targets[position.id] = state.pop("targets", None)
             statuses[position.id] = decision.status
             if isinstance(decision.action, Sell):
-                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
                 if sold:
                     return status
                 statuses[position.id] = status
@@ -412,7 +423,7 @@ class Engine:
             decision = await strategy.evaluate(context(None))
             buy_targets = state.pop("targets", None)
             next_price = None
-            if positions:
+            if positions and not strategy.fixed_trades:
                 # another trade only well below the open ones – otherwise a lasting signal would buy them all at once
                 spacing = Decimal(str(params.get("trade_spacing", 0))) / 100
                 next_price = min(p.entry_price for p in positions) * (1 - spacing)
@@ -428,7 +439,8 @@ class Engine:
                 if wait > 0:
                     buy_status = m("engine.trade_interval", left=dur(wait))
                 elif next_price is None or view.price <= next_price:
-                    return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
+                    return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason,
+                                           maker)
                 else:
                     buy_status = m("engine.trade_spacing", price=money(next_price, quote))
             elif wait > 0:
@@ -448,7 +460,8 @@ class Engine:
             targets.update(sell_price=near.get("sell_price"), stop_price=near.get("stop_price"))
             targets["note"] = targets["note"] or near.get("note")
         state["targets"] = targets if buy_targets or (nearest and position_targets.get(nearest.id)) else None
-        several = max_trades > 1 or len(positions) > 1  # also when the limit was lowered below the open trades
+        # also when the limit was lowered below the open trades; a strategy that manages its trades speaks for all
+        several = (max_trades > 1 or len(positions) > 1) and not strategy.fixed_trades
         if several and positions:
             state["position_targets"] = position_targets
         else:
@@ -463,19 +476,54 @@ class Engine:
             return m("engine.trades_open", open=len(positions), max=max_trades, status=status)
         return status
 
+    async def _close_paper_slices(self, bot: dict, state: dict, view: MarketView, positions: list[Position]) -> Message:
+        """Switched to live while holding paper slices: close them the simulated way and start afresh from the
+        capital – the next check works out the live position (real coins are never "sold" on paper)."""
+        pair = await self.exchange.pair(bot["symbol"])
+        price = view.bid
+        for paper in [p for p in positions if p.paper]:
+            gross = paper.qty * price
+            fee = gross * self.paper_fee("sell")
+            self._record_sell(bot, state, pair, paper.qty, gross - fee, price, fee, None, True,
+                              m("engine.mode_changed_close"), position_id=paper.id)
+        for key in ("realized", "momentum"):
+            state.pop(key, None)
+        status = m("engine.mode_changed_restart")
+        self.db.add_event(bot["id"], "info", status)
+        return status
+
+    def _maker_wait(self, params: dict, state: dict) -> int | None:
+        """Minutes a strategy's live order may wait as a fee-free limit order – None: a market order right away
+        (switched off, the exchange can't, or a limit order of the last 30 minutes wasn't filled completely)."""
+        if not params.get("maker_orders") or not self.exchange.supports_limit:
+            return None
+        if now_ms() - int(state.get("taker_from") or 0) < MAKER_PAUSE_MS:
+            return None
+        return max(1, int(params.get("maker_wait") or 10))
+
+    def _waiting_status(self, bot: dict, pending: dict) -> Message:
+        limit = pending.get("limit")
+        if not limit:
+            return m("engine.waiting_for_order")
+        _, quote = split_symbol(bot["symbol"])
+        until = datetime.fromtimestamp(int(limit["until"]) / 1000).strftime("%H:%M")
+        return m("engine.limit_waiting", price=money(Decimal(limit["price"]), quote), until=until)
+
     async def _sell_unless_loss(self, bot: dict, state: dict, view: MarketView, position: Position, sell: Sell,
-                                quote: str) -> tuple[bool, Message]:
+                                quote: str, maker: int | None = None) -> tuple[bool, Message]:
         """Sell one trade – unless it is a target rule that would realize a loss. Returns (sold, status)."""
         # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
         # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
         net = position.net_proceeds(view.bid, float(self.paper_fee("sell")) if position.paper else float(self.settings.taker_fee), quote)
         if not sell.stop and net < position.cost:
             return False, m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
-        return True, await self._sell(bot, state, view, sell.reason, position)
+        return True, await self._sell(bot, state, view, sell.reason, position, maker)
 
     def max_trades(self, bot: dict) -> int:
         """How many trades the bot may hold at once (1 for strategies without the option)."""
         strategy = STRATEGIES.get(bot["strategy"])
+        if strategy and strategy.fixed_trades:
+            return strategy.fixed_trades
         if not strategy or not strategy.multi_trades:
             return 1
         return int(strategy.normalize(bot["params"]).get("max_trades", 1))
@@ -499,6 +547,12 @@ class Engine:
             if not bot:
                 raise KeyError(bot_id)
             state = bot["state"]
+            if (state.get("pending_order") or {}).get("limit"):
+                before = self._snapshot(bot)
+                try:
+                    await self._cancel_limit(bot, state)
+                finally:
+                    self._persist(bot, state, bot["status"], before)
             chosen = [p for p in open_positions(state)
                       if (position_id is None or p.id == position_id) and not (live_only and p.paper)]
             if not chosen:
@@ -585,7 +639,7 @@ class Engine:
             before = self._snapshot(bot)
             deleted = self.db.delete_paper_trades(bot_id)
             store_positions(state, [])  # only paper trades are open (checked above)
-            for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at"):
+            for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at", "realized", "momentum"):
                 state.pop(key, None)
             status = m("engine.paper_reset", count=deleted)
             self.db.add_event(bot_id, "info", status)
@@ -620,8 +674,11 @@ class Engine:
             buying = pending.get("side") == "buy"
             if positions or buying:
                 strategy = STRATEGIES.get(b["strategy"])
-                # every trade counts; a buy in flight opens one more (a savings plan's adds to its position)
-                count += len(positions) + (1 if buying and not (positions and strategy and strategy.accumulates) else 0)
+                if strategy and strategy.fixed_trades:  # one position, held in slices
+                    count += 1
+                else:
+                    # every trade counts; a buy in flight opens one more (a savings plan's adds to its position)
+                    count += len(positions) + (1 if buying and not (positions and strategy and strategy.accumulates) else 0)
                 symbols.add(b["symbol"])
                 invested += sum((p.cost for p in positions), Decimal(0))
                 invested += Decimal(pending.get("quote_size") or 0) if buying else Decimal(0)
@@ -632,7 +689,8 @@ class Engine:
         count, invested, symbols = self.exposure(exclude_bot_id=bot["id"])
         positions = open_positions(state)
         strategy = STRATEGIES.get(bot["strategy"])
-        if not (positions and strategy and strategy.accumulates):  # this buy opens a new trade
+        # this buy opens a new position (a savings plan adds to its position, the momentum follower to its slices)
+        if not (positions and strategy and (strategy.accumulates or strategy.fixed_trades)):
             count += len(positions)  # the bot's own open trades count as well
             max_positions = int(limits["max_open_positions"])
             if max_positions > 0 and count >= max_positions:
@@ -648,7 +706,9 @@ class Engine:
 
     # --- order execution ------------------------------------------------------
 
-    async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message) -> Message:
+    async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message,
+                   maker: int | None = None) -> Message:
+        """Buy for ``amount`` – live with ``maker`` (minutes) first as a limit order at the best bid."""
         strategy = STRATEGIES[bot["strategy"]]
         if state.get("pending_order"):
             return m("engine.order_running_no_buy")
@@ -697,11 +757,22 @@ class Engine:
             if available < quote_size:
                 raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
                               needed=money(quote_size, pair.quote))
-            pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size)
+            limit_price = base_size = None
+            if maker:
+                limit_price = round_down(view.bid, pair.quote_step)
+                base_size = round_down(quote_size / limit_price, pair.base_step) if limit_price > 0 else Decimal(0)
+                if base_size < pair.min_order_size or base_size <= 0:
+                    limit_price = base_size = None  # too small for a limit order: market
+            pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size, base_size=base_size,
+                                               limit_price=limit_price, wait_minutes=maker or 0)
         # the pending order already counts towards the limits – don't hold up other bots while it fills
+        if pending.get("limit"):
+            return await self._track_limit(bot, state, pair, pending)
         return await self._track_order(bot, state, pair, pending)
 
-    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position) -> Message:
+    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position,
+                    maker: int | None = None) -> Message:
+        """Sell one trade – live with ``maker`` (minutes) first as a limit order at the best ask."""
         pair = await self.exchange.pair(bot["symbol"])
         amount = position.qty
 
@@ -733,6 +804,10 @@ class Engine:
         if available + pair.min_order_size < position.qty:
             self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
                                                     available=qty(available), base=pair.base))
+        if maker and not manual:
+            pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id,
+                                               limit_price=round_up(view.ask, pair.quote_step), wait_minutes=maker)
+            return await self._track_limit(bot, state, pair, pending)
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
         return await self._track_order(bot, state, pair, pending)
 
@@ -751,8 +826,9 @@ class Engine:
     async def _submit_order(
         self, bot: dict, state: dict, side: str, reason: Message,
         *, base_size: Decimal | None = None, quote_size: Decimal | None = None, position_id: str | None = None,
+        limit_price: Decimal | None = None, wait_minutes: int = 0,
     ) -> dict:
-        """Place a market order exactly once.
+        """Place a market order – or with ``limit_price`` a post-only limit order of ``base_size`` – exactly once.
 
         The pending order (with our own client_order_id) is persisted *before* it is sent. If the response
         gets lost, the next tick looks the order up by that id instead of sending a second one.
@@ -767,17 +843,28 @@ class Engine:
             "base_size": str(base_size) if base_size is not None else None,
             "position_id": position_id,  # the trade a sell closes
         }
+        if limit_price is not None:
+            # what isn't filled until then is cancelled – the strategy buys or sells the rest at market
+            pending["limit"] = {"price": str(limit_price), "until": pending["placed_at"] + wait_minutes * 60_000}
         state["pending_order"] = pending
         self.db.update_bot(bot["id"], state=state)
         try:
-            pending["id"] = await self.exchange.place_market_order(
-                bot["symbol"], side, client_order_id=pending["client_order_id"],
-                base_size=base_size, quote_size=quote_size,
-            )
+            if limit_price is not None:
+                pending["id"] = await self.exchange.place_limit_order(
+                    bot["symbol"], side, client_order_id=pending["client_order_id"],
+                    base_size=base_size, price=limit_price,
+                )
+            else:
+                pending["id"] = await self.exchange.place_market_order(
+                    bot["symbol"], side, client_order_id=pending["client_order_id"],
+                    base_size=base_size, quote_size=quote_size,
+                )
         except Exception as exc:
             self.exchange.invalidate_balances()  # the order may have gone through anyway
             if definitely_not_placed(exc):
                 state.pop("pending_order", None)
+                if limit_price is not None:  # e.g. post-only would have crossed the book: next time at market
+                    state["taker_from"] = now_ms()
                 raise
             raise Problem("err.order_unclear", error=as_message(exc)) from exc
         self.exchange.invalidate_balances()  # balances change with this order – the cache must not serve the old ones
@@ -800,6 +887,28 @@ class Engine:
             return self._apply_order(bot, state, pair, pending, result)
         return m("engine.waiting_for_order")
 
+    async def _track_limit(self, bot: dict, state: dict, pair: PairInfo, pending: dict) -> Message:
+        """A limit order is read once right after placing – it usually waits; every check looks at it again."""
+        await asyncio.sleep(ORDER_POLL_DELAYS[0])
+        result = await self.exchange.get_order(pending["id"])
+        if result.terminal and not short_fill(pending, result):
+            return self._apply_order(bot, state, pair, pending, result)
+        return self._waiting_status(bot, pending)
+
+    async def _cancel_limit(self, bot: dict, state: dict) -> Message | None:
+        """Cancel the waiting limit order and book what it filled. Returns the status once it is settled."""
+        pending = state["pending_order"]
+        if not pending.get("id"):
+            return None
+        try:
+            await self.exchange.cancel_order(pending["id"])
+        except Exception as exc:  # noqa: BLE001 – filled meanwhile, or the exchange cancels it anyway
+            log.warning("Bot %s: cancelling order %s failed: %s", bot["name"], pending["id"], exc)
+        result = await self.exchange.get_order(pending["id"])
+        if result.terminal:
+            return self._apply_order(bot, state, await self.exchange.pair(bot["symbol"]), pending, result)
+        return None
+
     async def _reconcile(self, bot: dict, state: dict) -> Message | None:
         """Finish a pending order. Returns the new status once the order is settled, else None."""
         pending = state["pending_order"]
@@ -819,6 +928,12 @@ class Engine:
                 if exc.status == 404 and overdue:  # the exchange doesn't know the id (any more)
                     return self._abandon_order(bot, state, pending)
                 raise
+        if limit := pending.get("limit"):
+            if result.terminal:
+                return self._apply_order(bot, state, pair, pending, result)
+            if now_ms() > int(limit["until"]):  # waited long enough: cancel, the rest goes out at market
+                return await self._cancel_limit(bot, state)
+            return None
         if result.terminal and (not short_fill(pending, result) or overdue):
             return self._apply_order(bot, state, pair, pending, result)
         return None
@@ -956,6 +1071,15 @@ class Engine:
             state["fill_check"] = {"order_id": r.order_id, "side": pending["side"], "until": now_ms() + FILL_CHECK_MS,
                                    "position_id": pending.get("position_id")}
         self._holdings_checked_at = 0  # verify the books against the exchange at the next tick
+        if (limit := pending.get("limit")) and r.status != "filled":
+            # a limit order not (completely) filled in time: book what it filled, the rest goes out at market –
+            # no error and no pause, and no re-reading for a missing fill (it was cancelled on purpose)
+            state["taker_from"] = now_ms()
+            state["fill_checked"] = r.order_id
+            if r.filled_qty <= 0:
+                msg = m("engine.limit_not_filled", price=money(Decimal(limit["price"]), pair.quote))
+                self.db.add_event(bot["id"], "info", msg)
+                return msg
         if r.filled_qty <= 0:
             msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
                    else m("engine.order_failed", status=r.status))
@@ -1016,6 +1140,8 @@ class Engine:
         sold = min(sold, position.qty)
         cost_part = position.cost * sold / position.qty
         pnl = proceeds - cost_part
+        # what the bot's sales gained or lost in total – a strategy reinvesting it (momentum) counts its capital with it
+        state["realized"] = str(Decimal(str(state.get("realized") or 0)) + pnl)
         position.qty -= sold
         position.cost -= cost_part
         if position.qty <= 0 or position.qty < pair.min_order_size:
@@ -1098,6 +1224,8 @@ class Engine:
             "position": pos_json(total) if total else None,
             "positions": [trade_json(p) for p in positions],
             "max_trades": self.max_trades(bot),
+            # one position held in several trades (momentum): the apps show the sum and list the trades below
+            "sliced": bool(strategy and strategy.fixed_trades),
             "realized_pnl": float(s.get("realized") or 0),
             "trades_count": int(s.get("trades") or 0),
             "wins": int(s.get("wins") or 0),
@@ -1148,7 +1276,7 @@ class Engine:
             "other_mode_trades": self.db.trades_count(not paper_mode),
             "bots_total": len(bots),
             "bots_active": sum(1 for b in bots if b["enabled"]),
-            "open_positions": sum(len(b["positions"]) for b in bots),
+            "open_positions": self.exposure()[0],  # counted like the limit (sliced bots as one)
             "max_open_positions": int(self.db.get_limits()["max_open_positions"]),
             "trades_count": self.db.trades_count(paper_mode),
         }

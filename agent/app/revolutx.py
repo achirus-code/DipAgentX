@@ -144,6 +144,23 @@ class RevolutXClient:
         }
         return (await self.request("POST", "/orders", body=body))["data"]
 
+    async def place_limit_order(
+        self, symbol: str, side: str, *, client_order_id: str | None = None, base_size: str, price: str,
+    ) -> dict:
+        """Post-only: the exchange rejects the order instead of filling it as a taker."""
+        body = {
+            "client_order_id": client_order_id or str(uuid.uuid4()),
+            "symbol": symbol,
+            "side": side,
+            "order_configuration": {
+                "limit": {"base_size": base_size, "price": price, "execution_instructions": ["post_only"]},
+            },
+        }
+        return (await self.request("POST", "/orders", body=body))["data"]
+
+    async def cancel_order(self, venue_order_id: str) -> None:
+        await self.request("DELETE", f"/orders/{venue_order_id}")
+
     async def get_order(self, venue_order_id: str) -> dict:
         return (await self.request("GET", f"/orders/{venue_order_id}"))["data"]
 

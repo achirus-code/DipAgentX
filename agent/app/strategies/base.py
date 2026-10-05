@@ -14,6 +14,7 @@ from ..i18n import L, Problem
 
 CANDLE_INTERVALS = [5, 15, 30, 60, 240, 1440]  # minutes, as supported by Revolut X
 HOUR_MS = 3_600_000
+DAY_MS = 24 * HOUR_MS
 FIAT = {"EUR", "USD", "GBP", "CHF", "PLN"}
 
 
@@ -307,6 +308,9 @@ class Strategy:
     accumulates: bool = False
     # True = offers "Max. open trades": the bot may hold several positions (trades) at once, each sold on its own
     multi_trades: bool = False
+    # > 0 = the strategy manages its trades itself (slices of one position): the engine allows this many, without
+    # spacing or min. time between them, and the limits count the bot as one open position
+    fixed_trades: int = 0
 
     def normalize(self, raw: dict[str, Any] | None) -> dict[str, Any]:
         raw = raw or {}

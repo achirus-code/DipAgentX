@@ -39,6 +39,10 @@ struct BotDetailView: View {
                     Section { ErrorLabel(message: error) }
                 }
                 openTrades(bot)
+                if bot.sliced == true, !bot.openTrades.isEmpty {
+                    // the trades the position is made of (momentum follower)
+                    Section("Opened trades \(String(bot.openTrades.count))") { SlicesList(bot: bot).padding(.vertical, 4) }
+                }
                 result(bot)
                 if bot.strategy == "ai" { claude(bot) }
                 rules(bot)

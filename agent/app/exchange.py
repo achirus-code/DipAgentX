@@ -72,6 +72,8 @@ class OrderResult:
 
 class Exchange:
     name = "base"
+    max_candles = 98  # candles per request (Revolut X: about 100)
+    supports_limit = False  # post-only limit orders (place_limit_order / cancel_order)
 
     def now_ms(self) -> int:
         return int(time.time() * 1000)
@@ -93,6 +95,15 @@ class Exchange:
         base_size: Decimal | None = None,
         quote_size: Decimal | None = None,
     ) -> str: ...
+    async def place_limit_order(
+        self, symbol: str, side: str, *, client_order_id: str, base_size: Decimal, price: Decimal,
+    ) -> str:
+        """A post-only limit order (maker) – only where ``supports_limit``."""
+        raise NotImplementedError
+
+    async def cancel_order(self, order_id: str) -> None:
+        raise NotImplementedError
+
     async def get_order(self, order_id: str) -> OrderResult: ...
     async def find_order(self, symbol: str, client_order_id: str, since: int) -> OrderResult | None:
         """Look up an order by our own client_order_id (used when the placement response got lost)."""
@@ -115,6 +126,7 @@ class Exchange:
 
 class RevolutXExchange(Exchange):
     name = "revolutx"
+    supports_limit = True
 
     # Balances only change through our own orders (trades the user makes directly on Revolut X are deliberately
     # not tracked), so they are cached and dropped whenever we place an order. The app, the holdings check and the
@@ -201,6 +213,15 @@ class RevolutXExchange(Exchange):
             quote_size=str(quote_size) if quote_size is not None else None,
         )
         return result["venue_order_id"]
+
+    async def place_limit_order(self, symbol, side, *, client_order_id, base_size, price) -> str:
+        result = await self.client.place_limit_order(
+            symbol, side, client_order_id=client_order_id, base_size=str(base_size), price=str(price),
+        )
+        return result["venue_order_id"]
+
+    async def cancel_order(self, order_id: str) -> None:
+        await self.client.cancel_order(order_id)
 
     async def get_order(self, order_id: str) -> OrderResult:
         return self._parse_order(await self.client.get_order(order_id))

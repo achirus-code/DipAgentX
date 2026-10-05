@@ -227,6 +227,44 @@ public struct TradesStrip: View {
     }
 }
 
+/// The trades a sliced position (momentum follower) is made of, oldest first: when bought, how much, at what
+/// price, what it is worth now.
+public struct SlicesList: View {
+    let bot: Bot
+
+    public init(bot: Bot) { self.bot = bot }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(bot.openTrades.enumerated()), id: \.offset) { index, trade in
+                HStack(spacing: 6) {
+                    Text(verbatim: "\(index + 1)")
+                        .font(.ui(9, weight: .bold)).foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(Color.primary.opacity(0.08)))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(verbatim: "\(Fmt.qty(trade.qty)) \(bot.baseCurrency)")
+                            .font(.ui(10.5, weight: .medium))
+                        Text(Date(ms: trade.openedAt).formatted(date: .abbreviated, time: .shortened))
+                            .font(.ui(9.5)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Entry \(Fmt.price(trade.entryPrice, bot.quoteCurrency))")
+                            .font(.ui(10)).foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Text(verbatim: Fmt.money(trade.value, bot.quoteCurrency)).font(.ui(10.5, weight: .medium))
+                            Text(Fmt.pct(trade.unrealizedPct))
+                                .font(.ui(10, weight: .medium)).foregroundStyle(trade.unrealizedPct.pnlColor)
+                        }
+                    }
+                }
+                .monospacedDigit()
+            }
+        }
+    }
+}
+
 /// "1  Value 251.20 € · +1.20 %      Target 2,460 €"
 public struct OpenTradeRow: View {
     let bot: Bot

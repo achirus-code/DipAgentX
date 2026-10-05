@@ -207,6 +207,8 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let position: BotPosition? // all open trades summed up
     public let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
     public let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
+    /// The trades are slices of one position (momentum follower, agent 1.20+) – shown as one position.
+    public let sliced: Bool?
     public let realizedPnl: Double
     public let tradesCount: Int
     public let wins: Int
@@ -215,6 +217,7 @@ public struct Bot: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
+        case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
         case strategyIcon = "strategy_icon"
@@ -235,7 +238,7 @@ public struct Bot: Codable, Identifiable, Equatable {
     public var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
 
     /// True when the bot may hold more than one trade (or does) – the card then lists them.
-    public var tradesMode: Bool { (maxTrades ?? 1) > 1 || openTrades.count > 1 }
+    public var tradesMode: Bool { sliced != true && ((maxTrades ?? 1) > 1 || openTrades.count > 1) }
 
     /// True when the sale runs through a trailing stop: the trailing strategy, or the dip buyer with
     /// "Trailing after the sell signal" (agent 1.18+) – its sale price then first lies above, later below the price.

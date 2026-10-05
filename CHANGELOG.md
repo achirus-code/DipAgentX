@@ -4,6 +4,23 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.20.0] – 2026-10-05
+
+### Added
+
+- **Momentum trend follower** (`momentum`) for ETH-EUR and BTC-EUR: invests the more of its capital the more of six
+  lookbacks (14 to 60 days, 4-hour closes) point up, in 10 % steps – fully invested in a clear uptrend, in cash in a
+  downtrend. Less in very volatile markets (above 100 % a year), a 50 % floor while the 7-day funding rate of the
+  Binance perpetual futures is below +2 % a year, optionally halved on large exchange inflows (Coin Metrics, off by
+  default). Each step is its own trade of about 10 % of the capital; it only trades when the target step changes,
+  also at a loss, and reinvests its gains.
+- **Fee-free limit orders** for the momentum follower live on Revolut X: buys at the best bid, sells at the best ask
+  (post-only, maker 0 % instead of 0.09 %). What isn't filled within 10 minutes (adjustable) is cancelled and goes
+  out as a market order; after an unfilled or rejected limit order the next 30 minutes use market orders.
+- The momentum follower counts as **one open position** for the limits and the apps show it as one position with
+  its opened trades below. It may switch from paper to live with open paper trades: they are closed (simulated) and
+  the bot starts afresh with its capital.
+
 ### Changed
 
 - **New icon with the X of Revolut X** in the bottom-right corner – app icon (macOS, iPhone), menu bar icon,

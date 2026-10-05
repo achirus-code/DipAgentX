@@ -450,3 +450,5 @@
 "Export backup …" = "Backup exportieren …";
 "Import backup …" = "Backup importieren …";
 "Filter" = "Filter";
+"Opened trades %@" = "Eröffnete Trades %@";
+"Entry %@" = "Einstieg %@";

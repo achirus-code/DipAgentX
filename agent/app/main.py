@@ -28,10 +28,10 @@ from .engine import Engine
 from .exchange import Exchange, MockExchange, RevolutXExchange
 from .i18n import Problem, as_message, lang_from_header, m, render, text
 from .revolutx import RevolutXClient, RevolutXError
-from .strategies import STRATEGIES, has_position
+from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.19.0"
+VERSION = "1.20.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -430,7 +430,13 @@ async def update_bot(bot_id: int, body: BotIn, lang: str = Depends(get_lang)) ->
     busy = has_position(bot["state"]) or bot["state"].get("pending_order")
     if busy and (symbol != bot["symbol"] or body.strategy != bot["strategy"]):
         raise fail(409, lang, "api.locked_pair_strategy")
-    if busy and body.paper != bot["paper"]:
+    # a strategy holding slices may go from paper to live with paper slices open: the engine closes them (simulated)
+    # and starts afresh – never the other way round, and never with an order in flight
+    strategy = STRATEGIES.get(body.strategy)
+    paper_slices_only = (strategy is not None and strategy.fixed_trades and not body.paper
+                         and not bot["state"].get("pending_order")
+                         and all(p.paper for p in open_positions(bot["state"])))
+    if busy and body.paper != bot["paper"] and not paper_slices_only:
         raise fail(409, lang, "api.locked_mode")
     db.update_bot(
         bot_id, name=body.name.strip(), strategy=body.strategy, symbol=symbol,
