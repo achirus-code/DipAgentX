@@ -183,7 +183,7 @@ public struct PositionStrip: View {
                 // how big the position is: its current value and what went in
                 Text("Value \(Fmt.money(position.value, bot.quoteCurrency)) · invested \(Fmt.money(position.cost, bot.quoteCurrency))")
                     .font(.ui(10.5, weight: .medium)).monospacedDigit()
-                Text("\(Fmt.qty(position.qty)) \(bot.baseCurrency) · entry \(Fmt.price(position.entryPrice, bot.quoteCurrency))")
+                Text("\(Fmt.qty(position.qty)) \(position.unit(of: bot)) · entry \(Fmt.price(position.entryPrice, bot.quoteCurrency))")
                     .font(.ui(9.5)).foregroundStyle(.secondary).monospacedDigit()
             }
             Spacer()

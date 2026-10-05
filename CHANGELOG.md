@@ -2,6 +2,30 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.22.0] – 2026-10-05
+
+### Added
+
+- **Monthly trend follower: the combination that held up best in the backtests** (see
+  `docs/strategien-backtests.md`, sections 8–12). All new options are off by default, except the Euribor hurdle:
+  - *Trend signal: price above its average or return better than the cash rate* – the trend only counts as broken
+    when both are down, which avoids many false signals.
+  - *Cash rate from the Euribor* (on by default): "return better than the cash rate" compares with what cash actually
+    earned in the same months (3-month Euribor from the ECB, fetched once a day); without the data, or switched off,
+    the fixed rate counts as before.
+  - Two more recession signs next to the unemployment rate: *jobless claims* (US initial claims of the last complete
+    month more than 5 % above a year earlier, weekly from the US Department of Labor) and *yield curve* (the US
+    10-year yield below the 3-month one at a month end of the last 24 months, from the US Treasury). A falling trend
+    only sells when at least one switched-on sign shows; without any data the trend alone decides.
+  - *Currency-hedged share class*: while the euro is above its 12-month average against the dollar (ECB month-end
+    rates), the bot holds the EUR-hedged share class of its index instead of its own instrument – the signal keeps
+    using its own instrument.
+  - *Park in instead of cash*: up to three ISINs (e.g. euro government bonds and EUR-hedged US Treasuries); while the
+    trend is down the bot buys the one with the best 12-month return, as long as it beats the cash rate.
+- **A bot can hold another instrument than its own.** The engine buys, sells, tracks orders, checks the holdings on the
+  broker and values open trades per instrument; the apps show the held instrument's ticker with the quantity. Trades
+  are booked under the instrument actually traded.
+
 ## [1.21.0] – 2026-10-05
 
 ### Added

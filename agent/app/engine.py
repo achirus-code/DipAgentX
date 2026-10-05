@@ -69,6 +69,11 @@ def broker_of(bot: dict[str, Any]) -> str:
     return bot.get("exchange") or REVOLUTX
 
 
+def held_symbol(bot: dict[str, Any], position: Position | None) -> str:
+    """The instrument a trade holds – the bot's own symbol unless the strategy bought another one."""
+    return (position.symbol if position else None) or bot["symbol"]
+
+
 def find_position(state: dict[str, Any], position_id: str | None) -> Position | None:
     """The trade with this id – without an id (orders placed before 1.13) the bot's only trade."""
     positions = open_positions(state)
@@ -373,7 +378,13 @@ class Engine:
             log.warning("Housekeeping on %s failed: %s", broker, exc)
         # stopped bots still need a price while they hold a position (unrealised P&L) or an order is in flight
         relevant = [b for b in bots if b["enabled"] or has_position(b["state"]) or b["state"].get("pending_order")]
-        views, errors = await self._market_views(exchange, sorted({b["symbol"] for b in relevant}))
+        symbols = set()
+        for b in relevant:  # the bots' symbols and what their trades hold (or an order in flight buys) instead
+            symbols.add(b["symbol"])
+            symbols.update(p.symbol for p in open_positions(b["state"]) if p.symbol)
+            if (b["state"].get("pending_order") or {}).get("symbol"):
+                symbols.add(b["state"]["pending_order"]["symbol"])
+        views, errors = await self._market_views(exchange, sorted(symbols))
         self.exchange_errors[broker] = next(iter(errors.values()), None)
         await self._verify_holdings(broker, bots)
 
@@ -387,7 +398,7 @@ class Engine:
                     if current := self.db.get_bot(bot["id"]):  # re-read: the API may have changed it meanwhile
                         self._persist(current, current["state"], status, self._snapshot(current))
                 continue
-            await self.process(bot["id"], view)
+            await self.process(bot["id"], view, views)
 
     # --- per bot ------------------------------------------------------------
 
@@ -403,7 +414,7 @@ class Engine:
             return
         self.db.update_bot(bot["id"], state=state, status=status, last_check=self._last_check[bot["id"]])
 
-    async def process(self, bot_id: int, view: MarketView) -> None:
+    async def process(self, bot_id: int, view: MarketView, views: dict[str, MarketView] | None = None) -> None:
         async with self._locks[bot_id]:
             bot = self.db.get_bot(bot_id)
             if not bot or not bot["enabled"]:
@@ -426,7 +437,7 @@ class Engine:
                 if mismatch := state.get("holdings_mismatch"):
                     # the exchange holds less than we booked – no trading until that is resolved (a late fill
                     # gets booked above; otherwise "Sell position now" sells what is there and writes off the rest)
-                    base = view.instrument.get("short") or split_symbol(bot["symbol"])[0]
+                    base = mismatch.get("base") or view.instrument.get("short") or split_symbol(bot["symbol"])[0]
                     status = m("engine.holdings_mismatch", booked=qty(Decimal(mismatch["booked"])),
                                held=qty(Decimal(mismatch["held"])), base=base)
                     return
@@ -435,7 +446,7 @@ class Engine:
                     # the prices don't move – the strategy waits for the opening as well
                     status = view.closed
                     return
-                status = await self._evaluate(bot, state, view)
+                status = await self._evaluate(bot, state, view, views)
                 state.pop("retry_after", None)
             except Exception as exc:  # noqa: BLE001
                 log.warning("Bot %s: %s", bot["name"], exc)
@@ -445,16 +456,28 @@ class Engine:
             finally:
                 self._persist(bot, state, status, before)
 
-    async def _evaluate(self, bot: dict[str, Any], state: dict[str, Any], view: MarketView) -> Message:
+    async def _evaluate(self, bot: dict[str, Any], state: dict[str, Any], view: MarketView,
+                        views: dict[str, MarketView] | None = None) -> Message:
         strategy = STRATEGIES.get(bot["strategy"])
         if strategy is None:
             return m("engine.unknown_strategy", strategy=bot["strategy"])
+        views = {**(views or {}), bot["symbol"]: view}
+        exchange = self.exchange_for(bot)
+
+        async def view_of(symbol: str) -> MarketView:
+            """Market data of another instrument of the broker – fetched once per check."""
+            if symbol not in views:
+                views[symbol] = await self.market_view(symbol, exchange=exchange)
+            return views[symbol]
+
         positions = open_positions(state)
+        held: dict[str, MarketView] = {p.id: await view_of(p.symbol) for p in positions if p.symbol}
         if positions:
             for position in positions:
-                position.peak = max(position.peak, view.price)
+                price = held[position.id].price if position.id in held else view.price
+                position.peak = max(position.peak, price)
                 if position.trail_peak is not None:
-                    position.trail_peak = max(position.trail_peak, view.price)
+                    position.trail_peak = max(position.trail_peak, price)
             store_positions(state, positions)
 
         _, quote = split_symbol(bot["symbol"])
@@ -462,7 +485,12 @@ class Engine:
 
         def context(position: Position | None) -> Context:
             return Context(params, position, state, view, quote, self.sell_fees(bot),
-                           journal=lambda entry: self.db.add_ai_decision(bot_id=bot["id"], **entry))
+                           journal=lambda entry: self.db.add_ai_decision(bot_id=bot["id"], **entry),
+                           view_of=view_of, held=held.get(position.id) if position else None)
+
+        async def buy(action: Buy) -> Message:
+            target = action.symbol or bot["symbol"]
+            return await self._buy(bot, state, await view_of(target), action.quote_amount, action.reason, target)
 
         if strategy.accumulates:  # savings plan: one position that every buy adds to
             position = positions[0] if positions else None
@@ -470,9 +498,9 @@ class Engine:
             if position:
                 store_positions(state, positions)  # the strategy may have changed the trade (an armed trailing stop)
             if isinstance(decision.action, Buy):
-                return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
+                return await buy(decision.action)
             if isinstance(decision.action, Sell) and position:
-                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold = await self._sell_unless_loss(bot, state, held.get(position.id, view), position, decision.action, quote)
                 return sold[1]
             state.pop("position_targets", None)
             if not self.blocked_buy(bot, state):
@@ -490,7 +518,8 @@ class Engine:
             position_targets[position.id] = state.pop("targets", None)
             statuses[position.id] = decision.status
             if isinstance(decision.action, Sell):
-                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold, status = await self._sell_unless_loss(bot, state, held.get(position.id, view), position,
+                                                            decision.action, quote)
                 if sold:
                     return status
                 statuses[position.id] = status
@@ -517,7 +546,7 @@ class Engine:
                 if wait > 0:
                     buy_status = m("engine.trade_interval", left=dur(wait))
                 elif next_price is None or view.price <= next_price:
-                    return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason)
+                    return await buy(decision.action)
                 else:
                     buy_status = m("engine.trade_spacing", price=money(next_price, quote))
             elif wait > 0:
@@ -582,9 +611,14 @@ class Engine:
         bot = self.db.get_bot(bot_id)
         if not bot:
             raise KeyError(bot_id)
-        view = await self.market_view(bot["symbol"], exchange=self.exchange_for(bot))
+        exchange = self.exchange_for(bot)
+        view = await self.market_view(bot["symbol"], exchange=exchange)
         if view.closed:
             raise Problem("err.market_closed", reason=view.closed)
+        held = {}
+        for p in open_positions(bot["state"]):
+            if p.symbol and p.symbol not in held:
+                held[p.symbol] = await self.market_view(p.symbol, exchange=exchange)
         async with self._locks[bot_id]:
             bot = self.db.get_bot(bot_id)
             if not bot:
@@ -600,7 +634,8 @@ class Engine:
             status: Message = bot["status"]
             try:
                 for position in chosen:
-                    status = await self._sell(bot, state, view, reason or m("engine.manual_close"), position)
+                    pview = held.get(position.symbol) or view if position.symbol else view
+                    status = await self._sell(bot, state, pview, reason or m("engine.manual_close"), position)
                     if state.get("pending_order"):  # still filling – the next tick finishes it, the rest waits
                         break
             except Exception as exc:
@@ -650,12 +685,13 @@ class Engine:
                 raise Problem("err.order_running")
             before = self._snapshot(bot)
             exchange = self.exchange_for(bot)
-            pair = await exchange.pair(bot["symbol"])
+            pair = await exchange.pair(held_symbol(bot, chosen[0]))
             store_positions(state, [p for p in positions if p not in chosen])
             state.pop("holdings_mismatch", None)
             state.pop("fill_check", None)
             state["last_sell_at"] = exchange.now_ms()
-            status = m("engine.position_discarded", qty=qty(sum(p.qty for p in chosen)), base=self._base(bot, pair),
+            status = m("engine.position_discarded", qty=qty(sum(p.qty for p in chosen)),
+                       base=self._base(bot, pair, chosen[0].symbol),
                        cost=money(sum(p.cost for p in chosen), pair.quote))
             self.db.add_event(bot["id"], "info", status)
             self._holdings_checked_at[broker_of(bot)] = 0
@@ -740,8 +776,13 @@ class Engine:
 
     # --- order execution ------------------------------------------------------
 
-    async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message) -> Message:
+    async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message,
+                   symbol: str | None = None) -> Message:
+        """Buy for ``amount`` – the bot's instrument, or ``symbol`` (``view`` is that instrument's market)."""
         strategy = STRATEGIES[bot["strategy"]]
+        symbol = symbol or bot["symbol"]
+        if symbol != bot["symbol"] and view.closed:
+            return view.closed
         if state.get("pending_order"):
             return m("engine.order_running_no_buy")
         positions = open_positions(state)
@@ -761,7 +802,7 @@ class Engine:
             fee = self._paper_fee(bot, "sell", gross)
             self._record_sell(bot, state, pair, open_position.qty, gross - fee, price, fee, None, True,
                               m("engine.mode_changed_close"), position_id=open_position.id)
-        pair = await exchange.pair(bot["symbol"])
+        pair = await exchange.pair(symbol)
         quote_size = round_down(amount, pair.quote_step)
         if quote_size < pair.min_order_size_quote:
             raise Problem("err.amount_below_min", amount=money(quote_size, pair.quote),
@@ -786,14 +827,14 @@ class Engine:
                 if bought <= 0:
                     raise Problem("err.amount_below_min", amount=money(quote_size, pair.quote),
                                   min=money(price + fee, pair.quote))
-                return self._record_buy(bot, state, pair, bought, spent, price, fee, None, True, reason)
+                return self._record_buy(bot, state, pair, bought, spent, price, fee, None, True, reason, symbol=symbol)
 
             balances = await exchange.balances()
             available = balances.get(pair.quote, (Decimal(0), Decimal(0)))[0]
             if available < quote_size:
                 raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
                               needed=money(quote_size, pair.quote))
-            pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size)
+            pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size, symbol=symbol)
         # the pending order already counts towards the limits – don't hold up other bots while it fills
         return await self._track_order(bot, state, pair, pending)
 
@@ -802,13 +843,15 @@ class Engine:
         fees = self.paper_fees(broker_of(bot))
         return gross * Decimal(str(fees[side])) + Decimal(str(fees.get("fixed") or 0))
 
-    def _base(self, bot: dict, pair: PairInfo) -> str:
+    def _base(self, bot: dict, pair: PairInfo, symbol: str | None = None) -> str:
         """The unit of the bot's quantities as people know it: ETH – or AAPL instead of an ISIN."""
-        return self.exchange_for(bot).instrument(bot["symbol"]).get("short") or pair.base
+        return self.exchange_for(bot).instrument(symbol or bot["symbol"]).get("short") or pair.base
 
     async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position) -> Message:
+        """Sell a whole trade; ``view`` is the market of the instrument it holds."""
         exchange = self.exchange_for(bot)
-        pair = await exchange.pair(bot["symbol"])
+        symbol = held_symbol(bot, position)
+        pair = await exchange.pair(symbol)
         amount = position.qty
 
         if position.paper:  # sell the way it was bought – never "simulate" selling real coins
@@ -816,7 +859,7 @@ class Engine:
             gross = amount * price
             fee = self._paper_fee(bot, "sell", gross)
             return self._record_sell(bot, state, pair, amount, gross - fee, price, fee, None, True, reason,
-                                     position_id=position.id)
+                                     position_id=position.id, symbol=symbol)
 
         balances = await exchange.balances()
         available, total = balances.get(pair.base, (Decimal(0), Decimal(0)))
@@ -829,17 +872,18 @@ class Engine:
             if amount < pair.min_order_size:
                 return self._write_off(bot, state, pair, position, missing)
             status = await self._track_order(bot, state, pair, await self._submit_order(
-                bot, state, "sell", reason, base_size=amount, position_id=position.id))
+                bot, state, "sell", reason, base_size=amount, position_id=position.id, symbol=symbol))
             if not state.get("pending_order") and (rest := find_position(state, position.id)):
                 return self._write_off(bot, state, pair, rest, missing)
             return status
         if amount <= 0 or amount < pair.min_order_size:
-            raise Problem("err.sell_below_min", qty=qty(amount), base=self._base(bot, pair),
+            raise Problem("err.sell_below_min", qty=qty(amount), base=self._base(bot, pair, position.symbol),
                           min=qty(pair.min_order_size), available=qty(available))
         if available + pair.min_order_size < position.qty:
             self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
-                                                    available=qty(available), base=self._base(bot, pair)))
-        pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
+                                                    available=qty(available), base=self._base(bot, pair, position.symbol)))
+        pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id,
+                                           symbol=symbol)
         return await self._track_order(bot, state, pair, pending)
 
     def _write_off(self, bot: dict, state: dict, pair: PairInfo, position: Position, missing: Decimal) -> Message:
@@ -848,7 +892,7 @@ class Engine:
         store_positions(state, [p for p in open_positions(state) if p.id != position.id])
         state.pop("holdings_mismatch", None)
         state.pop("fill_check", None)
-        msg = m("engine.position_written_off", qty=qty(missing), base=self._base(bot, pair),
+        msg = m("engine.position_written_off", qty=qty(missing), base=self._base(bot, pair, position.symbol),
                 cost=money(position.cost * missing / position.qty, pair.quote))
         self.db.add_event(bot["id"], "error", msg)
         log.error("Bot %s: %s", bot["name"], render(msg, "en"))
@@ -858,6 +902,7 @@ class Engine:
     async def _submit_order(
         self, bot: dict, state: dict, side: str, reason: Message,
         *, base_size: Decimal | None = None, quote_size: Decimal | None = None, position_id: str | None = None,
+        symbol: str | None = None,
     ) -> dict:
         """Place a market order exactly once.
 
@@ -873,13 +918,14 @@ class Engine:
             "quote_size": str(quote_size) if quote_size is not None else None,
             "base_size": str(base_size) if base_size is not None else None,
             "position_id": position_id,  # the trade a sell closes
+            "symbol": symbol or bot["symbol"],  # the instrument (not always the bot's own)
         }
         state["pending_order"] = pending
         self.db.update_bot(bot["id"], state=state)
         exchange = self.exchange_for(bot)
         try:
             pending["id"] = await exchange.place_market_order(
-                bot["symbol"], side, client_order_id=pending["client_order_id"],
+                pending["symbol"], side, client_order_id=pending["client_order_id"],
                 base_size=base_size, quote_size=quote_size,
             )
         except Exception as exc:
@@ -913,10 +959,11 @@ class Engine:
         """Finish a pending order. Returns the new status once the order is settled, else None."""
         pending = state["pending_order"]
         exchange = self.exchange_for(bot)
-        pair = await exchange.pair(bot["symbol"])
+        symbol = pending.get("symbol") or bot["symbol"]
+        pair = await exchange.pair(symbol)
         overdue = now_ms() - pending["placed_at"] > (exchange.order_lookup_grace_ms or ORDER_LOOKUP_GRACE_MS)
         if not pending.get("id"):
-            found = await exchange.find_lost_order(bot["symbol"], pending)
+            found = await exchange.find_lost_order(symbol, pending)
             if found is None:
                 return self._abandon_order(bot, state, pending) if overdue else None
             pending["id"] = found.order_id
@@ -950,25 +997,39 @@ class Engine:
             self._holdings_checked_at[broker] = now_ms() - HOLDINGS_CHECK_MS + 5 * 60_000
             return
         self._holdings_checked_at[broker] = now_ms()
+        # what the bots booked per instrument they hold (usually their own symbol, see Position.symbol)
         booked: dict[str, Decimal] = defaultdict(Decimal)
+        held_by: dict[int, set[str]] = defaultdict(set)
         for b in live:
-            booked[split_symbol(b["symbol"])[0]] += sum((p.qty for p in open_positions(b["state"]) if not p.paper), Decimal(0))
+            for p in open_positions(b["state"]):
+                if not p.paper:
+                    symbol = held_symbol(b, p)
+                    booked[split_symbol(symbol)[0]] += p.qty
+                    held_by[b["id"]].add(symbol)
         for b in live:
-            base, _ = split_symbol(b["symbol"])
-            held = balances.get(base, (Decimal(0), Decimal(0)))[1]
-            pair = await exchange.pair(b["symbol"])
-            unit = self._base(b, pair)
-            tolerance = max(pair.min_order_size, booked[base] * Decimal("0.005"))
+            mismatch = None
+            unit = ""
+            for symbol in sorted(held_by[b["id"]]):
+                base, _ = split_symbol(symbol)
+                held = balances.get(base, (Decimal(0), Decimal(0)))[1]
+                pair = await exchange.pair(symbol)
+                unit = self._base(b, pair, symbol)
+                tolerance = max(pair.min_order_size, booked[base] * Decimal("0.005"))
+                if booked[base] - held > tolerance:
+                    mismatch = (booked[base], held, unit)
+                    break
             async with self._locks[b["id"]]:
                 bot = self.db.get_bot(b["id"])
                 if not bot:
                     continue
                 state = bot["state"]
                 before = self._snapshot(bot)
-                if booked[base] - held > tolerance:
+                if mismatch:
                     if not state.get("holdings_mismatch"):
-                        state["holdings_mismatch"] = {"booked": str(booked[base]), "held": str(held), "since": now_ms()}
-                        msg = m("engine.holdings_mismatch_event", booked=qty(booked[base]), held=qty(held), base=unit)
+                        booked_qty, held, unit = mismatch
+                        state["holdings_mismatch"] = {"booked": str(booked_qty), "held": str(held), "since": now_ms(),
+                                                      "base": unit}
+                        msg = m("engine.holdings_mismatch_event", booked=qty(booked_qty), held=qty(held), base=unit)
                         self.db.add_event(bot["id"], "error", msg)
                         log.error("Bot %s: %s", bot["name"], render(msg, "en"))
                 elif state.pop("holdings_mismatch", None):
@@ -985,7 +1046,7 @@ class Engine:
             if not position or position.paper or state.get("fill_checked") == sold["order_id"]:
                 return False
             state["fill_check"] = {"order_id": sold["order_id"], "side": "sell", "position_id": position.id,
-                                   "until": sold["at"] + FILL_CHECK_MS}
+                                   "until": sold["at"] + FILL_CHECK_MS, "symbol": sold.get("symbol")}
             return True
         # sells booked before 1.13 don't record their trade – a bot held only one then
         positions = open_positions(state)
@@ -1015,7 +1076,8 @@ class Engine:
                 state.pop("fill_check", None)
                 state["fill_checked"] = order_id
             return None
-        pair = await exchange.pair(bot["symbol"])
+        symbol = check.get("symbol") or bot["symbol"]
+        pair = await exchange.pair(symbol)
         booked = self.db.booked_for_order(order_id)
         fee_base = r.fee if r.fee_currency == pair.base else Decimal(0)
         fee_quote = r.fee if r.fee_currency == pair.quote else Decimal(0)
@@ -1033,13 +1095,14 @@ class Engine:
             reason = m("engine.late_fill", id=order_id)
             if check["side"] == "sell" and (position := find_position(state, check.get("position_id"))):
                 status = self._record_sell(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False,
-                                           reason, position_id=position.id)
+                                           reason, position_id=position.id, symbol=symbol)
             elif check["side"] == "buy":
                 # the rest belongs to the trade this order opened (a new one if that is sold already)
                 into = next((p.id for p in open_positions(state) if p.order_id == order_id), None)
                 status = self._record_buy(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False,
-                                          reason, into=into)
-            self.db.add_event(bot["id"], "info", m("engine.late_fill_booked", id=order_id, qty=qty(more_qty), base=self._base(bot, pair)))
+                                          reason, into=into, symbol=symbol)
+            self.db.add_event(bot["id"], "info", m("engine.late_fill_booked", id=order_id, qty=qty(more_qty),
+                                                   base=self._base(bot, pair, symbol)))
         if r.terminal and (more_qty >= pair.base_step or now_ms() > check["until"]):
             state.pop("fill_check", None)
             state["fill_checked"] = order_id
@@ -1072,7 +1135,7 @@ class Engine:
             return m("engine.order_booked")
         if short_fill(pending, r, self.exchange_for(bot).partial_fills):
             state["fill_check"] = {"order_id": r.order_id, "side": pending["side"], "until": now_ms() + FILL_CHECK_MS,
-                                   "position_id": pending.get("position_id")}
+                                   "position_id": pending.get("position_id"), "symbol": pending.get("symbol")}
         self._holdings_checked_at[broker_of(bot)] = 0  # verify the books against the exchange at the next tick
         if r.filled_qty <= 0:
             msg = (m("engine.order_failed_reason", status=r.status, reason=r.reject_reason) if r.reject_reason
@@ -1086,17 +1149,20 @@ class Engine:
         if pending["side"] == "buy":
             return self._record_buy(
                 bot, state, pair, r.filled_qty - fee_base, r.filled_amount + fee_quote,
-                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"],
+                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], symbol=pending.get("symbol"),
             )
         return self._record_sell(
             bot, state, pair, r.filled_qty + fee_base, r.filled_amount - fee_quote,
             r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], position_id=pending.get("position_id"),
+            symbol=pending.get("symbol"),
         )
 
     # --- bookkeeping ----------------------------------------------------------
 
-    def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason, into=None) -> Message:
+    def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason, into=None,
+                    symbol=None) -> Message:
         """Book a buy: a new trade – or more of an existing one (``into``, or the savings plan's only position)."""
+        symbol = symbol or bot["symbol"]
         positions = open_positions(state)
         state.pop("targets", None)  # the next check computes what the bot waits for now
         state.pop("position_targets", None)
@@ -1110,25 +1176,28 @@ class Engine:
             position.buys += 1
             position.peak = max(position.peak, price)
         else:
-            position = Position(bought, spent, now_ms(), price, paper=paper, order_id=order_id)
+            position = Position(bought, spent, now_ms(), price, paper=paper, order_id=order_id,
+                                symbol=symbol if symbol != bot["symbol"] else None)
             positions.append(position)
         store_positions(state, positions)
         state["last_buy_at"] = self.exchange_for(bot).now_ms()
         self.db.add_trade(
-            bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="buy",
+            bot_id=bot["id"], bot_name=bot["name"], symbol=symbol, side="buy",
             price=str(price), base_qty=str(bought), quote_amount=str(spent), fee=str(fee), pnl=None,
             order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, exchange=broker_of(bot),
         )
-        status = m("engine.bought", qty=qty(bought), base=self._base(bot, pair), amount=money(spent, pair.quote))
+        status = m("engine.bought", qty=qty(bought), base=self._base(bot, pair, symbol), amount=money(spent, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
         return status
 
-    def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason, position_id=None) -> Message:
+    def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason, position_id=None,
+                     symbol=None) -> Message:
         positions = open_positions(state)
         position = find_position(state, position_id)
         position = next((p for p in positions if position and p.id == position.id), None)
         if position is None:
             return m("engine.no_position")
+        symbol = symbol or held_symbol(bot, position)
         state.pop("targets", None)  # the next check computes what the bot waits for now
         state.pop("position_targets", None)
         sold = min(sold, position.qty)
@@ -1142,13 +1211,13 @@ class Engine:
         state["last_sell_at"] = self.exchange_for(bot).now_ms()
         if order_id and not paper and "#" not in order_id:
             # lets the next tick spot a trade that survived its sell (a fill reported short)
-            state["last_live_sell"] = {"order_id": order_id, "position_id": position.id, "at": now_ms()}
+            state["last_live_sell"] = {"order_id": order_id, "position_id": position.id, "at": now_ms(), "symbol": symbol}
         self.db.add_trade(
-            bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="sell",
+            bot_id=bot["id"], bot_name=bot["name"], symbol=symbol, side="sell",
             price=str(price), base_qty=str(sold), quote_amount=str(proceeds), fee=str(fee), pnl=str(pnl),
             order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, exchange=broker_of(bot),
         )
-        status = m("engine.sold", qty=qty(sold), base=self._base(bot, pair), amount=money(proceeds, pair.quote),
+        status = m("engine.sold", qty=qty(sold), base=self._base(bot, pair, symbol), amount=money(proceeds, pair.quote),
                    pnl=money(pnl, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
         return status
@@ -1168,8 +1237,14 @@ class Engine:
         position_targets = bot["state"].get("position_targets") or {}
 
         def pos_json(position: Position) -> dict[str, Any]:
-            price = Decimal(str(snap["bid"])) if snap else position.entry_price
+            own = self.snapshots.get(position.symbol) if position.symbol else snap
+            price = Decimal(str(own["bid"])) if own else position.entry_price
             value = position.value(price)
+            extra: dict[str, Any] = {}
+            if position.symbol:  # another instrument than the bot's (a currency-hedged ETF, bonds to park in)
+                other = self.exchange_for(broker).instrument(position.symbol)
+                extra = {"symbol": position.symbol, "display_symbol": other.get("name") or split_symbol(position.symbol)[0],
+                         "base_currency": other.get("short") or split_symbol(position.symbol)[0]}
             return {
                 "id": position.id,
                 "qty": float(position.qty),
@@ -1180,6 +1255,7 @@ class Engine:
                 "unrealized_pnl": float(value - position.cost),
                 "unrealized_pct": position.pnl_pct(price),
                 "paper": position.paper,
+                **extra,
             }
 
         def trade_json(position: Position) -> dict[str, Any]:
@@ -1192,7 +1268,8 @@ class Engine:
         if positions:
             total = Position(sum(p.qty for p in positions), sum(p.cost for p in positions),
                              min(p.opened_at for p in positions), max(p.peak for p in positions),
-                             paper=positions[0].paper, id="total")
+                             paper=positions[0].paper, id="total",
+                             symbol=positions[0].symbol if len({p.symbol for p in positions}) == 1 else None)
         return {
             "id": bot["id"],
             "name": bot["name"],

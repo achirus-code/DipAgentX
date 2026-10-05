@@ -132,7 +132,7 @@ struct BotDetailView: View {
                 // older agents: one position without an id – sold as a whole
                 let tradeId: String? = several ? (trade.id ?? "") : nil
                 Section {
-                    LabeledContent("Amount", value: "\(Fmt.qty(trade.qty)) \(bot.baseCurrency)")
+                    LabeledContent("Amount", value: "\(Fmt.qty(trade.qty)) \(trade.unit(of: bot))")
                     LabeledContent("Entry", value: Fmt.price(trade.entryPrice, bot.quoteCurrency))
                     LabeledContent("Invested", value: Fmt.money(trade.cost, bot.quoteCurrency))
                     LabeledContent("Value", value: Fmt.money(trade.value, bot.quoteCurrency))
