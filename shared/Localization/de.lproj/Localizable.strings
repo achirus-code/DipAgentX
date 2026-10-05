@@ -507,3 +507,12 @@
 "Brokers" = "Broker";
 "Stocks, ETFs and crypto" = "Aktien, ETFs und Krypto";
 "A broker that is switched off is left alone: its bots stop, no prices, no login. With only one broker on, the tabs above the statistics disappear. A broker with open trades can't be switched off." = "Ein ausgeschalteter Broker bleibt unberührt: Seine Bots stoppen, keine Kurse, keine Anmeldung. Ist nur ein Broker eingeschaltet, verschwinden die Tabs über der Statistik. Ein Broker mit offenen Trades lässt sich nicht ausschalten.";
+
+/* Signal overview of the monthly trend follower */
+"Signals" = "Signale";
+"Pillars" = "Säulen";
+"Hedged" = "Gesichert";
+"Bonds" = "Anleihen";
+"Cash" = "Cash";
+"Drifted %@ pp from the target shares – the amounts after the arrow restore them (a new amount applies from the bot's next buy)." = "%@ Pp von den Soll-Anteilen abgewichen – die Beträge nach dem Pfeil stellen sie wieder her (ein neuer Betrag gilt ab dem nächsten Kauf des Bots).";
+"Close to the target shares (actual / target) – rebalance once a year." = "Nah an den Soll-Anteilen (Ist / Soll) – einmal im Jahr angleichen.";

@@ -23,7 +23,7 @@ from .config import Settings
 from .db import Database, now_ms, scoped
 from .errors import ExchangeError
 from .exchange import REVOLUTX, Candle, Exchange, Fees, OrderResult, PairInfo, Ticker, UnconfiguredExchange
-from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
+from .i18n import Problem, as_message, dump, dur, m, message_key, money, month, qty, render
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
 from .strategies.base import DAY_MS, fetch_daily_candles
 
@@ -150,6 +150,9 @@ class CandleCache:
         candles = await exchange.candles(symbol, interval, since, until)
         self._entries[key] = (bucket, now_ms(), candles)
         return candles
+
+
+PILLAR_DRIFT = 5.0  # percentage points a trend follower may drift from its share before rebalancing is suggested
 
 
 class Engine:
@@ -1233,6 +1236,52 @@ class Engine:
 
     # --- views for the API ------------------------------------------------------
 
+    def _bot_value(self, bot: dict[str, Any]) -> float:
+        """What a bot is worth now: its open trades at the bid, or the money it waits with (the monthly trend
+        follower reinvests its last sale)."""
+        positions = open_positions(bot["state"])
+        if positions:
+            total = 0.0
+            for position in positions:
+                snap = self.snapshots.get(position.symbol or bot["symbol"])
+                price = Decimal(str(snap["bid"])) if snap else position.entry_price
+                total += float(position.value(price))
+            return total
+        params = bot["params"]
+        capital = (bot["state"].get("monthly") or {}).get("capital")
+        return float(capital if capital and params.get("reinvest", True) else params.get("amount") or 0)
+
+    def pillars(self, bot: dict[str, Any], lang: str = "en") -> dict[str, Any] | None:
+        """The running trend followers of the bot's broker side by side: the share each should have (by its
+        amount) and has (by its value) – the app suggests rebalancing once they drift apart."""
+        if bot["strategy"] != "trend":
+            return None
+        group = [b for b in self.db.list_bots() if b["strategy"] == "trend" and b["enabled"]
+                 and broker_of(b) == broker_of(bot)]
+        if len(group) < 2 or bot["id"] not in {b["id"] for b in group}:
+            return None
+        amounts = [float(b["params"].get("amount") or 0) for b in group]
+        values = [self._bot_value(b) for b in group]
+        if not sum(amounts) or not sum(values):
+            return None
+        shares = [{"id": b["id"], "name": b["name"], "value": v, "target": a / sum(amounts) * 100,
+                   "actual": v / sum(values) * 100, "rebalanced": a / sum(amounts) * sum(values)}
+                  for b, a, v in zip(group, amounts, values)]
+        drift = max(abs(x["actual"] - x["target"]) for x in shares)
+        return {"shares": shares, "total": sum(values), "drift": drift, "due": drift >= PILLAR_DRIFT}
+
+    @staticmethod
+    def signals(bot: dict[str, Any], lang: str = "en") -> dict[str, Any] | None:
+        """A strategy's overview of its signals (the monthly trend follower), rendered for the app."""
+        raw = bot["state"].get("signals")
+        if not raw or not bot["enabled"]:
+            return None
+        rows = [{"label": render(r["label"], lang), "value": render(r["value"], lang), "state": r.get("state"),
+                 "note": render(r["note"], lang) if r.get("note") else None} for r in raw.get("rows", [])]
+        history = [{"month": h["month"], "label": render(m("signals.month", month=month(h["month"])), lang), "state": h["state"],
+                    "name": h.get("name")} for h in raw.get("history", [])]
+        return {"rows": rows, "history": history, "at": raw.get("at")}
+
     def describe_bot(self, bot: dict[str, Any], stats: dict[int, dict[str, Any]], lang: str = "en") -> dict[str, Any]:
         base, quote = split_symbol(bot["symbol"])
         broker = broker_of(bot)
@@ -1315,6 +1364,8 @@ class Engine:
             "losses": int(s.get("losses") or 0),
             "market": {"price": snap["price"], "change_24h": snap["change_24h"],
                        "closed": render(snap["closed"], lang) if snap.get("closed") else None} if snap else None,
+            "signals": self.signals(bot, lang),
+            "pillars": self.pillars(bot, lang),
         }
 
     def summary(self, broker: str = REVOLUTX) -> dict[str, Any]:

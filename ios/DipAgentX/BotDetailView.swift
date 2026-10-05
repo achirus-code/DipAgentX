@@ -39,6 +39,15 @@ struct BotDetailView: View {
                     Section { ErrorLabel(message: error) }
                 }
                 openTrades(bot)
+                if let signals = bot.signals {
+                    Section("Signals") { SignalList(signals: signals, compact: false).padding(.vertical, 4) }
+                }
+                if let pillars = bot.pillars {
+                    Section("Pillars") {
+                        PillarList(pillars: pillars, currency: bot.quoteCurrency, current: bot.id, compact: false)
+                            .padding(.vertical, 4)
+                    }
+                }
                 result(bot)
                 if bot.strategy == "ai" { claude(bot) }
                 rules(bot)

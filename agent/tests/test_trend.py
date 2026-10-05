@@ -150,10 +150,9 @@ async def test_unemployment_decides_whether_a_falling_trend_sells(monkeypatch):
     d = await s.evaluate(ctx(MonthlyExchange(FALLING, 89), bought_at("110"), unemployment=True))
     assert isinstance(d.action, Sell) and "trend alone decides" in render(d.action.reason, "en")
 
-    # a rising trend never asks
-    calls.clear()
+    # a rising trend buys whatever the sign says – it is only looked up for the overview
+    monkeypatch.setattr(macro, "unemployment", feed(macro.Unemployment("2026-08", 4.4, 4.2)))
     assert isinstance((await s.evaluate(ctx(MonthlyExchange(RISING, 113), unemployment=True))).action, Buy)
-    assert not calls
 
 
 async def test_decides_once_a_month_and_again_when_the_rules_change():
@@ -295,6 +294,39 @@ async def test_monthly_trend_follower_on_trade_republic(tmp_path: Path):
     bot = db.get_bot(bot_id)
     assert not open_positions(bot["state"]) and render(bot["status"], "en").startswith("In cash")
 
+
+
+async def test_the_app_sees_the_signals_and_the_pillars(tmp_path: Path):
+    db, engine, tr = two_brokers(tmp_path)
+    start = ms(2025, 1, 1, 0, 0)
+    tr._price = lambda symbol, t: 100 + (t - start) / DAY * 0.1
+    world = db.create_bot("World", "trend", EUNL, {"amount": 3000}, True, True, exchange=TRADEREPUBLIC)
+    gold = db.create_bot("Gold", "trend", SXR8, {"amount": 1000, "signal": "either"}, True, True,
+                         exchange=TRADEREPUBLIC)
+    await engine.tick()
+
+    card = engine.describe_bot(db.get_bot(world), db.trade_stats(), "de")
+    rows = card["signals"]["rows"]
+    assert rows[0]["label"] == "Entscheidung Okt. 2026" and rows[0]["value"] == "investiert" and rows[0]["state"] == "on"
+    assert rows[1]["label"] == "Kurs vs. 10-Monats-Ø" and rows[1]["state"] == "on"
+    assert rows[1]["note"].startswith("Heute") and "aus unter" in rows[1]["note"]
+    assert card["signals"]["history"] == [{"month": "2026-10", "label": "Okt. 2026", "state": "in", "name": None}]
+    gold_rows = engine.describe_bot(db.get_bot(gold), db.trade_stats(), "en")["signals"]["rows"]
+    assert [r["label"] for r in gold_rows] == ["Decision Oct 2026", "Price vs. 10-month average", "12-month return vs. cash"]
+
+    pillars = card["pillars"]
+    assert [round(x["target"]) for x in pillars["shares"]] == [75, 25] and not pillars["due"]
+    assert abs(pillars["total"] - 4000) < 20
+
+    # the gold bot's amount is raised: the shares no longer match – rebalancing is suggested
+    db.update_bot(gold, params={"amount": 3000, "signal": "either"})
+    pillars = engine.describe_bot(db.get_bot(world), db.trade_stats())["pillars"]
+    assert [round(x["target"]) for x in pillars["shares"]] == [50, 50] and pillars["due"]
+    assert abs(pillars["shares"][0]["rebalanced"] - pillars["total"] / 2) < 0.01
+
+    db.update_bot(gold, enabled=False)  # a single trend follower has nothing to compare with
+    assert engine.describe_bot(db.get_bot(world), db.trade_stats())["pillars"] is None
+    assert engine.describe_bot(db.get_bot(gold), db.trade_stats())["signals"] is None
 
 # --- C7: combined signal, more recession signs, Euribor, currency-hedged share class, parking in bonds ----------
 
