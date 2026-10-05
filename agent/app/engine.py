@@ -727,17 +727,16 @@ class Engine:
             return status
 
     async def reset_paper_broker(self, broker: str = REVOLUTX) -> int:
-        """Start the broker's whole paper result from scratch (every bot on it). Bots holding a live trade or with an
-        order in flight are skipped – live trades are never touched. Returns the number of simulated trades deleted."""
-        deleted = 0
-        for bot in self.db.list_bots():
-            if broker_of(bot) != broker:
-                continue
-            try:
-                await self.reset_paper(bot["id"])
-            except Problem:
-                continue
-        deleted = self.db.delete_paper_trades_of_broker(broker)  # what is left, e.g. trades of deleted bots
+        """Start the broker from scratch: every trade is deleted and every bot's open paper trades and counters are
+        reset. Refuses while a bot holds a live trade or has an order in flight. Returns the trades deleted."""
+        bots = [b for b in self.db.list_bots() if broker_of(b) == broker]
+        if any(bot_has_live_position(b) for b in bots):
+            raise Problem("err.reset_live_open")
+        if any(b["state"].get("pending_order") for b in bots):
+            raise Problem("err.order_running")
+        for bot in bots:
+            await self.reset_paper(bot["id"])
+        deleted = self.db.delete_trades_of_broker(broker)  # what is left: live history, trades of deleted bots
         self.db.add_event(None, "info", m("event.paper_reset_broker", broker=BROKER_TITLES[broker]))
         return deleted
 

@@ -165,6 +165,7 @@ struct LiveTradingSection: View {
     @Environment(AppStore.self) private var store
     @State private var showingWarning = false
     @State private var confirmingDisable = false
+    @State private var confirmingReset = false
     @State private var busy = false
     @State private var error: String?
     @State private var info: String?
@@ -200,6 +201,10 @@ struct LiveTradingSection: View {
                     .disabled(!live && !exchangeReady)
                 }
             }
+            // paper mode only – goes away as soon as live trading is on
+            if !live {
+                Button("Reset all values and trades", role: .destructive) { confirmingReset = true }
+            }
             if let info { Label(info, systemImage: "checkmark.circle.fill").font(.footnote).foregroundStyle(.green) }
             if let error { ErrorLabel(message: error) }
         } header: {
@@ -215,6 +220,15 @@ struct LiveTradingSection: View {
                 Text("When switching back to paper mode, all open live positions are sold immediately.")
             } else if !liveBotsWithPosition.isEmpty {
                 Text("\(String(liveBotsWithPosition.count)) live position(s) could not be sold and are still managed live – sell them manually in the bot view.")
+            }
+        }
+        .confirmationDialog("Delete all trades of this broker and reset its values to zero? This cannot be undone.",
+                            isPresented: $confirmingReset, titleVisibility: .visible) {
+            Button("Reset all values and trades", role: .destructive) {
+                Task {
+                    do { try await store.resetPaperBroker(); error = nil; info = String(localized: "Values and trades reset.") }
+                    catch { self.error = error.localizedDescription }
+                }
             }
         }
         .sheet(isPresented: $showingWarning) {
@@ -421,7 +435,6 @@ struct PaperFeesPage: View {
     let fees: PaperFees
     @State private var draft: PaperFees?
     @State private var saving = false
-    @State private var confirmingReset = false
     @State private var error: String?
 
     private var current: PaperFees { draft ?? fees }
@@ -451,20 +464,7 @@ struct PaperFeesPage: View {
                     Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
                 }
             }
-            Section {
-                Button("Reset values to zero", role: .destructive) { confirmingReset = true }
-            } footer: {
-                Text("Sets the result, fees and trade count of this broker back to zero. Simulated trades are deleted and open paper trades discarded; live trades stay as they are.")
-            }
             if let error { Section { ErrorLabel(message: error) } }
-        }
-        .confirmationDialog("Delete all paper trades on this broker and reset its values to zero? This cannot be undone.",
-                            isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button("Reset values to zero", role: .destructive) {
-                Task {
-                    do { try await store.resetPaperBroker(); error = nil } catch { self.error = error.localizedDescription }
-                }
-            }
         }
         .navigationTitle(store.showsBrokerTabs ? Text("Paper mode fees") + Text(verbatim: " · \(store.broker.title)") : Text("Paper mode fees"))
         .navigationBarTitleDisplayMode(.inline)

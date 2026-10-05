@@ -1135,7 +1135,9 @@ async def test_reset_paper_broker_zeroes_the_summary(tmp_path: Path):
     before = engine.summary()
     assert before["trades_count"] == 2 and before["currencies"][0]["realized"] != 0
 
-    assert await engine.reset_paper_broker() == 0  # the bot's reset already removed its trades
+    db.add_trade(bot_id=None, bot_name="old", symbol="ETH-EUR", side="buy", price="1", base_qty="1",
+                 quote_amount="1", fee="0", pnl=None, order_id="live-1", paper=0, reason="", exchange="revolutx")
+    assert await engine.reset_paper_broker() == 1  # the old live trade; the bot's own paper trades are already gone
     after = engine.summary()
     assert after["trades_count"] == 0 and after["open_positions"] == 0
     assert all(c["realized"] == 0 and c["fees"] == 0 for c in after["currencies"])
