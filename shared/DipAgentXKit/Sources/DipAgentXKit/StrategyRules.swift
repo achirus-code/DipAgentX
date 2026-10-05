@@ -38,6 +38,24 @@ private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
+/// Rules that only matter together with another one stay hidden in the editor until that one is set.
+public enum ParamVisibility {
+    public static func isShown(_ key: String, values: [String: JSONValue]) -> Bool {
+        switch key {
+        case "trade_spacing":
+            return (values["max_trades"]?.double ?? 1) > 1
+        case "trend_buffer", "trend_exit":
+            return (values["trend_days"]?.double ?? 0) > 0 || (values["trend_fast_days"]?.double ?? 0) > 0
+        case "sma_months", "sma_buffer":  // monthly trend follower: only the rules of the chosen signal
+            return (values["signal"]?.string ?? "sma") == "sma"
+        case "momentum_months", "cash_rate":
+            return values["signal"]?.string == "momentum"
+        default:
+            return true
+        }
+    }
+}
+
 /// What a buy + sell costs for the given rules, and whether the rules' profit target covers it.
 public struct TradeCostCheck {
     public static let defaultFeeRate = 0.0009 // Revolut X taker fee: 0.09 %
@@ -231,6 +249,7 @@ public enum ParamNotes {
         case "trailing": short = String(localized: "Trailing")
         case "zones": short = String(localized: "Zones")
         case "dca": short = String(localized: "Savings plan")
+        case "trend": short = String(localized: "Trend")
         case "ai": short = String(localized: "AI")
         default: short = strategyName ?? key
         }

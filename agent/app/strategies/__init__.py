@@ -5,9 +5,12 @@ from .base import (
 from .ai import AiStrategy
 from .dip import DipStrategy
 from .others import DcaStrategy, PriceZoneStrategy, ReboundTrailingStrategy
+from .trend import TrendStrategy
 
 STRATEGIES: dict[str, Strategy] = {
-    s.key: s for s in (DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy(), AiStrategy())
+    s.key: s for s in (
+        DipStrategy(), ReboundTrailingStrategy(), PriceZoneStrategy(), DcaStrategy(), TrendStrategy(), AiStrategy(),
+    )
 }
 
 # strategy names can be used as message arguments, e.g. m("event.bot_created", strategy=m("strategy.dip"))

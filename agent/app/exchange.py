@@ -114,6 +114,8 @@ class Exchange:
     # an order whose placement answer got lost and that can't be found for this long stops the bot (None: the
     # engine's default)
     order_lookup_grace_ms: int | None = None
+    # candles per request – longer daily series are fetched in chunks of this size
+    max_candles = 98
 
     @property
     def title(self) -> str:

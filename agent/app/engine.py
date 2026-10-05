@@ -25,6 +25,7 @@ from .errors import ExchangeError
 from .exchange import REVOLUTX, Candle, Exchange, Fees, OrderResult, PairInfo, Ticker, UnconfiguredExchange
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
+from .strategies.base import DAY_MS, fetch_daily_candles
 
 log = logging.getLogger("dipagentx.engine")
 
@@ -119,9 +120,21 @@ class CandleCache:
 
     def __init__(self) -> None:
         self._entries: dict[tuple[str, int, int], tuple[int, int, list[Candle]]] = {}
+        self._daily: dict[tuple[str, int], tuple[int, list[Candle]]] = {}
 
     def clear(self) -> None:
         self._entries.clear()
+        self._daily.clear()
+
+    async def daily_candles(self, exchange: Exchange, symbol: str, days: int, now: int) -> list[Candle]:
+        """Daily candles for long averages – fetched once per day."""
+        key, day = (symbol, days), now // DAY_MS
+        entry = self._daily.get(key)
+        if entry and entry[0] == day:
+            return entry[1]
+        candles = await fetch_daily_candles(exchange.candles, symbol, days, now, exchange.max_candles)
+        self._daily[key] = (day, candles)
+        return candles
 
     async def fetch(self, exchange: Exchange, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
         key = (symbol, interval, until - since)
@@ -301,9 +314,12 @@ class Engine:
         async def fetch(symbol: str, interval: int, since: int, until: int) -> list[Candle]:
             return await self._candles.fetch(exchange, symbol, interval, since, until)
 
+        async def daily(symbol: str, days: int, now: int) -> list[Candle]:
+            return await self._candles.daily_candles(exchange, symbol, days, now)
+
         if ticker is None:
             ticker = await exchange.ticker(symbol)
-        view = MarketView(exchange, symbol, ticker, exchange.now_ms(), fetch=fetch)
+        view = MarketView(exchange, symbol, ticker, exchange.now_ms(), fetch=fetch, daily=daily)
         self.snapshots[symbol] = {
             "price": float(view.price),
             "bid": float(view.bid),

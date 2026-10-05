@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DipAgentX – Trading-Bots für Revolut X und Trade Republic, auf Wunsch mit Claude</title>
-  <meta name="description" content="DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
+  <meta name="description" content="DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Fünf Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#08080b">
   <meta property="og:title" content="DipAgentX – Trading-Bots für Revolut X und Trade Republic">
@@ -193,6 +193,9 @@
     .strat .icon.trailing { background: linear-gradient(135deg, #1abf99, #1a80d9); }
     .strat .icon.zones { background: linear-gradient(135deg, #ff9933, #f25966); }
     .strat .icon.dca { background: linear-gradient(135deg, #bf66f2, #f259a6); }
+    .strat .icon.trend { background: linear-gradient(135deg, #33b359, #1a73cc); }
+    .trend-strat { grid-column: 1 / -1; }
+    @media (min-width: 721px) { .trend-strat dl { grid-template-columns: auto 1fr; } }
     .strat dl { margin: 14px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 15px; }
     .strat dt { color: var(--text-3); font-weight: 600; }
     .strat dd { margin: 0; color: var(--text-2); }
@@ -522,8 +525,8 @@
     <div class="wrap">
       <div class="section-head">
         <span class="kicker"><span class="de">Strategien</span><span class="en">Strategies</span></span>
-        <h2><span class="de">Fünf Strategien, pro Bot einstellbar.</span><span class="en">Five strategies, configurable per bot.</span></h2>
-        <p><span class="de">Vier Strategien folgen festen Regeln, die du einstellst – zum Beispiel „Kaufe ETH-EUR, nachdem der Kurs in 24 h um mindestens 1 % gefallen ist, verkaufe, sobald er sich erholt hat.“ Die fünfte überlässt die Entscheidung Claude.</span><span class="en">Four strategies follow fixed rules you configure – for example “buy ETH-EUR after the price dropped at least 1 % in 24 h, sell once it has recovered.” The fifth leaves the decision to Claude.</span></p>
+        <h2><span class="de">Sechs Strategien, pro Bot einstellbar.</span><span class="en">Six strategies, configurable per bot.</span></h2>
+        <p><span class="de">Fünf Strategien folgen festen Regeln, die du einstellst – zum Beispiel „Kaufe ETH-EUR, nachdem der Kurs in 24 h um mindestens 1 % gefallen ist, verkaufe, sobald er sich erholt hat.“ Die sechste überlässt die Entscheidung Claude.</span><span class="en">Five strategies follow fixed rules you configure – for example “buy ETH-EUR after the price dropped at least 1 % in 24 h, sell once it has recovered.” The sixth leaves the decision to Claude.</span></p>
       </div>
       <div class="grid2">
         <div class="card strat">
@@ -531,9 +534,9 @@
           <h3><span class="de">Dip-Käufer</span><span class="en">Dip buyer</span></h3>
           <dl>
             <dt><span class="de">Kauft</span><span class="en">Buys</span></dt>
-            <dd><span class="de">wenn die Kursänderung im Zeitfenster (Standard 24 h) unter der Kaufschwelle liegt (Standard −1 %)</span><span class="en">when the price change within a time window (default 24 h) is at or below the buy threshold (default −1 %)</span></dd>
+            <dd><span class="de">wenn die Kursänderung im Zeitfenster (Standard 24 h) unter der Kaufschwelle liegt (Standard −1 %) – optional nur im Aufwärtstrend (Trendfilter)</span><span class="en">when the price change within a time window (default 24 h) is at or below the buy threshold (default −1 %) – optionally only in an uptrend (trend filter)</span></dd>
             <dt><span class="de">Verkauft</span><span class="en">Sells</span></dt>
-            <dd><span class="de">wenn die Änderung wieder über der Verkaufsschwelle liegt und ein Mindestgewinn erreicht ist, oder am Gewinnziel – optional läuft ab dann ein Trailing-Stop mit; optionaler Stop-Loss</span><span class="en">when the change is back above the sell threshold and a minimum profit is reached, or at the profit target – optionally a trailing stop takes over from there; optional stop-loss</span></dd>
+            <dd><span class="de">wenn die Änderung wieder über der Verkaufsschwelle liegt und ein Mindestgewinn erreicht ist, oder am Gewinnziel – optional läuft ab dann ein Trailing-Stop mit; optionaler Stop-Loss und Verkauf bei Trendbruch</span><span class="en">when the change is back above the sell threshold and a minimum profit is reached, or at the profit target – optionally a trailing stop takes over from there; optional stop-loss and sale when the trend breaks</span></dd>
           </dl>
         </div>
         <div class="card strat">
@@ -564,6 +567,16 @@
             <dd><span class="de">einen festen Betrag alle N Stunden (bis zu einem Höchstbetrag bzw. einer Anzahl Käufe)</span><span class="en">a fixed amount every N hours (up to a max. amount / number of buys)</span></dd>
             <dt><span class="de">Verkauft</span><span class="en">Sells</span></dt>
             <dd><span class="de">optional alles am Gewinnziel</span><span class="en">optionally everything at the profit target</span></dd>
+          </dl>
+        </div>
+        <div class="card strat trend-strat">
+          <div class="icon trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 18l3-3 2 2 5-5"/></svg></div>
+          <h3><span class="de">Monatlicher Trendfolger</span><span class="en">Monthly trend follower</span></h3>
+          <dl>
+            <dt><span class="de">Kauft</span><span class="en">Buys</span></dt>
+            <dd><span class="de">einmal im Monat den ganzen Betrag, wenn der Vormonat über seinem Durchschnitt der letzten Monate geschlossen hat – oder mit besserer Rendite als der Zins. Gedacht für ETFs und Gold auf Trade Republic, z. B. drei Bots für Weltaktien, Gold und Euro-Staatsanleihen</span><span class="en">once a month the whole amount when the previous month closed above its average of the last months – or with a better return than the cash rate. Meant for ETFs and gold on Trade Republic, e.g. three bots for world shares, gold and euro government bonds</span></dd>
+            <dt><span class="de">Verkauft</span><span class="en">Sells</span></dt>
+            <dd><span class="de">bei der Monatsprüfung, sobald der Trend fällt – auch mit Verlust; optional erst, wenn zusätzlich die US-Arbeitslosigkeit steigt</span><span class="en">at the monthly check as soon as the trend is down – also at a loss; optionally only when the US unemployment rate rises as well</span></dd>
           </dl>
         </div>
         <div class="card strat ai-strat">
@@ -737,8 +750,8 @@
   (function () {
     var titles = { de: "DipAgentX – Trading-Bots für Revolut X und Trade Republic, auf Wunsch mit Claude", en: "DipAgentX – Trading bots for Revolut X and Trade Republic, with Claude if you like" };
     var descs = {
-      de: "DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Vier Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
-      en: "DipAgentX: trading bots for Revolut X and Trade Republic that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Four rule-based strategies or let Claude decide. Open source, paper mode first."
+      de: "DipAgentX: Trading-Bots für Revolut X und Trade Republic, die rund um die Uhr in Docker oder als Home-Assistant-Add-on laufen – gesteuert aus einer kleinen macOS-Menüleisten-App. Fünf Regelstrategien oder Claude entscheidet. Open Source, Paper-Modus zuerst.",
+      en: "DipAgentX: trading bots for Revolut X and Trade Republic that run 24/7 in Docker or as a Home Assistant add-on – controlled from a tiny macOS menu bar app. Five rule-based strategies or let Claude decide. Open source, paper mode first."
     };
     function setLang(lang, store) {
       if (lang !== "de" && lang !== "en") lang = "en";

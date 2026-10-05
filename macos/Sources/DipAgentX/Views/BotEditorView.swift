@@ -313,7 +313,7 @@ struct BotEditorView: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         // the distance between trades only matters when there can be more than one
-                        ForEach(strategy.params.filter { $0.key != "trade_spacing" || (values["max_trades"]?.double ?? 1) > 1 }) { param in
+                        ForEach(strategy.params.filter { ParamVisibility.isShown($0.key, values: values) }) { param in
                             ParamField(
                                 param: param,
                                 value: Binding(

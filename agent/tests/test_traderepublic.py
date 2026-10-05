@@ -23,6 +23,7 @@ from app.traderepublic import (
     MockTradeRepublicExchange, TradeRepublicExchange, TradeRepublicSession, TRSocket, apply_delta, market_closed_at,
     normalize_phone,
 )
+from app.strategies.base import fetch_daily_candles
 from tests.test_core import FakeExchange
 
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -98,6 +99,7 @@ class FakeTR:
         self.sent_orders: list[dict] = []
         self.cookies_seen: list[str] = []
         self.refuse_next_order: str | None = None
+        self.history_requests: list[dict] = []
         self.server = None
         self.port = 0
 
@@ -160,11 +162,19 @@ class FakeTR:
             await ws.send(f"{sid} D =" + str(start) + "\t-6\t+101.00\t=" + str(len(first) - start - 6))
             assert apply_delta(first, f"={start}\t-6\t+101.00\t={len(first) - start - 6}") == second
         elif kind == "aggregateHistoryLight":
-            assert p.get("resolution") in (600_000, 3_600_000)
+            self.history_requests.append(p)
             now = int(time.time() * 1000)
-            start = now - now % 600_000 - 30 * 600_000
-            aggregates = [{"time": start + i * 600_000, "open": str(100 + i), "high": str(101 + i), "low": str(99 + i),
-                           "close": str(100.5 + i)} for i in range(30)]
+            if p.get("resolution") == 86_400_000:  # daily: stamped at UTC midnight of the trading day, weekdays only
+                days = 1830 if p["range"] == "max" else 365
+                today = now - now % 86_400_000
+                aggregates = [{"time": t, "open": "100", "high": "101", "low": "99", "close": "100.5"}
+                              for t in range(today - days * 86_400_000, today + 1, 86_400_000)
+                              if time.gmtime(t / 1000).tm_wday < 5]
+            else:
+                assert p.get("resolution") in (600_000, 3_600_000)
+                start = now - now % 600_000 - 30 * 600_000
+                aggregates = [{"time": start + i * 600_000, "open": str(100 + i), "high": str(101 + i),
+                               "low": str(99 + i), "close": str(100.5 + i)} for i in range(30)]
             await ws.send(f"{sid} A " + json.dumps({"aggregates": aggregates, "resolution": p["resolution"]}))
         elif kind == "neonSearch":
             await ws.send(f"{sid} A " + json.dumps({"results": [
@@ -230,6 +240,17 @@ async def test_market_data_and_orders_over_the_websocket(tmp_path: Path):
             now = int(time.time() * 1000)
             candles = await ex.candles(SAP, 30, now - 3 * 3_600_000, now)
             assert candles and all(c.start % 1_800_000 == 0 for c in candles)
+            # long daily series: daily resolution (hourly candles only go back three months), "max" beyond a year,
+            # and one request for the whole window
+            assert tr.history_requests[-1]["range"] == "5d"
+            daily = await fetch_daily_candles(ex.candles, SAP, 434, now, ex.max_candles)
+            assert tr.history_requests[-1] == {"type": "aggregateHistoryLight", "range": "max",
+                                               "id": "DE0007164600.LSX", "resolution": 86_400_000}
+            assert len(daily) > 300 and all(c.start % 86_400_000 == 0 for c in daily)
+            assert daily[-1].start < now - now % 86_400_000  # not today's forming candle
+            requests = len(tr.history_requests)
+            await fetch_daily_candles(ex.candles, SAP, 200, now, ex.max_candles)
+            assert len(tr.history_requests) == requests + 1 and tr.history_requests[-1]["range"] == "1y"
 
             assert [r["symbol"] for r in await ex.search("apple")] == ["US0378331005-EUR"]
 
