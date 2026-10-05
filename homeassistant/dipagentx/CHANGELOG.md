@@ -4,7 +4,11 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
-## [1.20.0] – 2026-10-05
+## [1.28.0] – 2026-10-05
+
+Built on 1.19.0: Trade Republic and everything from 1.20.0 to 1.27.0 were removed (the monthly trend followers, the
+first momentum bot, paper reset per broker). Version numbers go on from 1.27.0 so updates and the Docker image
+tags stay unique.
 
 ### Added
 

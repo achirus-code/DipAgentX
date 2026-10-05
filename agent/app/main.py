@@ -31,7 +31,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.20.0"
+VERSION = "1.28.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

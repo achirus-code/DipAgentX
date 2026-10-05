@@ -207,7 +207,7 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let position: BotPosition? // all open trades summed up
     public let positions: [BotPosition]? // the open trades one by one (agent 1.13+)
     public let maxTrades: Int? // how many trades the bot may hold at once (agent 1.13+)
-    /// The trades are slices of one position (momentum follower, agent 1.20+) – shown as one position.
+    /// The trades are slices of one position (momentum follower, agent 1.28+) – shown as one position.
     public let sliced: Bool?
     public let realizedPnl: Double
     public let tradesCount: Int
