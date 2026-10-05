@@ -1,9 +1,8 @@
 import DipAgentXKit
 import SwiftUI
 
-/// Fees the simulation charges on the selected broker. Prefilled with what the broker charges (Revolut X: buy 0 %,
-/// sell 0.09 %; Trade Republic: 1 € per order); changing them rebooks the broker's simulated trades on the agent,
-/// live trades are never touched.
+/// Fees the simulation charges. Prefilled with Revolut X (buy 0 %, sell 0.09 %); changing them rebooks the
+/// simulated trades on the agent, live trades are never touched.
 struct PaperFeesSection: View {
     @Environment(AppStore.self) private var store
     let fees: PaperFees
@@ -17,33 +16,20 @@ struct PaperFeesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel("Paper mode fees", trailing: store.showsBrokerTabs ? AnyView(BrokerName(broker: store.broker)) : nil)
+            SectionLabel("Paper mode fees")
             Card {
                 VStack(alignment: .leading, spacing: 12) {
                     row("Buy fee", value: Binding(
                         get: { current.buy * 100 },
-                        set: { draft = PaperFees(buy: max(0, min($0, 10)) / 100, sell: current.sell, fixed: current.fixed) }
+                        set: { draft = PaperFees(buy: max(0, min($0, 10)) / 100, sell: current.sell) }
                     ))
                     row("Sell fee", value: Binding(
                         get: { current.sell * 100 },
-                        set: { draft = PaperFees(buy: current.buy, sell: max(0, min($0, 10)) / 100, fixed: current.fixed) }
+                        set: { draft = PaperFees(buy: current.buy, sell: max(0, min($0, 10)) / 100) }
                     ))
-                    // a fixed fee per order is what Trade Republic charges – elsewhere only shown when set
-                    if let fixed = current.fixed, store.broker == .tradeRepublic || fixed > 0 {
-                        row("Fee per order", unit: "EUR", value: Binding(
-                            get: { fixed },
-                            set: { draft = PaperFees(buy: current.buy, sell: current.sell, fixed: max(0, min($0, 50))) }
-                        ))
-                    }
-                    Group {
-                        if store.broker == .tradeRepublic {
-                            Text("Trade Republic charges 1 € per order (buy and sale) and no percentage. Changing a fee rebooks all simulated Trade Republic trades; live trades stay as they are.")
-                        } else {
-                            Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
-                        }
-                    }
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text("Revolut X currently charges 0 % on buys and 0.09 % on sells. Changing a fee rebooks all simulated trades; live trades stay as they are.")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let error {
                         Text(error).font(.system(size: 10.5)).foregroundStyle(.red)
                     }
@@ -67,7 +53,7 @@ struct PaperFeesSection: View {
         }
     }
 
-    private func row(_ title: LocalizedStringKey, unit: String = "%", value: Binding<Double>) -> some View {
+    private func row(_ title: LocalizedStringKey, value: Binding<Double>) -> some View {
         HStack {
             Text(title).font(.system(size: 12, weight: .medium))
             Spacer()
@@ -76,8 +62,7 @@ struct PaperFeesSection: View {
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 70)
-                Text(verbatim: unit).font(.system(size: 11)).foregroundStyle(.secondary)
-                    .frame(minWidth: 26, alignment: .leading)
+                Text(verbatim: "%").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }

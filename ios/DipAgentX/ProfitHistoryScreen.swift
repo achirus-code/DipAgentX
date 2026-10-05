@@ -18,9 +18,7 @@ struct ProfitHistoryScreen: View {
     private static let historyLimit = 1000
 
     private var data: ProfitHistoryData {
-        // the selected broker's trades – each broker has its own result
-        ProfitHistoryData(trades: (history ?? store.trades).filter { $0.broker == store.broker }, bots: store.bots,
-                          summary: store.summary, live: live,
+        ProfitHistoryData(trades: history ?? store.trades, bots: store.bots, summary: store.summary, live: live,
                           currency: currency, range: range, perBot: perBot, hidden: hidden)
     }
 
@@ -45,7 +43,7 @@ struct ProfitHistoryScreen: View {
             }
             .padding()
         }
-        .navigationTitle(store.showsBrokerTabs ? Text(verbatim: store.broker.title) : Text("Profit history"))
+        .navigationTitle("Profit history")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { optionsMenu(data) }

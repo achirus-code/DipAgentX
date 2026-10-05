@@ -2,18 +2,16 @@
 
 [![CI](https://github.com/achirus-code/DipAgentX/actions/workflows/ci.yml/badge.svg)](https://github.com/achirus-code/DipAgentX/actions/workflows/ci.yml)
 
-**Trading bots for [Revolut X](https://exchange.revolut.com) and [Trade Republic](https://traderepublic.com) that run 24/7 in Docker – controlled from a tiny macOS menu bar app (and an iPhone app).**
+**Trading bots for [Revolut X](https://exchange.revolut.com) that run 24/7 in Docker – controlled from a tiny macOS menu bar app.**
 
 Website: <https://achirus-code.github.io/DipAgentX/> (source in [`docs/`](docs/), served by GitHub Pages)
 
 DipAgentX consists of two parts:
 
 - **Agent** (`agent/`) – a small Python service in a Docker container. It checks the market around the clock, runs
-  your bots and places orders on Revolut X and Trade Republic. Run it on any always-on machine: a home server, NAS,
-  Raspberry Pi or Mac mini.
+  your bots and places orders on Revolut X. Run it on any always-on machine: a home server, NAS, Raspberry Pi or Mac mini.
 - **App** (`macos/`) – a native SwiftUI menu bar app. One icon in the menu bar; a click shows your trades, bots and
-  profit, and lets you manage bots, limits and the broker connections. Two tabs above the statistics switch between
-  Revolut X and Trade Republic.
+  profit, and lets you manage bots, limits and the Revolut X connection.
 
 The app is available in **English and German** (follows the macOS language, can be changed in the app).
 
@@ -24,25 +22,16 @@ The app is available in **English and German** (follows the macOS language, can 
   <img src="docs/screenshots/new-bot.png" width="240" alt="New bot">
 </p>
 
-> **Disclaimer:** DipAgentX is a personal project, not financial advice. Trading can lose money. Everything
+> **Disclaimer:** DipAgentX is a personal project, not financial advice. Crypto trading can lose money. Everything
 > starts in **paper mode** (real prices, simulated orders). Only enable live trading once you trust your setup –
 > and start small.
 
-> **Trade Republic has no official API.** DipAgentX speaks the protocol of the Trade Republic web app, as documented by
-> open-source projects such as [pytr](https://github.com/pytr-org/pytr). Trade Republic's customer agreement doesn't
-> allow access through programs it doesn't provide – it may block the access or terminate the account, and the
-> protocol may change at any time. Paper trading only reads public market data; live trading logs in to your account.
-> Use it at your own risk.
-
 ## Features
 
-- **Two brokers side by side:** Revolut X (crypto) and Trade Republic (stocks, ETFs, crypto). Each has its own
-  result, bots, trades, trading mode, limits and simulation fees – the tabs above the statistics switch between them.
-  Don't need one? Switch it off under *Settings → Brokers* – its bots stop and the tabs disappear.
-- **Six strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
-  sell once it has recovered”* or *“a savings plan for an MSCI World ETF on Trade Republic”*.
-- **Paper mode by default.** Live trading is switched on in the app per broker, only after the broker is connected and
-  after a **double confirmation**. Switching back to paper mode sells all open live positions (with a warning first).
+- **Five strategies**, configurable per bot (see below) – e.g. *“buy ETH-EUR after the price dropped ≥ 1 % in 24 h,
+  sell once it has recovered”*.
+- **Paper mode by default.** Live trading is switched on in the app, only after Revolut X is connected and after a
+  **double confirmation**. Switching back to paper mode sells all open live positions (with a warning first).
 - **Risk limits:** max. open positions, max. invested capital, only one bot per trading pair.
 - **No duplicate orders:** each bot holds at most one position, orders are persisted with their own
   `client_order_id` *before* they are sent and reconciled after connection drops, every exchange order is booked
@@ -50,40 +39,29 @@ The app is available in **English and German** (follows the macOS language, can 
   for minutes stops the bot instead of being guessed about.
 - **Revolut X setup from the app:** the agent generates the Ed25519 key pair – the private key never leaves the
   agent; the app shows the public key to register with Revolut X and verifies the API key you get back.
-- **Trade Republic from the app:** paper trading works right away without a login (public market data). For live
-  trading log in with phone number and PIN and confirm it in the Trade Republic app. Trade Republic ends every login
-  after 24 hours; with the PIN saved, the agent starts the next one itself and you only confirm it on your phone.
-  Stocks and ETFs trade Monday to Friday 07:30–23:00 – outside these hours the bots wait; every order costs 1 €, which
-  the simulation and the "never sell at a loss" rule include.
 - **Menu bar app:** total and per-bot profit (realized/open/today), trade history, bot activity log, notifications
   for new trades, launch at login, light & dark mode.
 
 ## How it works
 
 ```
-┌────────────────────────┐  HTTP · bearer token   ┌──────────────────────────────┐  signed REST calls  ┌────────────────┐
-│  macOS / iPhone app    │ ─────────────────────▶ │  DipAgentX agent (Docker)     │ ──────────────────▶ │ Revolut X      │
-│  trades · bots · setup │ ◀───────────────────── │  REST API · bot engine · DB  │      Ed25519        │ API 1.0        │
-└────────────────────────┘      port 3470         │                              │  WebSocket          ├────────────────┤
-                                                  │                              │ ──────────────────▶ │ Trade Republic │
-                                                  └──────────────────────────────┘  web app protocol   │ (unofficial)   │
-                                                                                                        └────────────────┘
+┌────────────────────────┐  HTTP · bearer token   ┌──────────────────────────────┐  signed REST calls  ┌───────────┐
+│  macOS menu bar app    │ ─────────────────────▶ │  DipAgentX agent (Docker)     │ ──────────────────▶ │ Revolut X │
+│  trades · bots · setup │ ◀───────────────────── │  REST API · bot engine · DB  │ ◀────────────────── │  API 1.0  │
+└────────────────────────┘      port 3470         └──────────────────────────────┘      Ed25519        └───────────┘
 ```
 
-The agent evaluates every active bot every `TICK_SECONDS` (default 30 s), places market orders on the bot's broker
-and stores bots, trades, settings, the Revolut X key and the Trade Republic session in a Docker volume (`/data`,
-SQLite).
+The agent evaluates every active bot every `TICK_SECONDS` (default 30 s), places market orders on Revolut X and
+stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`, SQLite).
 
 ## Strategies
 
 | Strategy | Buys … | Sells … |
 |---|---|---|
-| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %); optionally only while the market moves sideways (ADX of the 4-hour candles below a limit) and/or only in an uptrend (trend filter: price above its 200- and/or 60-day average) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss; optionally as soon as the trend filter reports a downtrend (trend exit, also at a loss) |
+| **Dip buyer** | when the price change within a time window (default 24 h) is ≤ the buy threshold (default −1 %) | when the change is back to ≥ the sell threshold (default 0 %) *and* a minimum profit is reached, or at the profit target, or whichever comes first; optionally a trailing stop takes over from the sell signal instead of selling right away; optional stop-loss |
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
-| **Monthly trend follower** | once a month, on the first trading day: the whole amount when the previous month closed above its average of the last months (default 10, with a ±2 % buffer) – or with a better return than cash (e.g. 12 months, against the 3-month Euribor) – or either of the two; optionally the currency-hedged share class while the dollar falls | on that monthly check, as soon as the trend is down – also at a loss; optionally only with a recession sign (US unemployment above its 12-month average, jobless claims up more than 5 % on a year earlier, an inverted US yield curve in the last 24 months); optionally parks the money in the best of up to three bond ETFs instead of cash. Meant for ETFs and gold on Trade Republic (see the example below) |
-| **Momentum trend follower** | for ETH and BTC: invests the more of its capital the more of six lookbacks (14–60 days, 4-hour closes) are up – a lookback turns up once the price rose more than 5 % over it (2 % while the 90-day return is above 20 %); less while the 20-day volatility is above 100 % a year; at least 50 % while the 7-day funding rate of the Binance perpetual futures is below 2 % a year (panic); in 10 % steps, each step its own trade, gains reinvested | as soon as fewer lookbacks are up (a lookback turns down once the price is below its level of then) – also at a loss; optionally halves the position while more than 1 % of the exchanges' coins were sent to them on balance within 7 days (Coin Metrics) |
 | **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum, optionally the news and optionally the Crypto Fear & Greed index (as background or as a contrarian signal at extremes) every N minutes (model selectable: Opus 5, Sonnet 5, Haiku 4.5; optional minimum confidence before a trade is executed) | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
@@ -94,48 +72,6 @@ SQLite).
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode
 > once the **minimum profit** (default 0.25 %, covers fees) is reached. It can't be set below 0 – to cut a loss, set a
 > **stop-loss**.
-
-> **Momentum trend follower:** the strategy that held up best in the ETH/BTC backtests (hourly prices January 2020 –
-> October 2026, fees 0 % buy / 0.09 % sell): it follows the trend instead of buying dips, and keeps most of the
-> crashes away – 2022 −10 % (ETH) / −16 % (BTC) instead of −66 % / −62 % when holding – but keeps only about 55–70 % of
-> a strong rally. Blind test (settings chosen only with the years before, 2022 – October 2026): ETH ×3.5, BTC ×3.5 vs.
-> holding ×0.74 / ×1.87. Replayed through the real engine it matches the simulation (ETH ×3.74 vs. ×3.73 from 2022).
-> The bot rebalances about twice a week; under a month the result is a coin flip. It needs the funding rate (Binance,
-> public) at runtime – without it the floor does nothing. The exchange-inflow brake (*Halve on exchange inflows*) added
-> to the backtest result, but only with data at most a day old, and Coin Metrics revises its daily "flash" values later –
-> so it is off by default. Details in `docs/strategien-backtests.md`, section 14.
-
-> **Sideways filter (dip buyer):** a dip in a trending market often keeps falling. With *Only buy while ADX (4h)
-> below* set (e.g. 23), the bot buys a dip only while the trend strength ADX (14) of the 4-hour candles is below that
-> value – the market moves sideways. Selling isn't affected. In a backtest on 18 months of ETH-EUR and BTC-EUR
-> (April 2025 – October 2026) the filter together with a stop-loss turned a dip buyer that held its losers into one
-> that cut them early; past results don't predict future ones.
-
-### Example: three pillars on Trade Republic
-
-The *monthly trend follower* is meant for a slow, defensive setup – one bot per pillar, picked with the instrument
-search (accumulating share classes are best). The rules below are the combination that held up best in the backtests
-([docs/strategien-backtests.md](docs/strategien-backtests.md), sections 9–11):
-
-| Bot | Share | Rules |
-|---|---|---|
-| MSCI ACWI IMI or World ETF (e.g. SPYI) | 40 % | signal *price above its average or return better than the cash rate* (10 months, buffer 2 %; 12 months), recession signs *unemployment*, *jobless claims* and *yield curve* on, *currency-hedged share class* e.g. IE00BF1B7389 (MSCI ACWI EUR hedged) |
-| Physical gold ETC (e.g. Xetra-Gold) | 30 % | signal *return better than the cash rate*, 12 months, *cash rate from the Euribor* on – don't hedge gold: a hedged ETC loses Xetra-Gold's tax-free status after a year |
-| Euro government bond ETF (e.g. XGLE) | 30 % | signal *return better than the cash rate*, 12 months |
-
-All three park in bonds instead of cash: *Park in instead of cash* = `LU0290355717, LU1407888137` (euro government
-bonds and US Treasuries 7–10 years, EUR hedged) – while a bot is out it buys the one with the better 12-month return,
-as long as that beats the Euribor. Once a year, set the amounts back to 40/30/30 of the total and use *Sell now* on a
-bot whose amount changed – it buys again with the new amount. Allow at least three open positions under the Trade
-Republic limits.
-
-In a backtest in euros (1973–2026, monthly closes, the hedged ETF 0.5 % a year more expensive) this setup returned
-about 11.4 % a year against 8.9 % for the MSCI World, was up after 12 months in 96 % and after 3 years in 99.7 % of
-all start months; its deepest drop was −10.5 % against −54 %. After German taxes on every sale (with the partial
-exemption for equity funds) about 9.5 % a year against 8.6 % for holding the MSCI World. Since 2000 the timing hasn't
-earned more than simply holding 40/30/30 – it halves the drops. In long bull markets it earns clearly less than
-holding the index, and fast crashes like 2020 hit it before the monthly signal reacts. A backtest is no guarantee and
-none of this is investment advice.
 
 ## Quick start
 
@@ -198,29 +134,11 @@ In the app: **Settings → Revolut X → Connect** and follow the three steps:
 3. **Enter the API key** – the agent verifies it right away (balance request) and switches to Revolut X without a
    restart.
 
-### 4. Trade Republic (optional)
+### 4. Create bots, then go live (optional)
 
-Choose the **Trade Republic** tab above the statistics. Bots for stocks, ETFs and crypto can be created right away and
-trade in paper mode with Trade Republic's real prices – no login needed. For live trading:
-
-1. **Settings → Trade Republic → Log in**: phone number and PIN of your account. Read the note on the terms first.
-2. **Confirm** the login in the Trade Republic app on your phone (accounts with an authenticator app enter its code
-   instead). The agent then holds the session; the PIN is only kept if you tick *Remember PIN for the daily login*.
-3. Trade Republic ends every login after **24 hours**. With the PIN saved, the agent starts the next login shortly
-   before – only while live trading is on or live trades are open – and the app reminds you to confirm it. Without a
-   saved PIN, log in again in the app. While logged out, live bots can't trade (not even sell at the stop-loss).
-
-Notes: orders are market orders, every order costs **1 €** (the amount per buy includes it – small amounts pay a lot,
-the bot editor shows it). Stocks and ETFs trade on Lang & Schwarz **Monday to Friday 07:30–23:00** (Europe/Berlin);
-outside these hours the bots wait. Crypto trades around the clock. Most instruments can be bought in fractions from
-1 €.
-
-### 5. Create bots, then go live (optional)
-
-Create bots under **Bots → New bot** – they belong to the broker of the selected tab. They trade in paper mode first:
-real prices, simulated orders and fees. When you're happy, enable **Settings → Trading mode → Live trading** for that
-broker (double confirmation). All of the broker's existing bots are switched to live then – delete bots that shouldn't
-trade with real money beforehand.
+Create bots under **Bots → New bot**. They trade in paper mode first: real prices, simulated orders and fees. When
+you're happy, enable **Settings → Trading mode → Live trading** (double confirmation). All existing bots are switched
+to live then – delete bots that shouldn't trade with real money beforehand.
 
 ## Agent configuration
 
@@ -229,19 +147,18 @@ All settings are optional environment variables in `agent/.env`:
 | Variable | Default | Description |
 |---|---|---|
 | `API_TOKEN` | generated | Token the app authenticates with |
-| `EXCHANGE` | `revolutx` | `revolutx` = the real brokers (Revolut X and Trade Republic), `mock` = simulated market for both, for trying things out |
+| `EXCHANGE` | `revolutx` | `revolutx` = real exchange, `mock` = simulated market for trying things out |
 | `TICK_SECONDS` | `30` | How often the bots check the market |
 | `TAKER_FEE` | `0.0009` | Fee used for simulated (paper) trades |
 | `TZ` | UTC | Time zone, used for "today" in the summary (e.g. `Europe/Berlin`) |
 | `REVX_API_KEY` | – | Alternative to the in-app setup: API key here + private key in `agent/secrets/revx_private.pem` (takes precedence; read-only in the app) |
 | `MOCK_SPEED` | `1` | Only for `EXCHANGE=mock`: time lapse (60 = one market hour per minute) |
 | `ANTHROPIC_API_KEY` | – | Only for the *AI decides* strategy (Claude decides when to buy and sell). Key from console.anthropic.com |
-| `TR_APP_VERSION` | built in | Only if Trade Republic refuses the login as outdated: the version of its web app the agent reports |
 
 Live trading, limits and bots are managed in the app and stored in the data volume – not in `.env`.
 
-**Try it without an account:** set `EXCHANGE=mock` (and e.g. `MOCK_SPEED=60`) – the agent then simulates a market
-with realistic ups and downs for both brokers (Trade Republic's with its trading hours and 1 € per order).
+**Try it without Revolut X:** set `EXCHANGE=mock` (and e.g. `MOCK_SPEED=60`) – the agent then simulates a market
+with realistic ups and downs.
 
 ### Operating the agent
 
@@ -253,10 +170,9 @@ docker run --rm -v dipagentx_dipagentx-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/dipagentx-backup.tgz -C /data .      # backup of bots, trades, settings and key
 ```
 
-- **Data** lives in the Docker volume `dipagentx_dipagentx-data` (SQLite database, API token, Revolut X key and
-  Trade Republic session with file mode 600). Coming from DipAgent (≤ 1.18)? Move the old volume once – see the [changelog for 1.19.0](CHANGELOG.md).
-- **Backup from the app:** *Settings → Backup → Export* saves bots, trades, settings and the Revolut X key (not the
-  Trade Republic login – log in again after a restore) as a
+- **Data** lives in the Docker volume `dipagentx_dipagentx-data` (SQLite database, API token, Revolut X key with file
+  mode 600). Coming from DipAgent (≤ 1.18)? Move the old volume once – see the [changelog for 1.19.0](CHANGELOG.md).
+- **Backup from the app:** *Settings → Backup → Export* saves bots, trades, settings and the Revolut X key as a
   `.tgz`; *Import* restores such a file on any agent (e.g. when moving from Docker to the Home Assistant add-on).
   Importing replaces the agent's data and switches live trading off until you enable it again.
 - **Network:** the app talks plain HTTP with a bearer token. Keep port 3470 inside your home network or reach it via a
@@ -291,15 +207,11 @@ python3 scripts/check_localizations.py
 agent/                    Python 3.12 · FastAPI · SQLite
   app/main.py             REST API (answers in the app's language via Accept-Language)
   app/engine.py           bot engine: evaluation, limits, idempotent order execution, bookkeeping
-  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan, monthly trend follower,
-                          AI decides (Claude)
+  app/strategies/         dip buyer, rebound + trailing stop, price zones, savings plan, AI decides (Claude)
   app/revolutx.py         Revolut X client (Ed25519 request signing)
-  app/traderepublic.py    Trade Republic: login, WebSocket client, exchange, trading hours, demo market
   app/credentials.py      key pair generation / storage for the in-app Revolut X setup
   app/backup.py           backup archive (database snapshot + key) for export/import from the app
   app/i18n.py             English/German texts of the agent
-  app/macro.py            economic data for the monthly trend follower: US unemployment (BLS), jobless claims (DOL),
-                          yield curve (US Treasury), 3-month Euribor and EUR/USD (ECB)
   tests/
 macos/                    SwiftUI menu bar app (Swift package, no Xcode project needed)
   Sources/DipAgentX/       app, views, API client
@@ -334,22 +246,17 @@ To add a language, add `<lang>.lproj/Localizable.strings` (+ `InfoPlist.strings`
 ### REST API
 
 All routes except `/api/health` require `Authorization: Bearer <API_TOKEN>`; texts are returned in the language of
-`Accept-Language` (`de` or English). Summary, limits, paper fees, balances, pairs, instruments, trades and the live
-switch take `?exchange=revolutx|traderepublic` (default: Revolut X; `all` for bots and trades of every broker); bots
-carry their `exchange` (set when creating one).
+`Accept-Language` (`de` or English).
 
 | Route | Description |
 |---|---|
-| `GET /api/status` · `GET /api/summary` | agent status (`exchanges`: every broker), P&L summary of one broker |
+| `GET /api/status` · `GET /api/summary` | agent status, P&L summary |
 | `GET/POST /api/bots` · `PUT/DELETE /api/bots/{id}` | manage bots |
 | `POST /api/bots/{id}/start` · `/stop` · `/close` | start/stop a bot, sell its position |
 | `GET /api/trades` · `GET /api/events` | trade history, activity log |
 | `GET /api/strategies` · `GET /api/pairs` · `GET /api/balances` | strategy schemas, trading pairs, balances |
-| `GET /api/instruments?q=` | instruments with names – Trade Republic: search by name, ticker or ISIN |
-| `GET/PUT /api/limits` · `GET/PUT /api/paper-fees` · `PUT /api/live-trading` | risk limits, simulation fees, trading mode |
-| `PUT /api/brokers/{revolutx\|traderepublic}` | switch a broker on or off |
+| `GET/PUT /api/limits` · `PUT /api/live-trading` | risk limits, trading mode |
 | `GET /api/exchange` · `POST /api/exchange/keypair` · `PUT/DELETE /api/exchange/credentials` · `GET /api/exchange/public-ip` | Revolut X setup |
-| `GET/DELETE /api/traderepublic` · `POST/DELETE /api/traderepublic/login` · `POST /api/traderepublic/login/code` | Trade Republic login (state, start/cancel, authenticator code, log out) |
 | `GET /api/backup` · `POST /api/restore` | backup as `.tgz` (database snapshot + Revolut X key), restore from it |
 
 ## License

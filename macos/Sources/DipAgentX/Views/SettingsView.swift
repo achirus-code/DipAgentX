@@ -23,17 +23,16 @@ struct SettingsView: View {
 
             // Trading mode stays at the top until live trading is switched on; after that it is rarely
             // needed and moves down next to the other agent details.
-            // trading mode, limits and fees belong to the broker chosen in the tabs above
             if showsTradingMode, !liveTradingActive {
-                LiveTradingSection().id(store.broker)
+                LiveTradingSection()
             }
 
             if store.isConnected, let limits = store.limits {
-                LimitsSection(limits: limits).id(store.broker)
+                LimitsSection(limits: limits)
             }
 
             if store.isConnected, let fees = store.paperFees {
-                PaperFeesSection(fees: fees).id(store.broker)
+                PaperFeesSection(fees: fees)
             }
 
             // App
@@ -90,18 +89,11 @@ struct SettingsView: View {
             // Once connected, the connection details move to the bottom
             if store.isConnected {
                 agentSection
-                if store.supportsBrokers {
-                    BrokersSection()
-                }
-                if store.broker == .tradeRepublic {
-                    if let info = store.tradeRepublic {
-                        TradeRepublicSection(info: info, open: open)
-                    }
-                } else if let info = store.exchangeInfo {
+                if let info = store.exchangeInfo {
                     ExchangeSection(info: info, open: open)
                 }
                 if showsTradingMode, liveTradingActive {
-                    LiveTradingSection().id(store.broker)
+                    LiveTradingSection()
                 }
                 BackupSection()
             }
@@ -123,8 +115,8 @@ struct SettingsView: View {
         }
     }
 
-    private var showsTradingMode: Bool { store.isConnected && store.status?.isDemo != true }
-    private var liveTradingActive: Bool { store.isLive }
+    private var showsTradingMode: Bool { store.isConnected && store.status?.exchange != "mock" }
+    private var liveTradingActive: Bool { store.status?.liveTradingAllowed ?? false }
 
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -170,16 +162,8 @@ struct SettingsView: View {
                 }
                 if let status = store.status {
                     infoRow("Agent version", status.version)
-                    infoRow("Exchange", status.isDemo ? String(localized: "Demo market (simulated)")
-                            : store.enabledBrokers.map(\.title).joined(separator: " · "))
-                    if store.supportsBrokers {
-                        ForEach(store.enabledBrokers) { broker in
-                            infoRow("Live trading", verbatimTitle: broker.title,
-                                    status.liveTradingAllowed(broker) ? String(localized: "On") : String(localized: "Off (paper only)"))
-                        }
-                    } else {
-                        infoRow("Live trading", status.liveTradingAllowed ? String(localized: "On") : String(localized: "Off (paper only)"))
-                    }
+                    infoRow("Exchange", status.exchange == "mock" ? String(localized: "Demo market (simulated)") : "Revolut X")
+                    infoRow("Live trading", status.liveTradingAllowed ? String(localized: "On") : String(localized: "Off (paper only)"))
                     infoRow("Check interval", String(localized: "every \(String(status.tickSeconds)) s"))
                     if let tick = status.lastTick {
                         infoRow("Last check", Date(ms: tick).formatted(.relative(presentation: .named)))
@@ -261,15 +245,6 @@ struct SettingsView: View {
     private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
         HStack {
             Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).font(.system(size: 11, weight: .medium))
-        }
-    }
-
-    /// "Live trading · Trade Republic   On"
-    private func infoRow(_ title: LocalizedStringKey, verbatimTitle suffix: String, _ value: String) -> some View {
-        HStack {
-            (Text(title) + Text(verbatim: " · \(suffix)")).font(.system(size: 11)).foregroundStyle(.secondary)
             Spacer()
             Text(value).font(.system(size: 11, weight: .medium))
         }

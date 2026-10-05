@@ -10,7 +10,7 @@ from app.config import Settings
 from app.db import Database
 from app.engine import Engine
 from app.exchange import Candle, Exchange, MockExchange, OrderResult, PairInfo, Ticker
-from app.i18n import Problem, message_key, render
+from app.i18n import Problem, render
 from app.revolutx import RevolutXClient
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell
 from app.strategies import open_positions as trades_of
@@ -73,7 +73,7 @@ class FakeExchange(Exchange):
 def ctx(ex, position=None, state=None, **params):
     s = STRATEGIES["dip"]
     view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
-    return Context(s.normalize(params), position, {} if state is None else state, view)
+    return Context(s.normalize(params), position, state or {}, view)
 
 
 @pytest.mark.asyncio
@@ -196,57 +196,6 @@ async def test_dip_trailing_also_starts_at_the_profit_target():
     assert d.action is None and pos.trail_peak == Decimal("2040")
 
 
-class MarketPhaseExchange(FakeExchange):
-    """Like FakeExchange, but the 4-hour candles trend (falling 0.5 % per candle) or move sideways."""
-
-    def __init__(self, ref: str, price: str, phase: str):
-        super().__init__(ref, price)
-        self.phase = phase
-
-    async def candles(self, symbol, interval, since, until):
-        flat = await super().candles(symbol, interval, since, until)
-        if interval < 240:
-            return flat
-        out, n = [], len(flat)
-        for i, c in enumerate(flat):
-            f = 1 - 0.005 * (i - n) if self.phase == "trend" else 1 + (0.005 if i % 2 else -0.005)
-            close = self.ref * Decimal(str(f))
-            out.append(Candle(c.start, close, close * Decimal("1.002"), close * Decimal("0.998"), close))
-        return out
-
-
-def candles_of(closes):
-    return [Candle(i * HOUR, Decimal(str(c)), Decimal(str(c * 1.002)), Decimal(str(c * 0.998)), Decimal(str(c)))
-            for i, c in enumerate(closes)]
-
-
-def test_adx_tells_a_trend_from_a_sideways_market():
-    from app.strategies.base import adx
-    assert adx(candles_of([2000 * 0.995 ** i for i in range(98)])) > 60  # steady fall
-    assert adx(candles_of([2000 * (1.005 if i % 2 else 0.995) for i in range(98)])) < 20  # back and forth
-    assert adx(candles_of([2000] * 98)) == 0  # no movement at all
-    assert adx(candles_of([2000] * 20)) is None  # too few candles
-
-
-@pytest.mark.asyncio
-async def test_dip_sideways_filter_skips_dips_in_a_trend():
-    s = STRATEGIES["dip"]
-    trend, sideways = MarketPhaseExchange("2000", "1970", "trend"), MarketPhaseExchange("2000", "1970", "sideways")
-    d = await s.evaluate(ctx(trend, max_adx=25))  # −1.5 % in 24 h, but the market trends
-    assert d.action is None and message_key(d.status) == "dip.trending"
-    assert "ADX 4h" in render(d.status, "en")
-    assert isinstance((await s.evaluate(ctx(sideways, max_adx=25))).action, Buy)
-    assert isinstance((await s.evaluate(ctx(trend))).action, Buy)  # filter off (default)
-
-
-@pytest.mark.asyncio
-async def test_dip_sideways_filter_doesnt_touch_selling():
-    s = STRATEGIES["dip"]
-    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2040"))  # entry 2000
-    d = await s.evaluate(ctx(MarketPhaseExchange("2100", "2040", "trend"), pos, max_adx=25, sell_mode="profit", take_profit=2))
-    assert isinstance(d.action, Sell)
-
-
 async def test_dip_trailing_in_the_engine(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex)
@@ -272,100 +221,6 @@ def test_position_state_keeps_the_trailing_high():
     assert Position.from_state(p.to_state()).trail_peak == Decimal("105.5")
     old = {"qty": "1", "cost": "100", "opened_at": 0, "peak": "100"}  # stored before the option existed
     assert Position.from_state(old).trail_peak is None
-
-
-DAY = 24 * HOUR
-
-
-class TrendExchange(FakeExchange):
-    """Like FakeExchange, plus daily candles closing at `daily` (the last `history` days only)."""
-
-    def __init__(self, ref: str, price: str, daily: str, history: int = 1000):
-        super().__init__(ref, price)
-        self.now = 1000 * DAY + 5 * HOUR
-        self.daily, self.history = Decimal(daily), history
-        self.daily_requests: list[tuple[int, int]] = []
-
-    async def candles(self, symbol, interval, since, until):
-        if interval != 1440:
-            return await super().candles(symbol, interval, since, until)
-        self.daily_requests.append((since, until))
-        first = self.now - self.now % DAY - self.history * DAY
-        return [Candle(t, self.daily, self.daily, self.daily, self.daily)
-                for t in range(since - since % DAY, until + 1, DAY) if t >= first]
-
-
-TREND = {"trend_days": 200, "trend_fast_days": 60}
-
-
-async def test_daily_closes_come_in_chunks_without_the_forming_day():
-    ex = TrendExchange("2000", "1970", daily="1800")
-    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
-    closes = await view.daily_closes(200)
-    assert len(closes) == 200 and closes[-1] == Decimal("1800")
-    assert len(ex.daily_requests) == 3  # 98 + 98 + 4 candles
-    assert all((until - since) // DAY < 98 for since, until in ex.daily_requests)
-    assert max(until for _, until in ex.daily_requests) < ex.now - ex.now % DAY  # today's candle isn't complete yet
-
-
-async def test_dip_trend_filter_blocks_buys_in_a_downtrend():
-    s = STRATEGIES["dip"]
-    # −1.5 % in 24 h, but the price is below its 200- and 60-day average: no buy
-    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="2100"), **TREND))
-    assert d.action is None and "No uptrend" in render(d.status, "en") and "200-day average" in render(d.status, "en")
-    # well above both averages (> 3 % buffer): the dip is bought
-    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="1800"), **TREND))
-    assert isinstance(d.action, Buy)
-    # without the filter the same dip is bought in the downtrend
-    assert isinstance((await s.evaluate(ctx(TrendExchange("2000", "1970", daily="2100")))).action, Buy)
-
-
-async def test_dip_trend_filter_keeps_its_state_inside_the_buffer():
-    s = STRATEGIES["dip"]
-    state: dict = {}
-    # 1970 is 1 % above the 200-day average 1950: inside the 3 % buffer – no uptrend yet
-    ex = TrendExchange("2000", "1970", daily="1950")
-    assert (await s.evaluate(ctx(ex, state=state, trend_days=200))).action is None and state["trend_up"] is False
-    state["trend_up"] = True  # came from above: stays an uptrend until the price leaves the buffer downwards
-    assert isinstance((await s.evaluate(ctx(ex, state=state, trend_days=200))).action, Buy)
-    ex = TrendExchange("2000", "1970", daily="2050")  # 3.9 % below the average: downtrend
-    assert (await s.evaluate(ctx(ex, state=state, trend_days=200))).action is None and state["trend_up"] is False
-
-
-async def test_dip_trend_filter_waits_for_enough_history():
-    s = STRATEGIES["dip"]
-    d = await s.evaluate(ctx(TrendExchange("2000", "1970", daily="1800", history=120), **TREND))
-    assert d.action is None and "120 of 200 days" in render(d.status, "en")
-
-
-async def test_dip_trend_exit_sells_at_a_loss():
-    s = STRATEGIES["dip"]
-    pos = Position(Decimal("0.025"), Decimal("50"), 0, Decimal("2000"))  # entry 2000
-    ex = TrendExchange("2000", "1900", daily="2100")  # −5 % and below both averages
-    d = await s.evaluate(ctx(ex, pos, state={"trend_up": True}, trend_exit=True, **TREND))
-    assert isinstance(d.action, Sell) and d.action.stop and "Trend broken" in render(d.action.reason, "en")
-    # only with "Sell when the trend breaks"; and not without enough history to judge the trend
-    assert (await s.evaluate(ctx(ex, pos, **TREND))).action is None
-    ex = TrendExchange("2000", "1900", daily="2100", history=30)
-    assert (await s.evaluate(ctx(ex, pos, trend_exit=True, **TREND))).action is None
-
-
-async def test_dip_trend_exit_in_the_engine_fetches_daily_closes_once_a_day(tmp_path: Path):
-    ex = TrendExchange("2000", "1970", daily="1800")
-    db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("Trend", "dip", "ETH-EUR", {**TREND, "trend_exit": True}, True, True)
-    await engine.tick()
-    assert pos(db.get_bot(bot_id))
-    requests = len(ex.daily_requests)
-    ex.now += HOUR
-    await engine.tick()
-    assert len(ex.daily_requests) == requests  # cached until the next day
-    ex.price, ex.daily = Decimal("1700"), Decimal("1900")  # the next day: below both averages
-    ex.now += DAY
-    await engine.tick()
-    assert pos(db.get_bot(bot_id)) is None
-    trade = db.list_trades(bot_id)[0]
-    assert Decimal(trade["pnl"]) < 0
 
 
 @pytest.mark.asyncio
@@ -616,7 +471,7 @@ async def test_holdings_mismatch_pauses_trading_and_clears(tmp_path: Path, monke
     assert any(e["level"] == "error" and "Holdings check" in render(e["message"], "en") for e in db.list_events(bot_id, 10))
 
     ex.held = {}  # back to normal (e.g. a transfer arrived) – the flag clears, trading resumes
-    engine._holdings_checked_at["revolutx"] = 0
+    engine._holdings_checked_at = 0
     await engine.tick()
     bot = db.get_bot(bot_id)
     assert not bot["state"].get("holdings_mismatch") and pos(bot) is None  # stop-loss sold
@@ -1123,24 +978,6 @@ async def test_reset_paper_deletes_simulated_trades_only(tmp_path: Path):
     assert pos(bot) is None and [t["order_id"] for t in db.list_trades(bot_id)] == ["live-1"]
     assert "3 simulated trades deleted" in render(bot["status"], "en")
     assert engine.describe_bot(bot, db.trade_stats())["realized_pnl"] == 0
-
-
-async def test_reset_paper_broker_zeroes_the_summary(tmp_path: Path):
-    ex = FakeExchange("2000", "1970")
-    db, engine = make_engine(tmp_path, ex)
-    db.create_bot("Paper", "dip", "ETH-EUR", {"sell_mode": "profit", "take_profit": 1}, True, True)
-    await engine.tick()
-    ex.price = Decimal("2000")
-    await engine.tick()  # sold with profit
-    before = engine.summary()
-    assert before["trades_count"] == 2 and before["currencies"][0]["realized"] != 0
-
-    db.add_trade(bot_id=999, bot_name="old", symbol="ETH-EUR", side="buy", price="1", base_qty="1",
-                 quote_amount="1", fee="0", pnl=None, order_id="live-1", paper=0, reason="", exchange="revolutx")
-    assert await engine.reset_paper_broker() == 1  # the old live trade; the bot's own paper trades are already gone
-    after = engine.summary()
-    assert after["trades_count"] == 0 and after["open_positions"] == 0
-    assert all(c["realized"] == 0 and c["fees"] == 0 for c in after["currencies"])
 
 
 async def test_reset_paper_refuses_with_an_open_live_trade(tmp_path: Path):

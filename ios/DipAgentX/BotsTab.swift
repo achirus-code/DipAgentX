@@ -18,26 +18,18 @@ struct BotsTab: View {
                 if !store.isConnected {
                     Section { ConnectionLabel() }
                 }
-                if store.isConnected, store.showsBrokerTabs {
-                    // the two broker tabs above the statistics
-                    Section {
-                        BrokerTabsRow()
-                    }
-                }
                 if let summary = store.summary {
                     Section {
                         SummaryCard(
                             summary: summary,
-                            liveAllowed: store.isLive,
+                            liveAllowed: store.status?.liveTradingAllowed ?? false,
                             balances: store.balances,
-                            bots: store.brokerBots,
-                            trades: store.brokerTrades,
+                            bots: store.bots,
+                            trades: store.trades,
                             limits: store.limits,
-                            isDemo: store.status?.isDemo == true,
-                            broker: store.broker,
+                            isDemo: store.status?.exchange == "mock",
                             showHistory: { path.append(Route.history) }
                         )
-                        .id(store.broker)
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                     } footer: {
@@ -47,24 +39,20 @@ struct BotsTab: View {
                 if let error {
                     Section { ErrorLabel(message: error) }
                 }
-                if store.isConnected && store.brokerBots.isEmpty {
+                if store.isConnected && store.bots.isEmpty {
                     Section {
-                        if store.broker == .tradeRepublic {
-                            EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first Trade Republic bot – e.g. a savings plan for an MSCI World ETF or a dip buyer for a stock.")
-                        } else {
-                            EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first bot – e.g. a dip buyer for ETH-EUR.")
-                        }
+                        EmptyStateView(icon: "cpu", title: "No bots yet", message: "Create your first bot – e.g. a dip buyer for ETH-EUR.")
                         Button { creating = true } label: { Label("New bot", systemImage: "plus") }
                     }
                 }
-                group("Active", bots: store.brokerBots.filter(\.enabled))
-                group("Stopped", bots: store.brokerBots.filter { !$0.enabled })
+                group("Active", bots: store.bots.filter(\.enabled))
+                group("Stopped", bots: store.bots.filter { !$0.enabled })
             }
             .navigationTitle("Bots")
             .refreshable { await store.refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if store.brokerBots.count > 1 { sortMenu }
+                    if store.bots.count > 1 { sortMenu }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { creating = true } label: { Image(systemName: "plus") }
@@ -149,9 +137,8 @@ struct BotRow: View {
                         Text(bot.name).font(.headline).lineLimit(1)
                         ModeBadge(paper: bot.paper)
                     }
-                    Text(verbatim: "\(bot.title) · \(bot.strategyName)")
+                    Text(verbatim: "\(bot.symbol) · \(bot.strategyName)")
                         .font(.subheadline).foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .body.weight(.semibold))
@@ -169,7 +156,7 @@ struct BotRow: View {
 
     /// "2 open trades · value 150.00 € · +0.52 %"
     private var openTradesLine: some View {
-        let trades = bot.shownTrades
+        let trades = bot.openTrades
         let value = trades.reduce(0) { $0 + $1.value }
         let cost = trades.reduce(0) { $0 + $1.cost }
         let pct = cost > 0 ? (value / cost - 1) * 100 : 0
@@ -183,18 +170,5 @@ struct BotRow: View {
         .font(.footnote.weight(.medium))
         .monospacedDigit()
         .foregroundStyle(live ? Color.red : Color.secondary)
-    }
-}
-
-
-/// The broker tabs as a list row – bots, trades and the broker settings show the selected broker.
-struct BrokerTabsRow: View {
-    @Environment(AppStore.self) private var store
-
-    var body: some View {
-        BrokerTabs(selection: Binding(get: { store.selectedBroker }, set: { store.selectedBroker = $0 }),
-                   summaries: store.summaries, isLive: store.isLive, attention: store.needsAttention)
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
     }
 }

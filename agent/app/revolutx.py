@@ -20,8 +20,6 @@ import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .errors import ExchangeError
-
 API_PREFIX = "/api/1.0"
 # idempotent GETs are retried on network errors, 429 and 5xx; orders (POST) are never resent
 RETRY_DELAYS = (0.5, 1.0, 2.0)
@@ -29,8 +27,16 @@ RETRY_DELAYS = (0.5, 1.0, 2.0)
 log = logging.getLogger("dipagentx.revolutx")
 
 
-class RevolutXError(ExchangeError):
-    venue = "Revolut X"
+class RevolutXError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(f"Revolut X {status}: {message}")
+        self.status = status
+        self.message = message
+
+    @property
+    def transient(self) -> bool:
+        """Rate limit or server-side problem – worth retrying, says nothing about the request itself."""
+        return self.status == 429 or self.status >= 500
 
 
 class RevolutXClient:

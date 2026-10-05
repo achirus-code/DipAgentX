@@ -9,10 +9,8 @@ they are formatted per language as well (``1,234.56`` vs. ``1.234,56``).
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 LANGUAGES = ("en", "de")
 DEFAULT_LANGUAGE = "en"
@@ -57,28 +55,6 @@ def dur(ms: int) -> dict:
 
 def num(value: float, decimals: int = 1) -> dict:
     return {"$": "num", "v": float(value), "d": decimals}
-
-
-def at(ms: int, tz: str = "Europe/Berlin") -> dict:
-    """A point in time, shown as weekday and time in ``tz`` – e.g. the next opening of a stock exchange."""
-    return {"$": "at", "v": int(ms), "tz": tz}
-
-
-def day(ms: int) -> dict:
-    """A calendar day (UTC), e.g. the next monthly check – "Nov 2", in German "2.11."."""
-    return {"$": "day", "v": int(ms)}
-
-
-def month(key: str) -> dict:
-    """A month given as "YYYY-MM" – "Sep 2026", in German "Sep. 2026"."""
-    return {"$": "month", "v": key}
-
-
-WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "de": ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")}
-MONTHS = {
-    "en": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
-    "de": ("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."),
-}
 
 
 def m(key: str, **args: Any) -> dict:
@@ -132,15 +108,6 @@ def _format_arg(arg: Any, lang: str) -> str:
             return f"{hours} h {rest} min" if rest else f"{hours} h"
         if kind == "num":
             return _number(v, int(arg.get("d", 1)), lang)
-        if kind == "at":
-            when = datetime.fromtimestamp(int(v) / 1000, ZoneInfo(arg.get("tz") or "Europe/Berlin"))
-            return f"{WEEKDAYS['de' if lang == 'de' else 'en'][when.weekday()]} {when:%H:%M}"
-        if kind == "day":
-            when = datetime.fromtimestamp(int(v) / 1000, ZoneInfo("UTC"))
-            return f"{when.day}.{when.month}." if lang == "de" else f"{MONTHS['en'][when.month - 1]} {when.day}"
-        if kind == "month":
-            year, mon = str(v).split("-")
-            return f"{MONTHS['de' if lang == 'de' else 'en'][int(mon) - 1]} {year}"
         return str(arg)
     if isinstance(arg, list):
         return " / ".join(_format_arg(a, lang) for a in arg)
@@ -211,8 +178,6 @@ CATALOG: dict[str, L] = {
     "targets.next_buy": L("Next buy in {left}", "Nächster Kauf in {left}"),
     "targets.trailing": L("Trailing stop", "Trailing-Stop"),
     "targets.trailing_from": L("Trailing starts here", "Trailing startet hier"),
-    "targets.trend": L("Waiting for an uptrend", "Warte auf Aufwärtstrend"),
-    "targets.trend_check": L("Next check {date}", "Nächste Prüfung {date}"),
     "targets.ai": L("Claude decides", "Claude entscheidet"),
     "cooldown": L("Cooling down for {left}", "Pause noch {left}"),
     "cooldown.window": L("Cooling down for {left} · {window}", "Pause noch {left} · {window}"),
@@ -225,14 +190,6 @@ CATALOG: dict[str, L] = {
     "dip.buy_signal": L("Buy signal · {window}", "Kaufsignal · {window}"),
     "dip.buy_reason": L("{hours}h change {change} ≤ {threshold}", "{hours}h-Veränderung {change} ≤ {threshold}"),
     "dip.waiting": L("Waiting for a dip · {window} (buy at ≤ {threshold})", "Warte auf Dip · {window} (Kauf ≤ {threshold})"),
-    "dip.trending": L(
-        "Dip, but the market trends (ADX 4h {adx}, buys below {max}) · {window}",
-        "Dip, aber der Markt trendet (ADX 4h {adx}, Kauf unter {max}) · {window}",
-    ),
-    "dip.adx_missing": L(
-        "Dip, but too few candles for the ADX yet · {window}",
-        "Dip, aber noch zu wenige Kerzen für den ADX · {window}",
-    ),
     "dip.recovered": L("Recovered", "Erholung erreicht"),
     "dip.recovered.reason": L(
         "{hours}h change {change} ≥ {threshold}, profit {profit}",
@@ -256,137 +213,6 @@ CATALOG: dict[str, L] = {
     "dip.trailing_hold": L(
         "Trailing stop {stop} reached, but profit {profit} < minimum {min} · holding",
         "Trailing-Stop {stop} erreicht, aber Gewinn {profit} < Mindestgewinn {min} · halte",
-    ),
-    "dip.trend_down": L(
-        "No uptrend – buys only above {level} · {detail}",
-        "Kein Aufwärtstrend – Käufe erst über {level} · {detail}",
-    ),
-    "dip.trend_exit": L("Trend broken", "Trendbruch"),
-    "dip.trend_exit.reason": L("Trend broken ({detail}), result {profit}", "Trendbruch ({detail}), Ergebnis {profit}"),
-    # --- trend filter
-    "trend.detail": L("price {price} · {averages}", "Kurs {price} · {averages}"),
-    "trend.average": L("{days}-day average {avg}", "{days}-Tage-Schnitt {avg}"),
-    "trend.no_history": L(
-        "Not enough price history for the trend filter ({days} of {need} days) – no buys",
-        "Zu wenig Kursverlauf für den Trendfilter ({days} von {need} Tagen) – keine Käufe",
-    ),
-    # --- monthly trend follower
-    "momentum.no_history": L("Waiting for price history ({have} of {need} days)",
-                             "Warte auf Kursverlauf ({have} von {need} Tagen)"),
-    "momentum.status": L("{invested} % invested, target {target} % · {detail}",
-                         "{invested} % investiert, Ziel {target} % · {detail}"),
-    "momentum.target": L("Target {target} % invested", "Ziel {target} % investiert"),
-    "momentum.buying": L("Raising to {target} % – buying", "Aufstocken auf {target} % – kaufe"),
-    "momentum.buy_reason": L("target {target} % · {detail}", "Ziel {target} % · {detail}"),
-    "momentum.selling": L("Lowering to {target} % – selling a trade", "Reduzieren auf {target} % – verkaufe einen Trade"),
-    "momentum.sell_reason": L("target {target} % · {detail} · result {profit}",
-                              "Ziel {target} % · {detail} · Ergebnis {profit}"),
-    "momentum.trend": L("trend: {up} of {n} lookbacks up", "Trend: {up} von {n} Zeitfenstern aufwärts"),
-    "momentum.trend_strong": L("trend: {up} of {n} lookbacks up (strong uptrend: up from {entry})",
-                               "Trend: {up} von {n} Zeitfenstern aufwärts (starker Aufwärtstrend: aufwärts ab {entry})"),
-    "momentum.vol": L("volatility {vol} %", "Schwankung {vol} %"),
-    "momentum.vol_capped": L("volatility {vol} % above {limit} % – less", "Schwankung {vol} % über {limit} % – weniger"),
-    "momentum.funding": L("funding {rate} p.a.", "Funding {rate} p. a."),
-    "momentum.funding_floor": L("funding {rate} p.a. below {limit} – at least {floor} %",
-                                "Funding {rate} p. a. unter {limit} – mindestens {floor} %"),
-    "momentum.funding_missing": L("funding rate not available", "Funding-Rate nicht verfügbar"),
-    "momentum.inflow": L("exchange inflow {flow}", "Börsenzufluss {flow}"),
-    "momentum.inflow_brake": L("exchange inflow {flow} – halved", "Börsenzufluss {flow} – halbiert"),
-    "momentum.inflow_missing": L("exchange flows not available – no brake", "Börsenzuflüsse nicht verfügbar – keine Bremse"),
-    "momentum.and": L("{a} · {b}", "{a} · {b}"),
-    "monthly.invested": L("Invested {profit} · {detail} · next check {date}",
-                          "Investiert {profit} · {detail} · nächste Prüfung {date}"),
-    "monthly.out": L("In cash · {detail} · next check {date}", "In Cash · {detail} · nächste Prüfung {date}"),
-    "monthly.buy": L("Trend up – buying", "Trend aufwärts – kaufe"),
-    "monthly.exit": L("Trend down – selling", "Trend abwärts – verkaufe"),
-    "monthly.exit_reason": L("{detail} · result {profit}", "{detail} · Ergebnis {profit}"),
-    "monthly.sma": L("{month} close {close} vs. {n}-month average {avg} ({diff})",
-                     "Schluss {month} {close} vs. {n}-Monats-Schnitt {avg} ({diff})"),
-    "monthly.sma_band": L("{trend} – inside the ±{buffer}% buffer, unchanged",
-                          "{trend} – im Puffer ±{buffer} %, unverändert"),
-    "monthly.momentum": L("{n}-month return {ret} vs. cash rate {hurdle} (to the {month} close)",
-                          "{n}-Monats-Rendite {ret} vs. Zins {hurdle} (bis Schluss {month})"),
-    "monthly.momentum_euribor": L("{n}-month return {ret} vs. cash {hurdle} (Euribor, to the {month} close)",
-                                  "{n}-Monats-Rendite {ret} vs. Zins {hurdle} (Euribor, bis Schluss {month})"),
-    "monthly.either": L("{sma} · {momentum}", "{sma} · {momentum}"),
-    "monthly.with": L("{detail} · {extra}", "{detail} · {extra}"),
-    "monthly.and": L("{a}; {b}", "{a}; {b}"),
-    "monthly.recession_yes": L("{trend} · recession sign: {signs}", "{trend} · Rezessionszeichen: {signs}"),
-    "monthly.recession_no": L("{trend} · but no recession sign ({signs}) – stays invested",
-                              "{trend} · aber kein Rezessionszeichen ({signs}) – bleibt investiert"),
-    "monthly.recession_unknown": L("{trend} · recession data not available – the trend alone decides",
-                                   "{trend} · Rezessionsdaten nicht verfügbar – der Trend allein entscheidet"),
-    "monthly.missing": L("{what} not available", "{what} nicht verfügbar"),
-    "monthly.what_unemployment": L("US unemployment rate", "US-Arbeitslosenquote"),
-    "monthly.what_claims": L("US jobless claims", "US-Erstanträge"),
-    "monthly.what_curve": L("US yield curve", "US-Zinskurve"),
-    "monthly.unemployment_up": L("US unemployment {rate} % above its 12-month average {avg} % ({month})",
-                                 "US-Arbeitslosenquote {rate} % über ihrem 12-Monats-Schnitt {avg} % ({month})"),
-    "monthly.unemployment_down": L("US unemployment {rate} % not above its 12-month average {avg} % ({month})",
-                                   "US-Arbeitslosenquote {rate} % nicht über ihrem 12-Monats-Schnitt {avg} % ({month})"),
-    "monthly.claims": L("US jobless claims {change} vs. a year earlier ({month})",
-                        "US-Erstanträge {change} ggü. Vorjahr ({month})"),
-    "monthly.curve_inverted": L("US yield curve inverted in {month}", "US-Zinskurve invers im {month}"),
-    "monthly.curve_normal": L("US yield curve not inverted for 24 months (10 years − 3 months {spread} pp)",
-                              "US-Zinskurve seit 24 Monaten nicht invers (10 J. − 3 M. {spread} Pp.)"),
-    "monthly.hedge_on": L("dollar falling: euro {rate} $ above its 12-month average {avg} $ ({month}) – currency-hedged",
-                          "Dollar fällt: Euro {rate} $ über 12-Monats-Schnitt {avg} $ ({month}) – währungsgesichert"),
-    "monthly.hedge_off": L("euro {rate} $ not above its 12-month average {avg} $ ({month}) – unhedged",
-                           "Euro {rate} $ nicht über 12-Monats-Schnitt {avg} $ ({month}) – ungesichert"),
-    "monthly.hedge_unknown": L("EUR/USD not available – share class unchanged",
-                               "EUR/USD nicht verfügbar – Anteilsklasse unverändert"),
-    "monthly.hedge_unavailable": L("currency-hedged share class {name} not available – unhedged",
-                                   "Währungsgesicherte Variante {name} nicht verfügbar – ungesichert"),
-    "monthly.park_candidate": L("{name} {ret}", "{name} {ret}"),
-    "monthly.park_no_data": L("{name} without data", "{name} ohne Daten"),
-    "monthly.park_choice": L("12-month returns {candidates} vs. cash {hurdle} – parking in the best",
-                             "12-Monats-Renditen {candidates} vs. Zins {hurdle} – Ausweichen in die beste"),
-    "monthly.park_none": L("12-month returns {candidates} don't beat cash {hurdle} – cash",
-                           "12-Monats-Renditen {candidates} schlagen den Zins {hurdle} nicht – Cash"),
-    "monthly.buy_hedged": L("Trend up – buying the currency-hedged {name}",
-                            "Trend aufwärts – kaufe die währungsgesicherte Variante {name}"),
-    "monthly.buy_parking": L("Trend down – parking in {name}", "Trend abwärts – weiche aus in {name}"),
-    "monthly.invested_in": L("Invested in {name} {profit} · {detail} · next check {date}",
-                             "Investiert in {name} {profit} · {detail} · nächste Prüfung {date}"),
-    "monthly.parked_in": L("Parked in {name} {profit} · {detail} · next check {date}",
-                           "Ausgewichen in {name} {profit} · {detail} · nächste Prüfung {date}"),
-    "monthly.switch": L("Switching to {name}", "Wechsel zu {name}"),
-    "monthly.switch_reason": L("Switching to {name}: {detail} · result {profit}",
-                               "Wechsel zu {name}: {detail} · Ergebnis {profit}"),
-    "signals.month": L("{month}", "{month}"),
-    "signals.decision": L("Decision {month}", "Entscheidung {month}"),
-    "signals.state_in": L("invested", "investiert"),
-    "signals.state_hedged": L("invested, currency-hedged", "investiert, währungsgesichert"),
-    "signals.state_parked": L("parked in bonds", "in Anleihen ausgewichen"),
-    "signals.state_cash": L("in cash", "in Cash"),
-    "signals.sma": L("Price vs. {n}-month average", "Kurs vs. {n}-Monats-Ø"),
-    "signals.sma_value": L("{month} {close} · average {avg} ({diff})", "{month} {close} · Ø {avg} ({diff})"),
-    "signals.sma_exit": L("Today {price} – off below {turn} ({diff}) at the month end",
-                          "Heute {price} – aus unter {turn} ({diff}) zum Monatsende"),
-    "signals.sma_enter": L("Today {price} – on above {turn} ({diff}) at the month end",
-                           "Heute {price} – an über {turn} ({diff}) zum Monatsende"),
-    "signals.momentum": L("{n}-month return vs. cash", "{n}-Monats-Rendite vs. Zins"),
-    "signals.return_vs": L("{ret} vs. {hurdle}", "{ret} vs. {hurdle}"),
-    "signals.return_vs_euribor": L("{ret} vs. {hurdle} (Euribor)", "{ret} vs. {hurdle} (Euribor)"),
-    "signals.momentum_exit": L("Today {price} – off below {turn} ({diff}) at the month end",
-                               "Heute {price} – aus unter {turn} ({diff}) zum Monatsende"),
-    "signals.momentum_enter": L("Today {price} – on above {turn} ({diff}) at the month end",
-                                "Heute {price} – an über {turn} ({diff}) zum Monatsende"),
-    "signals.unemployment": L("{rate} % vs. 12-month average {avg} % ({month})",
-                              "{rate} % vs. 12-Monats-Ø {avg} % ({month})"),
-    "signals.claims": L("{change} vs. a year earlier ({month})", "{change} zum Vorjahr ({month})"),
-    "signals.curve_inverted": L("inverted in {month} · now {spread} pp", "invers im {month} · jetzt {spread} Pp"),
-    "signals.curve_normal": L("not inverted for 24 months · {spread} pp", "seit 24 Monaten nicht invers · {spread} Pp"),
-    "signals.dollar": L("Dollar (EUR/USD)", "Dollar (EUR/USD)"),
-    "signals.eurusd_hedged": L("{rate} vs. average {avg} ({month}) – dollar falling, hedged",
-                               "{rate} vs. Ø {avg} ({month}) – Dollar fällt, gesichert"),
-    "signals.eurusd_open": L("{rate} vs. average {avg} ({month}) – unhedged",
-                             "{rate} vs. Ø {avg} ({month}) – ungesichert"),
-    "signals.park": L("Park in {name} (12 months)", "Ausweichen {name} (12 Monate)"),
-    "signals.no_data": L("no data", "keine Daten"),
-    "monthly.no_months": L(
-        "Not enough price history: {have} of {need} month-end closes – waiting",
-        "Zu wenig Kursverlauf: {have} von {need} Monatsschlusskursen – warte",
     ),
     # --- price zones
     "zones.no_price": L("No buy price set", "Kein Kaufpreis eingestellt"),
@@ -472,10 +298,6 @@ CATALOG: dict[str, L] = {
         "Paper result reset – {count} simulated trades deleted, starting from scratch",
         "Paper-Ergebnis zurückgesetzt – {count} simulierte Trades gelöscht, Neustart bei null",
     ),
-    "event.paper_reset_broker": L(
-        "All values and trades on {broker} reset to zero",
-        "Alle Werte und Trades auf {broker} auf null zurückgesetzt",
-    ),
     "engine.trade_interval": L(
         "Buy signal – next trade at the earliest in {left} (min. time between trades)",
         "Kaufsignal – nächster Trade frühestens in {left} (Mindestzeit zwischen Trades)",
@@ -505,10 +327,6 @@ CATALOG: dict[str, L] = {
     "engine.order_not_found": L(
         "Order {id} could not be found at the exchange – bot stopped. Check the order on Revolut X before starting the bot again",
         "Order {id} ist bei der Börse nicht auffindbar – Bot gestoppt. Bitte die Order auf Revolut X prüfen, bevor der Bot wieder gestartet wird",
-    ),
-    "engine.mode_changed_restart": L(
-        "Live trading: paper trades closed (simulated) – starts afresh with its capital",
-        "Live-Handel: Paper-Trades geschlossen (simuliert) – startet neu mit seinem Kapital",
     ),
     "engine.mode_changed_close": L(
         "Paper position closed – live trading enabled",
@@ -572,99 +390,15 @@ CATALOG: dict[str, L] = {
     "err.unknown_pair": L("Unknown trading pair: {symbol}", "Unbekanntes Handelspaar: {symbol}"),
     "err.no_ticker": L("No ticker for {symbol}", "Kein Ticker für {symbol}"),
     "err.not_enough": L("Not enough {currency}", "Nicht genug {currency}"),
-    "err.market_closed": L("{reason} – no order possible right now", "{reason} – gerade keine Order möglich"),
-    "exchange.unknown": L("Unknown broker “{broker}”", "Unbekannter Broker „{broker}“"),
     "exchange.key_file_missing": L("Revolut X not configured: {path} is missing", "Revolut X nicht konfiguriert: {path} fehlt"),
     "exchange.not_set_up": L(
         "Revolut X is not set up – connect it in the app under Settings → Revolut X",
         "Revolut X nicht eingerichtet – in der App unter Einstellungen → Revolut X verbinden",
     ),
-    # --- Trade Republic
-    "tr.market_closed": L("Market closed · opens {opens}", "Börse geschlossen · öffnet {opens}"),
-    "tr.no_quotes": L(
-        "No current quotes since {since} – the venue seems to be closed today",
-        "Keine aktuellen Kurse seit {since} – der Handelsplatz ist heute wohl geschlossen",
-    ),
-    "tr.exchange_closed": L("Trade Republic: the venue is closed right now", "Trade Republic: der Handelsplatz ist gerade geschlossen"),
-    "tr.login_required": L(
-        "Not logged in to Trade Republic – log in in the app under Settings → Trade Republic",
-        "Nicht bei Trade Republic angemeldet – in der App unter Einstellungen → Trade Republic anmelden",
-    ),
-    "tr.session_expired": L(
-        "The Trade Republic session has expired (after 24 hours) – please log in again",
-        "Die Trade-Republic-Sitzung ist abgelaufen (nach 24 Stunden) – bitte neu anmelden",
-    ),
-    "tr.phone_invalid": L(
-        "Please enter the phone number of your Trade Republic account, e.g. +49 171 1234567",
-        "Bitte die Telefonnummer deines Trade-Republic-Kontos eingeben, z. B. +49 171 1234567",
-    ),
-    "tr.pin_invalid": L("The PIN has four digits", "Die PIN hat vier Ziffern"),
-    "tr.code_invalid": L("Please enter the code from your authenticator app", "Bitte den Code aus deiner Authenticator-App eingeben"),
-    "tr.credentials_missing": L(
-        "Phone number and PIN are needed for the login",
-        "Für die Anmeldung werden Telefonnummer und PIN gebraucht",
-    ),
-    "tr.wrong_credentials": L("Trade Republic rejected phone number or PIN", "Trade Republic hat Telefonnummer oder PIN abgelehnt"),
-    "tr.saved_pin_rejected": L(
-        "Trade Republic rejected the saved PIN – it was deleted. Log in again in the app",
-        "Trade Republic hat die gespeicherte PIN abgelehnt – sie wurde gelöscht. Bitte in der App neu anmelden",
-    ),
-    "tr.too_many_attempts": L(
-        "Too many login attempts – Trade Republic asks to wait a while",
-        "Zu viele Anmeldeversuche – Trade Republic bittet, eine Weile zu warten",
-    ),
-    "tr.web_login_unavailable": L(
-        "Trade Republic doesn't allow the web login for this account",
-        "Trade Republic erlaubt für dieses Konto keine Anmeldung über das Web",
-    ),
-    "tr.version_outdated": L(
-        "Trade Republic refuses the login: the web app version DipAgentX reports is outdated – update the agent "
-        "(or set TR_APP_VERSION)",
-        "Trade Republic lehnt die Anmeldung ab: die Web-App-Version, die DipAgentX meldet, ist veraltet – Agent "
-        "aktualisieren (oder TR_APP_VERSION setzen)",
-    ),
-    "tr.login_failed": L("Trade Republic login failed: {error}", "Anmeldung bei Trade Republic fehlgeschlagen: {error}"),
-    "tr.login_not_confirmed": L(
-        "The login was not confirmed in the Trade Republic app in time",
-        "Die Anmeldung wurde nicht rechtzeitig in der Trade-Republic-App bestätigt",
-    ),
-    "tr.no_login_running": L("No login is running", "Es läuft keine Anmeldung"),
-    "tr.unreachable": L("Trade Republic is not reachable: {error}", "Trade Republic nicht erreichbar: {error}"),
-    "tr.unknown_instrument": L("Trade Republic doesn't know {symbol}", "Trade Republic kennt {symbol} nicht"),
-    "tr.not_tradable": L("{name} can't be traded on Trade Republic right now", "{name} ist auf Trade Republic gerade nicht handelbar"),
-    "tr.order_too_small": L(
-        "Order too small: {qty} {name} – Trade Republic needs at least {min}",
-        "Order zu klein: {qty} {name} – Trade Republic verlangt mindestens {min}",
-    ),
-    "event.tr_logged_in": L("Logged in to Trade Republic", "Bei Trade Republic angemeldet"),
-    "event.tr_logged_out": L("Logged out of Trade Republic", "Von Trade Republic abgemeldet"),
-    "event.live_off_tr_logout": L(
-        "Live trading on Trade Republic disabled (logged out)",
-        "Live-Handel auf Trade Republic deaktiviert (abgemeldet)",
-    ),
     # --- API
     "api.invalid_token": L("Invalid or missing API token", "Ungültiges oder fehlendes API-Token"),
     "api.unknown_strategy": L("Unknown strategy: {strategy}", "Unbekannte Strategie: {strategy}"),
     "api.pair_unavailable": L("Trading pair {symbol} is not available on Revolut X", "Handelspaar {symbol} ist auf Revolut X nicht verfügbar"),
-    "api.pair_unavailable_on": L("{symbol} is not available on {broker}", "{symbol} ist auf {broker} nicht verfügbar"),
-    "api.unknown_exchange": L("Unknown broker: {exchange}", "Unbekannter Broker: {exchange}"),
-    "api.broker_disabled": L(
-        "{broker} is switched off in the settings",
-        "{broker} ist in den Einstellungen ausgeschaltet",
-    ),
-    "api.last_broker": L("At least one broker has to stay on", "Mindestens ein Broker muss eingeschaltet bleiben"),
-    "api.broker_busy": L(
-        "{broker} still has open trades or orders – sell or close them first",
-        "{broker} hat noch offene Trades oder Orders – erst verkaufen oder schließen",
-    ),
-    "api.tr_logout_open_trades": L(
-        "Live Trade Republic trades are open – without a login they could not be sold, not even by the stop-loss. Sell them first",
-        "Es sind Live-Trades auf Trade Republic offen – ohne Anmeldung ließen sie sich nicht verkaufen, auch nicht per Stop-Loss. Bitte erst verkaufen",
-    ),
-    "api.locked_exchange": L(
-        "A bot stays with its broker – create a new bot for the other one",
-        "Ein Bot bleibt bei seinem Broker – für den anderen bitte einen neuen Bot anlegen",
-    ),
     "api.bot_not_found": L("Bot not found", "Bot nicht gefunden"),
     "api.demo_mode": L("The agent runs in demo mode (EXCHANGE=mock)", "Der Agent läuft im Demo-Modus (EXCHANGE=mock)"),
     "api.env_configured": L(
@@ -688,11 +422,6 @@ CATALOG: dict[str, L] = {
         "Im Demo-Markt (EXCHANGE=mock) gibt es keinen Live-Handel",
     ),
     "api.connect_revx_first": L("Please connect Revolut X first", "Bitte zuerst Revolut X verbinden"),
-    "api.connect_broker_first": L("Please connect {broker} first", "Bitte zuerst {broker} verbinden"),
-    "api.broker_unreachable_live": L(
-        "{broker} is not reachable – live trading stays off: {error}",
-        "{broker} nicht erreichbar – Live-Handel bleibt aus: {error}",
-    ),
     "api.confirm_live": L("Live trading must be confirmed explicitly", "Live-Handel muss ausdrücklich bestätigt werden"),
     "api.invalid_backup": L("Not a valid DipAgentX backup: {error}", "Kein gültiges DipAgentX-Backup: {error}"),
     "api.revx_unreachable_live": L(
@@ -714,20 +443,12 @@ CATALOG: dict[str, L] = {
     # --- statuses and events
     "status.starting": L("Starting …", "Wird gestartet …"),
     "status.stopped": L("Stopped", "Gestoppt"),
-    "status.broker_disabled": L("Stopped – {broker} is switched off", "Gestoppt – {broker} ist ausgeschaltet"),
-    "event.broker_disabled": L("{broker} switched off – its bots were stopped", "{broker} ausgeschaltet – seine Bots wurden gestoppt"),
-    "event.broker_enabled": L("{broker} switched on", "{broker} eingeschaltet"),
     "event.bot_created": L("Bot created ({strategy}, {symbol})", "Bot angelegt ({strategy}, {symbol})"),
     "event.settings_changed": L("Settings changed", "Einstellungen geändert"),
     "event.bot_started": L("Bot started", "Bot gestartet"),
     "event.bot_stopped": L("Bot stopped", "Bot gestoppt"),
     "event.limits_changed": L("Limits changed", "Limits geändert"),
-    "event.limits_changed_on": L("Limits for {broker} changed", "Limits für {broker} geändert"),
     "event.paper_fees_changed": L("Simulation fees changed – simulated trades rebooked", "Simulationsgebühren geändert – simulierte Trades neu berechnet"),
-    "event.paper_fees_changed_on": L(
-        "Simulation fees for {broker} changed – simulated trades rebooked",
-        "Simulationsgebühren für {broker} geändert – simulierte Trades neu berechnet",
-    ),
     "event.keypair": L("New Revolut X key pair generated", "Neues Revolut-X-Schlüsselpaar erzeugt"),
     "event.revx_connected": L("Revolut X connected", "Revolut X verbunden"),
     "event.revx_removed": L("Revolut X access removed", "Revolut-X-Zugang entfernt"),
@@ -737,11 +458,6 @@ CATALOG: dict[str, L] = {
     ),
     "event.live_on": L("Live trading ENABLED – real orders on Revolut X", "Live-Handel AKTIVIERT – echte Orders auf Revolut X"),
     "event.live_off": L("Live trading disabled – paper trading only", "Live-Handel deaktiviert – nur noch Paper-Trading"),
-    "event.broker_live_on": L("Live trading ENABLED – real orders on {broker}", "Live-Handel AKTIVIERT – echte Orders auf {broker}"),
-    "event.broker_live_off": L(
-        "Live trading on {broker} disabled – paper trading only",
-        "Live-Handel auf {broker} deaktiviert – nur noch Paper-Trading",
-    ),
     "event.bot_live": L("Switched to live (live trading enabled)", "Live geschaltet (Live-Handel aktiviert)"),
     "event.restored": L("Backup from {date} restored ({bots} bots, {trades} trades)", "Backup vom {date} wiederhergestellt ({bots} Bots, {trades} Trades)"),
     "event.live_off_restored": L(

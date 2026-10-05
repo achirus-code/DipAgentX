@@ -22,11 +22,10 @@ RESOURCES = ROOT / "shared" / "Localization"
 
 # literals that are not UI text (identifiers, protocol values, product names …)
 IGNORE = {
-    "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "Trade Republic", "DipAgentX", "English", "Deutsch", "System",
+    "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgentX", "English", "Deutsch", "System",
     "Authorization", "Accept", "Accept-Language", "Content-Type", "application/json",
     "GET", "POST", "PUT", "DELETE", "AppleLanguages", "LIVE", "Bots", "Trades", "Name", "Agent",
     " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken", "Not Found",
-    "IE00B4L5Y983-EUR", "iShares Core MSCI World", "EUNL", "IE00B4L5Y983", "ETF",
 }
 # lines that never contain UI text
 IGNORE_LINE = re.compile(

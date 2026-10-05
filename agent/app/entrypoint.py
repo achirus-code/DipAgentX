@@ -27,7 +27,6 @@ OPTION_ENV = {
     "taker_fee": "TAKER_FEE",
     "mock_speed": "MOCK_SPEED",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "tr_app_version": "TR_APP_VERSION",
 }
 
 UVICORN = ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(PORT), "--proxy-headers"]

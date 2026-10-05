@@ -39,72 +39,29 @@ public final class AppStore {
         }
     }
 
-    /// The broker the app shows – the tabs above the statistics switch it. Statistics, bots, trades, the trading
-    /// mode, limits and simulation fees all belong to one broker.
-    public var selectedBroker: Broker = Broker(id: UserDefaults.standard.string(forKey: "broker")) {
-        didSet {
-            UserDefaults.standard.set(selectedBroker.rawValue, forKey: "broker")
-            if selectedBroker != oldValue, isConnected { Task { await refreshBalances(force: true) } }
-        }
-    }
-
     // Data from the agent
     public internal(set) var connection: ConnectionState = .notConfigured
     public internal(set) var status: ServerStatus?
-    public internal(set) var summaries: [Broker: Summary] = [:]
-    /// All bots and the latest trades of every broker – `brokerBots`/`brokerTrades` are the selected broker's.
+    public internal(set) var summary: Summary?
     public internal(set) var bots: [Bot] = []
     public internal(set) var trades: [Trade] = []
     public internal(set) var strategies: [Strategy] = []
-    public internal(set) var pairsByBroker: [Broker: [String]] = [:]
-    public internal(set) var balancesByBroker: [Broker: [Balance]] = [:]
-    public internal(set) var limitsByBroker: [Broker: Limits] = [:]
-    public internal(set) var paperFeesByBroker: [Broker: PaperFees] = [:]
+    public internal(set) var pairs: [String] = []
+    public internal(set) var balances: [Balance] = []
+    public internal(set) var limits: Limits?
+    public internal(set) var paperFees: PaperFees?
     public internal(set) var exchangeInfo: ExchangeInfo?
-    public internal(set) var tradeRepublic: TradeRepublicInfo?
-
-    /// The agent knows several brokers (1.20+). Older agents only trade on Revolut X – no tabs then.
-    public var supportsBrokers: Bool { status?.exchanges != nil }
-    /// The brokers switched on in the settings (older agents: Revolut X).
-    public var enabledBrokers: [Broker] {
-        guard supportsBrokers else { return [.revolutX] }
-        let on = Broker.allCases.filter { status?.exchange($0)?.isEnabled ?? true }
-        return on.isEmpty ? [.revolutX] : on
-    }
-    /// The tabs above the statistics – only while more than one broker is on.
-    public var showsBrokerTabs: Bool { enabledBrokers.count > 1 }
-    /// The broker whose data the app shows right now: the selected tab – or the only broker that is on.
-    public var broker: Broker { enabledBrokers.contains(selectedBroker) ? selectedBroker : enabledBrokers[0] }
-    public var summary: Summary? { summaries[broker] }
-    public var limits: Limits? { limitsByBroker[broker] }
-    public var paperFees: PaperFees? { paperFeesByBroker[broker] }
-    public var balances: [Balance] { balancesByBroker[broker] ?? [] }
-    public var pairs: [String] { pairsByBroker[broker] ?? [] }
-    public func pairs(for broker: Broker) -> [String] { pairsByBroker[broker] ?? [] }
-    public var brokerBots: [Bot] { bots.filter { $0.broker == broker } }
-    public var brokerTrades: [Trade] { trades.filter { $0.broker == broker } }
-    /// Live trading on the selected broker.
-    public var isLive: Bool { status?.liveTradingAllowed(broker) ?? false }
-    public func isLive(_ broker: Broker) -> Bool { status?.liveTradingAllowed(broker) ?? false }
-    /// The broker can trade: connected (Revolut X: API key, Trade Republic: logged in) and answering.
-    public func brokerReady(_ broker: Broker) -> Bool {
-        switch broker {
-        case .revolutX: return exchangeInfo?.connected == true
-        case .tradeRepublic: return tradeRepublic?.connected == true
-        }
-    }
     public internal(set) var lastUpdate: Date?
     /// Set by the app: the panel (macOS) or the app (iPhone) is on screen. Balances are only fetched then –
     /// nobody sees them otherwise, and every fetch is a request to Revolut X.
     public var isVisible = false
-    private var balancesUpdatedAt: [Broker: Date] = [:]
+    private var balancesUpdatedAt: Date?
     public internal(set) var isRefreshing = false
     /// macOS: while true (Revolut X setup, file dialogs) the panel stays open when the user clicks elsewhere.
     @ObservationIgnored public var keepPanelOpen = false
 
     private var client: APIClient?
     private var pollTask: Task<Void, Never>?
-    private var loginWatch: Task<Void, Never>?
     /// The newest trade the user has been told about. The iPhone keeps it across launches, so trades made while
     /// the app was closed are reported by the background refresh or on the next start.
     private var lastSeenTradeId: Int? {
@@ -209,7 +166,7 @@ public final class AppStore {
             self.client = client
             status = try await client.get("/status")
             strategies = try await client.get("/strategies")
-            await loadPairs()
+            pairs = (try? await client.get("/pairs")) ?? []
             connection = .connected
             retryDelay = 5
             UserDefaults.standard.set(false, forKey: "userDisconnected")
@@ -225,35 +182,7 @@ public final class AppStore {
         pollTask?.cancel()
         client = nil
         connection = .notConfigured
-        bots = []; trades = []; summaries = [:]; status = nil; balancesByBroker = [:]; limitsByBroker = [:]
-        paperFeesByBroker = [:]; exchangeInfo = nil; tradeRepublic = nil; pairsByBroker = [:]
-    }
-
-    /// The brokers to load: every broker the agent knows (older agents: Revolut X only, without a query).
-    private var loadedBrokers: [Broker] { supportsBrokers ? Broker.allCases : [.revolutX] }
-
-    private func query(_ broker: Broker, _ extra: [String: String] = [:]) -> [String: String] {
-        supportsBrokers ? extra.merging(["exchange": broker.rawValue]) { a, _ in a } : extra
-    }
-
-    private func loadPairs() async {
-        guard let client else { return }
-        for broker in loadedBrokers {
-            if let pairs: [String] = try? await client.get("/pairs", query: query(broker)) { pairsByBroker[broker] = pairs }
-        }
-    }
-
-    /// The selected broker's balances – only while the app is on screen (each fetch asks the broker), at the latest
-    /// every 10 minutes, or right away after switching the broker.
-    public func refreshBalances(force: Bool = false) async {
-        guard let client else { return }
-        let broker = self.broker
-        let stale = balancesUpdatedAt[broker].map { Date().timeIntervalSince($0) > 600 } ?? true
-        guard force || isVisible || stale else { return }
-        if let fresh: [Balance] = try? await client.get("/balances", query: query(broker)) {
-            balancesByBroker[broker] = fresh
-            balancesUpdatedAt[broker] = Date()
-        }
+        bots = []; trades = []; summary = nil; status = nil; balances = []; limits = nil; paperFees = nil; exchangeInfo = nil
     }
 
     /// Connected: refresh every `refreshInterval`. Unreachable: reconnect after `retryDelay` (5 s, then doubling
@@ -285,35 +214,30 @@ public final class AppStore {
         defer { isRefreshing = false }
         do {
             async let s: ServerStatus = client.get("/status")
-            // "all": every broker's bots and trades (older agents ignore it and send their Revolut X ones)
-            async let b: [Bot] = client.get("/bots", query: ["exchange": "all"])
-            async let t: [Trade] = client.get("/trades", query: ["limit": "500", "exchange": "all"])
-            let (newStatus, newBots, newTrades) = try await (s, b, t)
+            async let sum: Summary = client.get("/summary")
+            async let b: [Bot] = client.get("/bots")
+            async let t: [Trade] = client.get("/trades", query: ["limit": "300"])
+            let (newStatus, newSummary, newBots, newTrades) = try await (s, sum, b, t)
             // the agent was updated while the app kept running – its strategies may have new settings
             if let old = status?.version, old != newStatus.version {
                 strategies = (try? await client.get("/strategies")) ?? strategies
             }
             status = newStatus
-            // every broker's statistics, limits and fees – the tabs switch without waiting for the agent
-            for broker in loadedBrokers {
-                async let sum: Summary = client.get("/summary", query: query(broker))
-                async let lim: Limits? = try? client.get("/limits", query: query(broker))
-                async let fees: PaperFees? = try? client.get("/paper-fees", query: query(broker))
-                summaries[broker] = try await sum
-                limitsByBroker[broker] = await lim ?? limitsByBroker[broker]
-                paperFeesByBroker[broker] = await fees ?? paperFeesByBroker[broker]
-            }
+            summary = newSummary
             notifyAboutBlockedBuys(newBots)
             bots = newBots
             notifyAboutNewTrades(newTrades)
             trades = newTrades
-            await refreshBalances()
-            exchangeInfo = (try? await client.get("/exchange")) ?? exchangeInfo
-            if supportsBrokers, let info: TradeRepublicInfo = try? await client.get("/traderepublic") {
-                notifyAboutTradeRepublic(info)
-                tradeRepublic = info
+            if isVisible || balancesUpdatedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
+                if let fresh: [Balance] = try? await client.get("/balances") {
+                    balances = fresh
+                    balancesUpdatedAt = Date()
+                }
             }
-            if loadedBrokers.contains(where: { pairsByBroker[$0]?.isEmpty ?? true }) { await loadPairs() }
+            limits = (try? await client.get("/limits")) ?? limits
+            paperFees = (try? await client.get("/paper-fees")) ?? paperFees
+            exchangeInfo = (try? await client.get("/exchange")) ?? exchangeInfo
+            if pairs.isEmpty { pairs = (try? await client.get("/pairs")) ?? [] }
             lastUpdate = Date()
             connection = .connected
         } catch {
@@ -328,8 +252,8 @@ public final class AppStore {
         do {
             let client = try self.client ?? APIClient(server: serverURL, token: token)
             self.client = client
-            async let b: [Bot] = client.get("/bots", query: ["exchange": "all"])
-            async let t: [Trade] = client.get("/trades", query: ["limit": "50", "exchange": "all"])
+            async let b: [Bot] = client.get("/bots")
+            async let t: [Trade] = client.get("/trades", query: ["limit": "50"])
             let (newBots, newTrades) = try await (b, t)
             notifyAboutBlockedBuys(newBots)
             bots = newBots
@@ -350,11 +274,10 @@ public final class AppStore {
         return (try? await client.get("/bots/\(botId)/decisions", query: ["limit": "100"])) ?? []
     }
 
-    /// The trade history for the profit chart – more than the latest trades the panel keeps (agent maximum: 1000),
-    /// of the selected broker only, so a busy broker doesn't push the other one's history out of the window.
+    /// The trade history for the profit chart – more than the latest trades the panel keeps (agent maximum: 1000).
     public func allTrades(limit: Int) async -> [Trade]? {
         guard let client else { return nil }
-        return try? await client.get("/trades", query: query(broker, ["limit": String(limit)]))
+        return try? await client.get("/trades", query: ["limit": String(limit)])
     }
 
     public func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
@@ -374,33 +297,27 @@ public final class AppStore {
         return bot
     }
 
-    /// The selected broker's limits.
     public func saveLimits(_ newLimits: Limits) async throws {
         guard let client else { return }
-        let broker = self.broker
-        limitsByBroker[broker] = try await client.send("PUT", "/limits", query: query(broker), body: newLimits)
+        limits = try await client.send("PUT", "/limits", body: newLimits)
         await refresh()
     }
 
-    /// The selected broker's simulation fees.
     public func savePaperFees(_ fees: PaperFees) async throws {
         guard let client else { return }
-        let broker = self.broker
-        paperFeesByBroker[broker] = try await client.send("PUT", "/paper-fees", query: query(broker), body: fees)
+        paperFees = try await client.send("PUT", "/paper-fees", body: fees)
         await refresh()
     }
 
     // MARK: - Live trading
 
-    /// Switches the selected broker. Switching on requires the explicit "LIVE" confirmation (the UI asks twice
-    /// before calling this).
+    /// Switching on requires the explicit "LIVE" confirmation (the UI asks twice before calling this).
     @discardableResult
     public func setLiveTrading(_ enabled: Bool) async throws -> [LiveSwitchResult.ClosedPosition] {
         guard let client else { return [] }
-        struct Body: Encodable { let enabled: Bool; let confirm: String?; let exchange: String? }
+        struct Body: Encodable { let enabled: Bool; let confirm: String? }
         let result: LiveSwitchResult = try await client.send(
-            "PUT", "/live-trading",
-            body: Body(enabled: enabled, confirm: enabled ? "LIVE" : nil, exchange: supportsBrokers ? broker.rawValue : nil)
+            "PUT", "/live-trading", body: Body(enabled: enabled, confirm: enabled ? "LIVE" : nil)
         )
         await refresh()
         return result.closedPositions
@@ -417,7 +334,7 @@ public final class AppStore {
         guard let client else { return }
         struct Body: Encodable { let api_key: String }
         exchangeInfo = try await client.send("PUT", "/exchange/credentials", body: Body(api_key: apiKey))
-        await loadPairs()
+        pairs = (try? await client.get("/pairs")) ?? pairs
         await refresh()
     }
 
@@ -425,78 +342,6 @@ public final class AppStore {
         guard let client else { return }
         try await client.delete("/exchange/credentials")
         await refresh()
-    }
-
-    // MARK: - Brokers on/off
-
-    /// Switches a broker off (its bots stop, the agent leaves it alone) or on again. With one broker on, the app
-    /// shows no tabs.
-    public func setBrokerEnabled(_ broker: Broker, _ enabled: Bool) async throws {
-        guard let client else { return }
-        struct Body: Encodable { let enabled: Bool }
-        status = try await client.send("PUT", "/brokers/\(broker.rawValue)", body: Body(enabled: enabled))
-        await refresh()
-    }
-
-    // MARK: - Trade Republic login
-
-    /// Phone number and PIN to the agent – Trade Republic then asks for the confirmation in its app.
-    public func startTradeRepublicLogin(phone: String?, pin: String?, rememberPin: Bool) async throws {
-        guard let client else { return }
-        struct Body: Encodable { let phone: String?; let pin: String?; let remember_pin: Bool }
-        tradeRepublic = try await client.send("POST", "/traderepublic/login", body: Body(phone: phone, pin: pin, remember_pin: rememberPin))
-        watchTradeRepublicLogin()
-    }
-
-    public func submitTradeRepublicCode(_ code: String) async throws {
-        guard let client else { return }
-        struct Body: Encodable { let code: String }
-        tradeRepublic = try await client.send("POST", "/traderepublic/login/code", body: Body(code: code))
-        watchTradeRepublicLogin()
-    }
-
-    public func cancelTradeRepublicLogin() async {
-        guard let client else { return }
-        try? await client.delete("/traderepublic/login")
-        tradeRepublic = (try? await client.get("/traderepublic")) ?? tradeRepublic
-    }
-
-    /// Logs out and forgets phone number and PIN on the agent; live trading on Trade Republic is switched off.
-    public func logoutTradeRepublic() async throws {
-        guard let client else { return }
-        try await client.delete("/traderepublic")
-        await refresh()
-    }
-
-    /// While the agent waits for the confirmation in the Trade Republic app: ask every 2 seconds instead of
-    /// waiting for the next refresh, so the app shows "logged in" right after the confirmation.
-    private func watchTradeRepublicLogin() {
-        loginWatch?.cancel()
-        loginWatch = Task { [weak self] in
-            for _ in 0..<120 {
-                try? await Task.sleep(for: .seconds(2))
-                guard let self, !Task.isCancelled, let client = self.client else { return }
-                guard let info: TradeRepublicInfo = try? await client.get("/traderepublic") else { continue }
-                self.tradeRepublic = info
-                if !info.waiting {
-                    await self.refresh()
-                    return
-                }
-            }
-        }
-    }
-
-    /// Trade Republic search (or the known instruments without a query) – for the bot editor.
-    public func instruments(_ query: String, broker: Broker) async throws -> [Instrument] {
-        guard let client else { return [] }
-        return try await client.get("/instruments", query: self.query(broker, query.isEmpty ? [:] : ["q": query]))
-    }
-
-    /// What an order costs on the broker: a rate of its value and a fixed amount (Trade Republic: 1 €).
-    public func fees(for broker: Broker, paper: Bool) -> (rate: Double, fixed: Double) {
-        if paper, let fees = paperFeesByBroker[broker] { return (fees.sell, fees.fixed ?? 0) }
-        if let fees = status?.exchange(broker)?.fees { return (fees.rate, fees.fixed) }
-        return (status?.takerFee ?? TradeCostCheck.defaultFeeRate, 0)
     }
 
     public func serverPublicIP() async -> String? {
@@ -524,14 +369,6 @@ public final class AppStore {
     public func resetPaper(_ bot: Bot) async throws {
         guard let client else { return }
         let _: Bot = try await client.post("/bots/\(bot.id)/reset-paper")
-        await refresh()
-    }
-
-    /// Paper mode: deletes all simulated trades of the selected broker and discards its open paper trades – the
-    /// broker's values start at zero. Live trades are never touched.
-    public func resetPaperBroker() async throws {
-        guard let client else { return }
-        let _: Summary = try await client.post("/reset-paper", query: query(broker))
         await refresh()
     }
 
@@ -568,7 +405,7 @@ public final class AppStore {
     public func restoreBackup(_ data: Data) async throws -> RestoreResult {
         guard let client else { throw APIError.invalidURL }
         let result: RestoreResult = try await client.upload("/restore", data: data, contentType: "application/gzip")
-        pairsByBroker = [:]
+        pairs = []
         await refresh()
         return result
     }
@@ -592,24 +429,6 @@ public final class AppStore {
             content.sound = .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "hint-\(bot.id)", content: content, trigger: nil))
         }
-    }
-
-    /// The agent started the daily Trade Republic login on its own (or the login ended): the user has to confirm it
-    /// in the Trade Republic app – say so once.
-    private func notifyAboutTradeRepublic(_ info: TradeRepublicInfo) {
-        guard notificationsEnabled, Bundle.main.bundleIdentifier != nil, let before = tradeRepublic else { return }
-        let content = UNMutableNotificationContent()
-        if info.waiting && info.automatic && !before.waiting {
-            content.title = String(localized: "Confirm the Trade Republic login")
-            content.body = String(localized: "DipAgentX logs in again for the next 24 hours – confirm it in the Trade Republic app.")
-        } else if before.connected && !info.connected && !info.waiting && !info.isDemo {
-            content.title = String(localized: "Trade Republic logged out")
-            content.body = info.error ?? String(localized: "Log in again in the settings so the bots can trade live.")
-        } else {
-            return
-        }
-        content.sound = .default
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "tr-login", content: content, trigger: nil))
     }
 
     /// One notification per new trade – after a long break (iPhone: the app was closed) just one for all of them.
