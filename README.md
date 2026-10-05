@@ -83,6 +83,7 @@ SQLite).
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
 | **Monthly trend follower** | once a month, on the first trading day: the whole amount when the previous month closed above its average of the last months (default 10, with a ±2 % buffer) – or with a better return than cash (e.g. 12 months, against the 3-month Euribor) – or either of the two; optionally the currency-hedged share class while the dollar falls | on that monthly check, as soon as the trend is down – also at a loss; optionally only with a recession sign (US unemployment above its 12-month average, jobless claims up more than 5 % on a year earlier, an inverted US yield curve in the last 24 months); optionally parks the money in the best of up to three bond ETFs instead of cash. Meant for ETFs and gold on Trade Republic (see the example below) |
+| **Momentum trend follower** | for ETH and BTC: invests the more of its capital the more of six lookbacks (14–60 days, 4-hour closes) are up – a lookback turns up once the price rose more than 5 % over it (2 % while the 90-day return is above 20 %); less while the 20-day volatility is above 100 % a year; at least 50 % while the 7-day funding rate of the Binance perpetual futures is below 2 % a year (panic); in 10 % steps, each step its own trade, gains reinvested | as soon as fewer lookbacks are up (a lookback turns down once the price is below its level of then) – also at a loss; optionally halves the position while more than 1 % of the exchanges' coins were sent to them on balance within 7 days (Coin Metrics) |
 | **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum, optionally the news and optionally the Crypto Fear & Greed index (as background or as a contrarian signal at extremes) every N minutes (model selectable: Opus 5, Sonnet 5, Haiku 4.5; optional minimum confidence before a trade is executed) | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
@@ -93,6 +94,16 @@ SQLite).
 > 24 h change can return to 0 % while the position is still at a loss. That's why the bot only sells in this mode
 > once the **minimum profit** (default 0.25 %, covers fees) is reached. It can't be set below 0 – to cut a loss, set a
 > **stop-loss**.
+
+> **Momentum trend follower:** the strategy that held up best in the ETH/BTC backtests (hourly prices January 2020 –
+> October 2026, fees 0 % buy / 0.09 % sell): it follows the trend instead of buying dips, and keeps most of the
+> crashes away – 2022 −10 % (ETH) / −16 % (BTC) instead of −66 % / −62 % when holding – but keeps only about 55–70 % of
+> a strong rally. Blind test (settings chosen only with the years before, 2022 – October 2026): ETH ×3.5, BTC ×3.5 vs.
+> holding ×0.74 / ×1.87. Replayed through the real engine it matches the simulation (ETH ×3.74 vs. ×3.73 from 2022).
+> The bot rebalances about twice a week; under a month the result is a coin flip. It needs the funding rate (Binance,
+> public) at runtime – without it the floor does nothing. The exchange-inflow brake (*Halve on exchange inflows*) added
+> to the backtest result, but only with data at most a day old, and Coin Metrics revises its daily "flash" values later –
+> so it is off by default. Details in `docs/strategien-backtests.md`, section 14.
 
 > **Sideways filter (dip buyer):** a dip in a trending market often keeps falling. With *Only buy while ADX (4h)
 > below* set (e.g. 23), the bot buys a dip only while the trend strength ADX (14) of the 4-hour candles is below that

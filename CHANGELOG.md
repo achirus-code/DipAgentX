@@ -2,6 +2,22 @@
 
 All notable changes to DipAgentX (formerly DipAgent) are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.0] – 2026-10-05
+
+### Added
+
+- **Momentum trend follower** – a new strategy for ETH and BTC (the best of more than 2,000 variants in the backtests,
+  see `docs/strategien-backtests.md`, section 14). Six lookbacks (14, 21, 30, 40, 50, 60 days) on the 4-hour closes each
+  count as up once the price rose more than 5 % over them (2 % while the 90-day return is above 20 %) and as down once
+  it fell; the bot invests the share of lookbacks that are up, in 10 % steps of its capital – each step its own trade,
+  sold also at a loss, gains reinvested. Less while the volatility of the last 20 days is above 100 % a year; at least
+  50 % while the 7-day average funding rate of the Binance perpetual futures is below 2 % a year (fetched hourly,
+  public). Optional: *Halve on exchange inflows* (net inflow onto exchanges over 7 days above 1 % of their balance,
+  Coin Metrics community API, daily). It only trades when the target step changes – about twice a week.
+- The engine supports strategies that manage their trades themselves: no "Max. open trades" option, no spacing, and
+  the sliced position counts as one open position for the limits. Every sale adds its result to the bot's state
+  (`realized`) – the momentum follower reinvests it.
+
 ## [1.22.0] – 2026-10-05
 
 ### Added
