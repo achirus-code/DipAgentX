@@ -27,15 +27,26 @@ SLICE = Decimal("0.1")  # one step: 10 % of the capital per trade
 MIN_BUY = Decimal("0.025")  # a smaller gap to the target (in capital) isn't bought – avoids crumbs
 MIN_ORDER = Decimal("10")  # nor below this amount of the quote currency
 
-# 4-hour closes per exchange and symbol, kept across checks: only new candles are fetched (one request per 4 hours)
+# a candle read this long after it closed is final – it isn't read again
+FINAL_AFTER_MS = 5 * 60_000
+
+# 4-hour closes per exchange and symbol, kept across checks: only new candles are fetched (about one request per
+# 4 hours), plus when each request was made
 _closes: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_fetched: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 async def four_hour_closes(market) -> dict[int, Decimal]:
     """{candle start: close} of the completed 4-hour candles of the last ``HISTORY_DAYS`` days."""
     store: dict[int, Decimal] = _closes.setdefault(market.exchange, {}).setdefault(market.symbol, {})
+    fetched = _fetched.setdefault(market.exchange, {})
     last = market.now // STEP_MS * STEP_MS - STEP_MS  # start of the last completed candle
     first = last - HISTORY_DAYS * DAY_MS
+    if store and min(store) <= first and max(store) == last and fetched.get(market.symbol, 0) >= last + STEP_MS + FINAL_AFTER_MS:
+        # complete and the newest candle read well after it closed: nothing new until the next candle closes
+        for t in [t for t in store if t < first]:
+            del store[t]
+        return store
     if store and min(store) <= first:
         since = max(store)  # the newest candle once more: fetched right after it closed, it may not have been final
     else:
@@ -48,6 +59,7 @@ async def four_hour_closes(market) -> dict[int, Decimal]:
             if first <= c.start <= last:
                 store[c.start] = c.close
         since = until
+    fetched[market.symbol] = market.now
     for t in [t for t in store if t < first]:
         del store[t]
     return store

@@ -125,17 +125,23 @@ public struct StatusLine: View {
     let bot: Bot
 
     public init(bot: Bot) { self.bot = bot }
+    @Environment(AppStore.self) private var store
     @State private var pulse = false
+
+    /// The pulse redraws the view every frame – only while it can be seen (a hidden macOS panel keeps animating otherwise).
+    private var pulsing: Bool { bot.enabled && store.isVisible }
 
     public var body: some View {
         HStack(alignment: .top, spacing: 6) {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
-                .opacity(bot.enabled && pulse ? 0.35 : 1)
+                .opacity(pulse ? 0.35 : 1)
                 .padding(.top, 4)
-                .animation(bot.enabled ? .easeInOut(duration: 1).repeatForever() : .default, value: pulse)
-                .onAppear { pulse = true }
+                .onChange(of: pulsing, initial: true) { _, on in
+                    // a new non-repeating transaction replaces the running repeatForever animation
+                    withAnimation(on ? .easeInOut(duration: 1).repeatForever() : .default) { pulse = on }
+                }
             VStack(alignment: .leading, spacing: 3) {
                 Text(statusText)
                     .font(.ui(10.5))

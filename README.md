@@ -186,6 +186,7 @@ All settings are optional environment variables in `agent/.env`:
 | `REVX_API_KEY` | – | Alternative to the in-app setup: API key here + private key in `agent/secrets/revx_private.pem` (takes precedence; read-only in the app) |
 | `MOCK_SPEED` | `1` | Only for `EXCHANGE=mock`: time lapse (60 = one market hour per minute) |
 | `ANTHROPIC_API_KEY` | – | Only for the *AI decides* strategy (Claude decides when to buy and sell). Key from console.anthropic.com |
+| `LOG_LEVEL` | `info` | `warning` = problems only, `info` = what the bots do, `debug` = also every exchange request and every app request |
 
 Live trading, limits and bots are managed in the app and stored in the data volume – not in `.env`.
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import secrets
 import time
@@ -31,10 +32,23 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.28.0"
+VERSION = "1.30.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+def configure_logging(level: str) -> None:
+    """LOG_LEVEL: warning = problems only, info = what the bots do (default), debug = also every request to the
+    exchange and every request of the apps. The request lines are many thousands a day – on a Home Assistant SD card
+    they only belong in the log while looking for a problem."""
+    level = level.strip().lower()
+    logging.basicConfig(level=logging.WARNING if level == "warning" else logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True)
+    requests = logging.INFO if level == "debug" else logging.WARNING
+    for name in ("httpx", "uvicorn.access"):  # uvicorn has set up its loggers before it imports this module
+        logging.getLogger(name).setLevel(requests)
+
+
+configure_logging(os.getenv("LOG_LEVEL", "info"))
 log = logging.getLogger("dipagentx")
 
 settings = load_settings()
