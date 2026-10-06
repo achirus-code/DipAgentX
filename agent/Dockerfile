@@ -39,8 +39,10 @@ RUN useradd --system --uid 10001 dipagentx && mkdir -p /data && chown dipagentx 
 VOLUME ["/data"]
 EXPOSE 3470
 
-# start-period/start-interval: the add-on shows "Starting" until the first probe passes
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=3s --retries=3 \
+# start-period/start-interval: the add-on shows "Starting" until the first probe passes. Afterwards every 5 minutes:
+# each probe starts a Python interpreter, which on a small Home Assistant box costs more CPU than the agent itself
+# (Home Assistant's watchdog checks /api/health on its own anyway)
+HEALTHCHECK --interval=5m --timeout=5s --start-period=30s --start-interval=3s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3470/api/health')"
 
 # exactly one process: the engine must never run twice (it also holds a lock file in /data)

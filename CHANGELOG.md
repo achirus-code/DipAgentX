@@ -4,6 +4,31 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.30.0] – 2026-10-06
+
+Performance release: less CPU on the Mac and on small Home Assistant hosts, fewer requests, far fewer log lines.
+
+### Added
+
+- **Log level** (`LOG_LEVEL`, add-on option `log_level`): `warning` = problems only, `info` = what the bots do
+  (default), `debug` = also every request to the exchange and from the apps.
+
+### Changed
+
+- The request lines of the exchange client and the access log are only written at `debug` – before, they were many
+  thousands of lines a day in the add-on log.
+- Docker health check every 5 minutes instead of every 30 seconds: each check starts a Python interpreter, which on a
+  small Home Assistant box cost more CPU than the agent itself (Home Assistant's watchdog checks the agent anyway).
+- macOS/iPhone app: while the panel is closed (iPhone: in the background) the app only fetches the bots and the latest
+  trades – enough for the menu bar icon and the notifications. Everything else is loaded when the panel opens.
+
+### Fixed
+
+- macOS app: about 10 % CPU while the panel was closed – the pulsing status dot of every active bot kept the hidden
+  panel redrawing at the display's frame rate. It now pulses only while it can be seen.
+- Momentum trend follower: the 4-hour candles were fetched again on every check (every 30 s per bot) instead of once
+  per new candle.
+
 ## [1.28.0] – 2026-10-05
 
 Built on 1.19.0: Trade Republic and everything from 1.20.0 to 1.27.0 were removed (the monthly trend followers, the

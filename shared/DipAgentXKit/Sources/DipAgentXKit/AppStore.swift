@@ -55,7 +55,6 @@ public final class AppStore {
     /// Set by the app: the panel (macOS) or the app (iPhone) is on screen. Balances are only fetched then –
     /// nobody sees them otherwise, and every fetch is a request to Revolut X.
     public var isVisible = false
-    private var balancesUpdatedAt: Date?
     public internal(set) var isRefreshing = false
     /// macOS: while true (Revolut X setup, file dialogs) the panel stays open when the user clicks elsewhere.
     @ObservationIgnored public var keepPanelOpen = false
@@ -212,6 +211,28 @@ public final class AppStore {
         guard let client, !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
+        guard isVisible else {
+            // panel closed: the bots (menu bar icon, blocked buys) and the latest trades (notifications) are enough –
+            // everything else is fetched when it opens (lastUpdate stays old, so refreshIfStale loads it all then)
+            do {
+                async let b: [Bot] = client.get("/bots")
+                async let t: [Trade] = client.get("/trades", query: ["limit": "50"])
+                let (newBots, newTrades) = try await (b, t)
+                notifyAboutBlockedBuys(newBots)
+                bots = newBots
+                notifyAboutNewTrades(newTrades)
+                let known = Set(newTrades.map(\.id))
+                trades = Array((newTrades + trades.filter { !known.contains($0.id) }).prefix(300))
+                connection = .connected
+            } catch {
+                connection = .failed(error.localizedDescription)
+            }
+            if isVisible, connection == .connected { // opened meanwhile – its refresh was skipped while this one ran
+                isRefreshing = false
+                await refresh()
+            }
+            return
+        }
         do {
             async let s: ServerStatus = client.get("/status")
             async let sum: Summary = client.get("/summary")
@@ -228,12 +249,7 @@ public final class AppStore {
             bots = newBots
             notifyAboutNewTrades(newTrades)
             trades = newTrades
-            if isVisible || balancesUpdatedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
-                if let fresh: [Balance] = try? await client.get("/balances") {
-                    balances = fresh
-                    balancesUpdatedAt = Date()
-                }
-            }
+            balances = (try? await client.get("/balances")) ?? balances
             limits = (try? await client.get("/limits")) ?? limits
             paperFees = (try? await client.get("/paper-fees")) ?? paperFees
             exchangeInfo = (try? await client.get("/exchange")) ?? exchangeInfo

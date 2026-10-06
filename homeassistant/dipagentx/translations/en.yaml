@@ -17,5 +17,8 @@ configuration:
   anthropic_api_key:
     name: Anthropic API key
     description: Only for the "AI decides" strategy – Claude decides when to buy and sell. Get a key at console.anthropic.com; every check costs a few cents.
+  log_level:
+    name: Log level
+    description: warning = problems only, info = what the bots do, debug = also every request to the exchange and from the apps (many thousands of lines a day – only while looking for a problem).
 network:
   3470/tcp: Port for the DipAgentX macOS app

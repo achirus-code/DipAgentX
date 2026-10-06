@@ -277,6 +277,23 @@ async def test_the_newest_candle_is_fetched_again():
     assert (await four_hour_closes(view))[last] != Decimal("1")
 
 
+async def test_final_candles_are_not_fetched_on_every_check():
+    from app.strategies.momentum import four_hour_closes
+    ex = PathExchange(steady(0.003))
+
+    async def check(at: int) -> dict:
+        ex.now = at
+        return await four_hour_closes(MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), at))
+
+    await check(NOW + 10 * 60_000)  # the newest candle closed 10 minutes ago – final
+    before = ex.requests
+    for minute in range(11, 240, 1):
+        await check(NOW + minute * 60_000)
+    assert ex.requests == before  # nothing new until the next candle closes
+    store = await check(NOW + STEP + 60_000)
+    assert ex.requests == before + 1 and max(store) == NOW
+
+
 # --- limit orders (maker, live on Revolut X) ---------------------------------------------------------------------
 
 

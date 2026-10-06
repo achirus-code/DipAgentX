@@ -39,7 +39,11 @@ def test_existing_environment_wins():
 
 
 def test_unknown_keys_are_ignored():
-    assert entrypoint.env_from_options({"SUPERVISOR_TOKEN": "x", "log_level": "debug"}, {}) == {}
+    assert entrypoint.env_from_options({"SUPERVISOR_TOKEN": "x", "verbose": True}, {}) == {}
+
+
+def test_log_level_option():
+    assert entrypoint.env_from_options({"log_level": "debug"}, {}) == {"LOG_LEVEL": "debug"}
 
 
 def test_take_over_data_dir_skips_options_json(tmp_path, monkeypatch):
