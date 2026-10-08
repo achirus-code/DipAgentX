@@ -15,7 +15,7 @@ from bisect import bisect_right
 from decimal import Decimal
 
 from .. import cryptodata
-from ..i18n import L, dur, m, num, pct
+from ..i18n import L, dur, m, money, num, pct
 from .base import DAY_MS, HOUR_MS, Buy, Context, Decision, Param, Sell, Strategy, open_positions
 
 LOOKBACKS = (14, 21, 30, 40, 50, 60)  # days
@@ -305,6 +305,17 @@ class MomentumStrategy(Strategy):
         invested = float(exposure / equity * 100) if equity > 0 else 0.0
         ctx.targets(note=m("momentum.target", target=num(level * 10, 0)))
         status = m("momentum.status", invested=num(invested, 0), target=num(level * 10, 0), detail=detail)
+        # the decision in one sentence for the bot details
+        facts = dict(target=num(level * 10, 0), amount=money(target, q), invested=num(invested, 0), have=money(exposure, q))
+        if level == st.get("level"):
+            key = "momentum.decide_hold"
+        elif target - exposure >= equity * MIN_BUY:
+            key = "momentum.decide_buy"
+        elif exposure - target >= equity * MIN_BUY and positions:
+            key = "momentum.decide_sell"
+        else:
+            key = "momentum.decide_hold"
+        st["decision"] = m(key, **facts)
         ctx.state.pop("warning", None)
         if (since := st.get("funding_missing_since")) is not None:
             # without the funding rate the floor can't protect – say so first (and as the card's hint), not hidden

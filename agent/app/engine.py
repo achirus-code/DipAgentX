@@ -1240,6 +1240,8 @@ class Engine:
             "signals": [{"text": render(x["text"], lang), "tone": x["tone"]}
                         for x in (bot["state"].get("momentum") or {}).get("signals") or []]
             if bot["enabled"] and bot["strategy"] == "momentum" else None,
+            "decision": render(d, lang)
+            if bot["enabled"] and (d := (bot["state"].get("momentum") or {}).get("decision")) else None,
             # momentum: the bot's capital now against buying and holding with it since the start
             "hodl": hodl_comparison(bot["state"], bot["params"], Decimal(str(snap["bid"])))
             if snap and bot["strategy"] == "momentum" else None,

@@ -457,3 +457,5 @@ async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path
     signals = engine.describe_bot(db.get_bot(bot_id), db.trade_stats(), "en")["signals"]
     assert signals[0]["text"].startswith("trend:") and signals[0]["tone"] == "good"
     assert all(s["tone"] in {"good", "warn", "bad"} for s in signals) and len(signals) >= 2
+    decision = engine.describe_bot(db.get_bot(bot_id), db.trade_stats(), "en")["decision"]
+    assert decision.startswith("Target ") and ("buys the rest" in decision or "holds" in decision)

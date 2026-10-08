@@ -323,6 +323,15 @@ CATALOG: dict[str, L] = {
     "momentum.status": L("{invested} % invested, target {target} % · {detail}",
                          "{invested} % investiert, Ziel {target} % · {detail}"),
     "momentum.target": L("Target {target} % invested", "Ziel {target} % investiert"),
+    "momentum.decide_hold": L(
+        "Target {target} % ({amount}), invested {invested} % ({have}) – holds; trades again when the target changes",
+        "Ziel {target} % ({amount}), investiert {invested} % ({have}) – hält; handelt erst wieder, wenn sich das Ziel ändert"),
+    "momentum.decide_buy": L(
+        "Target {target} % ({amount}), invested {invested} % ({have}) – buys the rest in steps of 10 %",
+        "Ziel {target} % ({amount}), investiert {invested} % ({have}) – kauft den Rest in Schritten von 10 % nach"),
+    "momentum.decide_sell": L(
+        "Target {target} % ({amount}), invested {invested} % ({have}) – sells trades down to the target",
+        "Ziel {target} % ({amount}), investiert {invested} % ({have}) – verkauft Trades bis zum Ziel"),
     "momentum.buying": L("Raising to {target} % – buying", "Aufstocken auf {target} % – kaufe"),
     "momentum.buy_reason": L("target {target} % · {detail}", "Ziel {target} % · {detail}"),
     "momentum.selling": L("Lowering to {target} % – selling a trade", "Reduzieren auf {target} % – verkaufe einen Trade"),

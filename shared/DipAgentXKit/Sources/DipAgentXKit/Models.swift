@@ -217,12 +217,14 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let fees: Double?
     /// Momentum: its indicators one by one with what each means for the decision – agent 1.31.1+.
     public let signals: [BotSignal]?
+    /// Momentum: the decision in one sentence (target, what it holds, what it does) – agent 1.31.2+.
+    public let decision: String?
     /// Momentum: the bot's capital now against buying and holding since its start – agent 1.31+.
     public let hodl: HodlComparison?
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals, decision
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
