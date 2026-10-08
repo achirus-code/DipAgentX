@@ -323,16 +323,17 @@ class Database:
             "SELECT * FROM trades WHERE bot_id = ? ORDER BY created_at DESC, id DESC LIMIT ?", (bot_id, limit)
         )
 
-    def trade_stats(self) -> dict[int, dict[str, Any]]:
+    def trade_stats(self) -> dict[tuple[int, bool], dict[str, Any]]:
+        """Per bot and mode (paper or live), so a bot switched to live doesn't show its paper results."""
         rows = self._all(
-            """SELECT bot_id,
+            """SELECT bot_id, paper,
                       COUNT(*) AS trades,
                       SUM(CASE WHEN pnl IS NOT NULL THEN CAST(pnl AS REAL) ELSE 0 END) AS realized,
                       SUM(CASE WHEN pnl IS NOT NULL AND CAST(pnl AS REAL) > 0 THEN 1 ELSE 0 END) AS wins,
                       SUM(CASE WHEN pnl IS NOT NULL AND CAST(pnl AS REAL) <= 0 THEN 1 ELSE 0 END) AS losses
-               FROM trades GROUP BY bot_id"""
+               FROM trades GROUP BY bot_id, paper"""
         )
-        return {r["bot_id"]: r for r in rows}
+        return {(r["bot_id"], bool(r["paper"])): r for r in rows}
 
     def realized_since(self, since_ms: int, paper: bool | None = None) -> list[dict[str, Any]]:
         return self._all(

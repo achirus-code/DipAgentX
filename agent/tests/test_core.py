@@ -980,6 +980,19 @@ async def test_reset_paper_deletes_simulated_trades_only(tmp_path: Path):
     assert engine.describe_bot(bot, db.trade_stats())["realized_pnl"] == 0
 
 
+async def test_bot_stats_count_only_the_current_mode(tmp_path: Path):
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("M", "dip", "ETH-EUR", {}, True, False)
+    common = dict(bot_id=bot_id, bot_name="M", symbol="ETH-EUR", price="1", base_qty="1", quote_amount="1", fee="0", reason="")
+    db.add_trade(side="sell", pnl="-4", order_id=None, paper=1, **common)  # left over from paper mode
+    db.add_trade(side="sell", pnl="2", order_id="live-1", paper=0, **common)
+    live = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())
+    assert live["realized_pnl"] == 2 and live["trades_count"] == 1 and live["losses"] == 0
+    db.update_bot(bot_id, paper=True)
+    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["realized_pnl"] == -4
+
+
 async def test_reset_paper_refuses_with_an_open_live_trade(tmp_path: Path):
     ex = FakeExchange("2000", "1970")
     db, engine = make_engine(tmp_path, ex, live=True)
