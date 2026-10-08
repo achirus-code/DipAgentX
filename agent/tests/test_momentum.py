@@ -407,21 +407,16 @@ async def test_a_limit_order_never_filled_is_no_error_and_goes_out_at_market(tmp
     assert ex.kinds[-1][0] == "limit"
 
 
-async def test_sells_with_a_limit_order_at_the_ask(tmp_path: Path, monkeypatch):
+async def test_sells_right_away_at_market(tmp_path: Path, monkeypatch):
     from app.strategies import Position
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     bot = db.get_bot(bot_id)
     state = bot["state"]
     state["positions"] = [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]
     view = await engine.market_view("ETH-EUR")
-    status = await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0], maker=10)
-    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1 + Decimal("0.01"), Decimal("0.05"))  # a cent above the best ask
-    assert "Limit order at" in render(status, "en") and open_positions(state)
-    ex.fill()
-    await engine._reconcile(bot, state)
-    assert not open_positions(state) and not state.get("pending_order")
-    sell = db.list_trades(bot_id)[0]
-    assert sell["side"] == "sell" and Decimal(sell["fee"]) == 0
+    await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0])
+    assert ex.kinds[-1] == ("market", "sell") and not open_positions(state)
+    assert db.list_trades(bot_id)[0]["order_type"] == "market"
 
 
 async def test_market_orders_when_switched_off(tmp_path: Path, monkeypatch):

@@ -8,9 +8,11 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ### Changed
 
-- Limit orders go out a cent away from the best price – a buy one cent below the bid, a sale one cent above the ask.
-  Before, at exactly the best price, the exchange refused many of them (post-only would have crossed the book when
-  the price ticked in the meantime), and the bot then bought at market with a fee for 30 minutes.
+- Limit buys go out a cent below the best bid. Before, at exactly the bid, the exchange refused many of them
+  (post-only would have crossed the book when the price ticked in the meantime), and the bot then bought at market
+  with a fee for 30 minutes.
+- Sales always go out at market right away: Revolut X charges a sale its fee as a limit order too, so waiting for a
+  better price only risked a worse one.
 - Mac: the comparison with holding in the bot details is no longer cut off.
 
 ## [1.31.0] – 2026-10-08

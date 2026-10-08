@@ -190,14 +190,15 @@ class MomentumStrategy(Strategy):
                 "Schwelle unten von ihrem Bestand, über 7 Tage (Coin Metrics, täglich). Half in den Backtests, aber "
                 "nur mit höchstens einen Tag alten Daten – ohne frische Daten tut sie nichts.")),
         Param("inflow_above", L("Inflow threshold", "Zufluss-Schwelle"), "percent", 1.0, min=0.1, max=10, step=0.1),
-        Param("maker_orders", L("Limit orders first (no fee)", "Erst Limit-Orders (ohne Gebühr)"), "bool", True,
-              L("Live on Revolut X: buys at the best bid and sells at the best ask with a limit order, which costs no "
-                "fee (maker 0 % instead of 0.09 %). What isn't filled within the waiting time below goes out as a "
-                "market order – so every step is executed. Paper trades always simulate market orders.",
-                "Live auf Revolut X: kauft zum besten Geldkurs und verkauft zum besten Briefkurs mit einer "
-                "Limit-Order, die keine Gebühr kostet (Maker 0 % statt 0,09 %). Was in der Wartezeit unten nicht "
-                "ausgeführt ist, geht als Market-Order raus – jede Stufe wird also ausgeführt. Paper-Trades "
-                "simulieren immer Market-Orders.")),
+        Param("maker_orders", L("Buy with limit orders (no fee)", "Kauf mit Limit-Orders (ohne Gebühr)"), "bool", True,
+              L("Live on Revolut X: buys a cent below the best bid with a limit order, which costs no fee (maker 0 % "
+                "instead of 0.09 %). What isn't filled within the waiting time below goes out as a market order – so "
+                "every step is executed. Sales always go out at market right away: Revolut X charges them the fee "
+                "either way. Paper trades always simulate market orders.",
+                "Live auf Revolut X: kauft einen Cent unter dem besten Geldkurs mit einer Limit-Order, die keine "
+                "Gebühr kostet (Maker 0 % statt 0,09 %). Was in der Wartezeit unten nicht ausgeführt ist, geht als "
+                "Market-Order raus – jede Stufe wird also ausgeführt. Verkäufe gehen immer sofort als Market-Order "
+                "raus: Revolut X berechnet ihnen die Gebühr so oder so. Paper-Trades simulieren immer Market-Orders.")),
         Param("maker_wait", L("Waiting time of the limit order", "Wartezeit der Limit-Order"), "int", 10,
               min=1, max=240, unit="min"),
     ]
