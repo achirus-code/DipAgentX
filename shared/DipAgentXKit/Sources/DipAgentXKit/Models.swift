@@ -217,6 +217,8 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let fees: Double?
     /// Momentum: its indicators one by one with what each means for the decision – agent 1.31.1+.
     public let signals: [BotSignal]?
+    /// Momentum: every lookback of the trend in detail – agent 1.32.2+.
+    public let lookbacks: Lookbacks?
     /// Momentum: the decision in one sentence (target, what it holds, what it does) – agent 1.31.2+.
     public let decision: String?
     /// Momentum: the bot's capital now against buying and holding since its start – agent 1.31+.
@@ -224,7 +226,7 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals, decision
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals, decision, lookbacks
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
@@ -278,6 +280,20 @@ public struct Bot: Codable, Identifiable, Equatable {
         }
         return BotGoal(kind: kind, target: target, percent: (target / price - 1) * 100, reached: reached)
     }
+}
+
+/// The trend's lookbacks: the change over each and whether it counts as up – plus the thresholds (up above
+/// `entry` %, down below `exit` %, in between it stays as it was).
+public struct Lookbacks: Codable, Equatable {
+    public struct Item: Codable, Equatable {
+        public let days: Int
+        public let up: Bool
+        public let change: Double?
+    }
+
+    public let entry: Double?
+    public let exit: Double?
+    public let items: [Item]
 }
 
 /// One indicator of a strategy and its effect: "good" lets the bot invest, "warn" holds it partly back, "bad" keeps it out.

@@ -230,15 +230,17 @@ public extension BotSignal {
 public struct IndicatorsList: View {
     let signals: [BotSignal]
     let decision: String?
+    var lookbacks: Lookbacks?
 
-    public init(signals: [BotSignal], decision: String?) {
+    public init(signals: [BotSignal], decision: String?, lookbacks: Lookbacks? = nil) {
         self.signals = signals
         self.decision = decision
+        self.lookbacks = lookbacks
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(signals.enumerated()), id: \.offset) { _, signal in
+            ForEach(Array(signals.enumerated()), id: \.offset) { index, signal in
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Circle().fill(signal.color).frame(width: 7, height: 7)
                     Text(verbatim: signal.text)
@@ -246,12 +248,43 @@ public struct IndicatorsList: View {
                         .foregroundStyle(signal.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if index == 0, let lookbacks, !lookbacks.items.isEmpty {
+                    lookbackGrid(lookbacks).padding(.leading, 14).padding(.bottom, 4)
+                }
             }
             if let decision {
                 Divider().padding(.vertical, 2)
                 Text("Decision").font(.ui(10, weight: .semibold)).foregroundStyle(.secondary)
                 Text(verbatim: decision)
                     .font(.ui(12, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+extension IndicatorsList {
+    /// Every lookback of the trend: how much the price changed over it and whether it counts as up.
+    func lookbackGrid(_ lookbacks: Lookbacks) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+                ForEach(lookbacks.items, id: \.days) { item in
+                    GridRow {
+                        Text("\(String(item.days)) days").foregroundStyle(.secondary)
+                        Text(verbatim: item.change.map { Fmt.pct($0) } ?? "–")
+                            .monospacedDigit()
+                            .gridColumnAlignment(.trailing)
+                        Label { item.up ? Text("Up") : Text("Down") } icon: {
+                            Image(systemName: item.up ? "arrow.up.right" : "arrow.down.right")
+                        }
+                            .foregroundStyle(item.up ? Color.green : Color.red)
+                    }
+                    .font(.ui(11, weight: .medium))
+                }
+            }
+            if let entry = lookbacks.entry, let exit = lookbacks.exit {
+                Text("Up above \(Fmt.pct(entry)), down below \(Fmt.pct(exit)) – in between a lookback stays as it was.")
+                    .font(.ui(10)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -274,7 +307,7 @@ public struct IndicatorsButton: View {
             #if os(macOS)
             .controlSize(.small)
             .popover(isPresented: $open, arrowEdge: .bottom) {
-                IndicatorsList(signals: signals, decision: bot.decision)
+                IndicatorsList(signals: signals, decision: bot.decision, lookbacks: bot.lookbacks)
                     .padding(14)
                     .frame(width: 340)
             }
@@ -283,7 +316,7 @@ public struct IndicatorsButton: View {
             .sheet(isPresented: $open) {
                 NavigationStack {
                     ScrollView {
-                        IndicatorsList(signals: signals, decision: bot.decision)
+                        IndicatorsList(signals: signals, decision: bot.decision, lookbacks: bot.lookbacks)
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
