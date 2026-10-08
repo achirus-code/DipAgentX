@@ -1058,3 +1058,22 @@ def test_reprice_paper_fees(tmp_path):
     pos = db.get_bot(bot)["state"]["positions"][0]
     assert abs(D(pos["qty"]) - D("0.1")) < D("0.0000001") and pos["cost"] == "100"
     assert db.reprice_paper(new, new) == 0
+
+
+async def test_remove_all_paper_keeps_live_trades_and_positions(tmp_path: Path):
+    from app.strategies import Position, open_positions, store_positions
+    ex = FakeExchange("2000", "1970")
+    db, engine = make_engine(tmp_path, ex, live=True)
+    bot_id = db.create_bot("M", "dip", "ETH-EUR", {}, True, False)
+    common = dict(bot_id=bot_id, bot_name="M", symbol="ETH-EUR", price="1", base_qty="1", quote_amount="1", fee="0", reason="")
+    db.add_trade(side="sell", pnl="-4", order_id=None, paper=1, **common)
+    db.add_trade(side="buy", pnl=None, order_id="live-1", paper=0, **common)
+    state = db.get_bot(bot_id)["state"]
+    store_positions(state, [Position(Decimal("1"), Decimal("10"), 0, Decimal(10), paper=True, id="p"),
+                            Position(Decimal("1"), Decimal("10"), 0, Decimal(10), paper=False, id="l")])
+    db.update_bot(bot_id, state=state)
+    assert engine.paper_data() == 2
+
+    assert await engine.remove_all_paper() == 1
+    assert [t["order_id"] for t in db.list_trades(bot_id)] == ["live-1"]
+    assert [p.id for p in open_positions(db.get_bot(bot_id)["state"])] == ["l"] and engine.paper_data() == 0

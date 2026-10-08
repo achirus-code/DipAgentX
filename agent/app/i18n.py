@@ -294,6 +294,10 @@ CATALOG: dict[str, L] = {
         "Buy signal – next trade only at ≤ {price} (distance to the open trades)",
         "Kaufsignal – nächster Trade erst bei ≤ {price} (Abstand zu den offenen Trades)",
     ),
+    "engine.paper_removed": L("All paper data removed – the bot continues live",
+                              "Alle Papier-Daten entfernt – der Bot läuft live weiter"),
+    "event.paper_removed": L("All paper data removed ({count} simulated trades)",
+                             "Alle Papier-Daten entfernt ({count} simulierte Trades)"),
     "engine.paper_reset": L(
         "Paper result reset – {count} simulated trades deleted, starting from scratch",
         "Paper-Ergebnis zurückgesetzt – {count} simulierte Trades gelöscht, Neustart bei null",

@@ -132,6 +132,7 @@ struct LiveTradingSection: View {
     @Environment(AppStore.self) private var store
     @State private var showingWarning = false
     @State private var confirmingDisable = false
+    @State private var confirmingPaperRemoval = false
     @State private var busy = false
     @State private var error: String?
     @State private var info: String?
@@ -164,6 +165,25 @@ struct LiveTradingSection: View {
                     .labelsHidden()
                     .tint(.red)
                     .disabled(!live && !exchangeReady)
+                }
+            }
+            if live, let paper = store.status?.paperData, paper > 0 {
+                Button(role: .destructive) { confirmingPaperRemoval = true } label: {
+                    Label("Remove all paper data (\(String(paper)))", systemImage: "trash")
+                }
+                .confirmationDialog("Remove all paper data", isPresented: $confirmingPaperRemoval, titleVisibility: .visible) {
+                    Button("Remove", role: .destructive) {
+                        Task {
+                            do {
+                                try await store.removeAllPaper()
+                                info = String(localized: "All paper data removed.")
+                            } catch {
+                                self.error = error.localizedDescription
+                            }
+                        }
+                    }
+                } message: {
+                    Text("Delete all paper trades, simulated transactions and open paper trades? Live data stays.")
                 }
             }
             if let info { Label(info, systemImage: "checkmark.circle.fill").font(.footnote).foregroundStyle(.green) }

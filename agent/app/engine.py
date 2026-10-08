@@ -647,6 +647,35 @@ class Engine:
             self._persist(bot, state, status, before)
             return status
 
+    def paper_data(self) -> int:
+        """How much paper there is: simulated trades plus open paper trades of all bots."""
+        return self.db.trades_count(True) + sum(
+            1 for bot in self.db.list_bots() for p in open_positions(bot["state"]) if p.paper
+        )
+
+    async def remove_all_paper(self) -> int:
+        """Delete every simulated trade and discard every open paper trade – live trades and positions are never
+        touched. A bot left without trades starts its bookkeeping afresh. Returns the number of deleted trades."""
+        async with self.paused():
+            deleted = self.db.delete_all_paper_trades()
+            for bot in self.db.list_bots():
+                async with self._locks[bot["id"]]:
+                    bot = self.db.get_bot(bot["id"])
+                    state = bot["state"]
+                    positions = open_positions(state)
+                    if not any(p.paper for p in positions) and not bot["paper"]:
+                        continue
+                    before = self._snapshot(bot)
+                    live = [p for p in positions if not p.paper]
+                    store_positions(state, live)
+                    if not live:
+                        for key in ("targets", "position_targets", "blocked_buy", "last_sell_at", "last_buy_at",
+                                    "realized", "momentum"):
+                            state.pop(key, None)
+                    self._persist(bot, state, m("engine.paper_removed") if not bot["paper"] else bot["status"], before)
+            self.db.add_event(None, "info", m("event.paper_removed", count=deleted))
+            return deleted
+
     async def close_live_positions(self, reason: Message) -> list[dict[str, Any]]:
         """Market-sell every open live position (used when switching back to paper mode)."""
         results = []

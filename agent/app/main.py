@@ -32,7 +32,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.32.6"
+VERSION = "1.33.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 
@@ -206,6 +206,7 @@ def _status(lang: str) -> dict[str, Any]:
         "exchange_error": render(error, lang) if error else None,
         "engine_error": render(engine.instance_error, lang) if engine.instance_error else None,
         "live_trading_allowed": engine.live_trading_enabled(),
+        "paper_data": engine.paper_data(),  # simulated trades + open paper trades – the apps offer to remove them
         "last_tick": engine.last_tick,
         "tick_seconds": settings.tick_seconds,
         "taker_fee": float(settings.taker_fee),
@@ -509,6 +510,13 @@ async def discard_position(bot_id: int, position_id: str | None = None, lang: st
     except Problem as exc:
         raise fail_with(409, lang, exc) from exc
     return _describe(bot_id, lang)
+
+
+@api.delete("/paper")
+async def remove_all_paper(lang: str = Depends(get_lang)) -> dict[str, Any]:
+    """Remove every paper trade, simulated transaction and open paper trade of all bots – live data stays."""
+    deleted = await engine.remove_all_paper()
+    return {"deleted": deleted, **_status(lang)}
 
 
 @api.post("/bots/{bot_id}/reset-paper")
