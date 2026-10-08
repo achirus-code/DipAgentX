@@ -169,6 +169,8 @@ public struct StatusLine: View {
             if index > 0 { result += AttributedString(" · ") }
             var dot = AttributedString("● ")
             dot.foregroundColor = signal.color
+            dot.font = .system(size: 6)  // smaller than the pulsing status dot (6 pt circle)
+            dot.baselineOffset = 1.5
             result += dot + AttributedString(signal.text)
         }
         return result
