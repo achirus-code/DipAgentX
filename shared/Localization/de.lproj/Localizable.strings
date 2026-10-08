@@ -478,3 +478,6 @@
 "Remove" = "Entfernen";
 "All paper data removed." = "Alle Papier-Daten entfernt.";
 "Delete all paper trades, simulated transactions and open paper trades? Live data stays." = "Alle Papier-Trades, simulierten Transaktionen und offenen Papier-Trades löschen? Live-Daten bleiben erhalten.";
+"Green" = "Grün";
+"Red" = "Rot";
+"Orange" = "Orange";
