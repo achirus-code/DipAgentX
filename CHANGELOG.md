@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.33.1] – 2026-10-08
+
+### Changed
+
+- Bot status: a small coloured dot in front of each indicator instead of coloured text.
+
 ## [1.33.0] – 2026-10-08
 
 ### Added
