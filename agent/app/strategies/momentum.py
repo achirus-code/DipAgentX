@@ -220,16 +220,20 @@ class MomentumStrategy(Strategy):
                 "Schwelle unten von ihrem Bestand, über 7 Tage (Coin Metrics, täglich). Half in den Backtests, aber "
                 "nur mit höchstens einen Tag alten Daten – ohne frische Daten tut sie nichts.")),
         Param("inflow_above", L("Inflow threshold", "Zufluss-Schwelle"), "percent", 1.0, min=0.1, max=10, step=0.1),
-        Param("maker_orders", L("Buy with limit orders (no fee)", "Kauf mit Limit-Orders (ohne Gebühr)"), "bool", True,
-              L("Live on Revolut X: buys a cent below the best bid with a limit order, which costs no fee (maker 0 % "
-                "instead of 0.09 %). What isn't filled within the waiting time below goes out as a market order – so "
-                "every step is executed. Sales always go out at market right away: Revolut X charges them the fee "
-                "either way. Paper trades always simulate market orders.",
-                "Live auf Revolut X: kauft einen Cent unter dem besten Geldkurs mit einer Limit-Order, die keine "
-                "Gebühr kostet (Maker 0 % statt 0,09 %). Was in der Wartezeit unten nicht ausgeführt ist, geht als "
-                "Market-Order raus – jede Stufe wird also ausgeführt. Verkäufe gehen immer sofort als Market-Order "
-                "raus: Revolut X berechnet ihnen die Gebühr so oder so. Paper-Trades simulieren immer Market-Orders.")),
-        Param("maker_wait", L("Waiting time of the limit order", "Wartezeit der Limit-Order"), "int", 10,
+        Param("maker_orders", L("Limit orders (no fee)", "Limit-Orders (ohne Gebühr)"), "bool", True,
+              L("Live on Revolut X: buys a cent below the best bid and sells a cent above the best ask with a limit "
+                "order, which costs no fee (maker 0 % instead of 0.09 %). If the price moves away, the order follows it. "
+                "What isn't filled within the waiting time below goes out as a market order – so every step is "
+                "executed. Paper trades always simulate market orders.",
+                "Live auf Revolut X: kauft einen Cent unter dem besten Geldkurs und verkauft einen Cent über dem "
+                "besten Briefkurs mit einer Limit-Order, die keine Gebühr kostet (Maker 0 % statt 0,09 %). Läuft der "
+                "Kurs weg, zieht die Order nach. Was in der Wartezeit unten nicht ausgeführt ist, geht als "
+                "Market-Order raus – jede Stufe wird also ausgeführt. Paper-Trades simulieren immer Market-Orders.")),
+        Param("maker_wait", L("Waiting time for limit orders", "Wartezeit für Limit-Orders"), "int", 10,
+              L("Counts once per rebalancing, from its first order – also when it takes several trades (e.g. 0 → 50 %). "
+                "After it, the rest goes out at market.",
+                "Gilt einmal pro Umschichtung ab ihrer ersten Order – auch wenn sie mehrere Trades braucht (z. B. "
+                "0 → 50 %). Danach geht der Rest als Market-Order raus."),
               min=1, max=240, unit="min"),
     ]
 
@@ -288,14 +292,18 @@ class MomentumStrategy(Strategy):
                 tones.append("warn")
             else:
                 st.pop("funding_missing_since", None)
+                via = cryptodata.funding_source(base)
                 if rate < p["funding_below"]:
                     floor = p["funding_floor"] / 100 * scale
                     parts.append(m("momentum.funding_floor", rate=pct(rate), limit=pct(p["funding_below"]),
                                    floor=num(round(floor * 100), 0)))
+                    if via != "Binance":
+                        parts[-1] = m("momentum.via", text=parts[-1], source=via)
                     tones.append("good")  # panic: the floor keeps the bot in
                     weight = max(weight, floor)
                 else:
-                    parts.append(m("momentum.funding", rate=pct(rate)))
+                    parts.append(m("momentum.funding", rate=pct(rate)) if via == "Binance"
+                                 else m("momentum.via", text=m("momentum.funding", rate=pct(rate)), source=via))
                     tones.append("good")
         if p["inflow_brake"]:
             flow = await cryptodata.exchange_inflow(base, market.now)

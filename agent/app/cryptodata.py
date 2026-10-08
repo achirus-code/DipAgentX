@@ -1,7 +1,8 @@
 """Market data of the crypto derivatives and on-chain world for the momentum trend follower – public, no key needed:
 
 - the funding rate of the Binance USDT perpetual futures (ETHUSDT, BTCUSDT): what long positions pay short ones,
-  around +11 % a year normally, near zero or negative when nearly everybody expects falling prices
+  around +11 % a year normally, near zero or negative when nearly everybody expects falling prices. Without a fresh
+  rate from Binance the same contracts on Bybit stand in (2022–2026: the same on average, single weeks ±4 points)
 - the net flow of coins onto exchanges (Coin Metrics community API, daily): large inflows mean many want to sell
 """
 
@@ -18,6 +19,7 @@ import httpx
 log = logging.getLogger("dipagentx.cryptodata")
 
 FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
+BYBIT_FUNDING_URL = "https://api.bybit.com/v5/market/funding/history"
 COINMETRICS_URL = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
 DAY_S = 86_400
 FUNDING_CACHE_S = 3600  # a new rate every 8 hours
@@ -66,6 +68,15 @@ async def _load_funding(client: httpx.AsyncClient, symbol: str) -> list[tuple[in
     return sorted((int(r["fundingTime"]), float(r["fundingRate"])) for r in response.json())
 
 
+async def _load_bybit_funding(client: httpx.AsyncClient, symbol: str) -> list[tuple[int, float]]:
+    response = await client.get(BYBIT_FUNDING_URL, params={"category": "linear", "symbol": symbol, "limit": 60})
+    response.raise_for_status()
+    data = response.json()
+    if data.get("retCode", 0) != 0:
+        raise ValueError(data.get("retMsg") or data["retCode"])
+    return sorted((int(r["fundingRateTimestamp"]), float(r["fundingRate"])) for r in data["result"]["list"])
+
+
 async def _load_flows(client: httpx.AsyncClient, asset: str) -> list[tuple[int, float, float, float]]:
     params = {"assets": asset, "metrics": "FlowInExNtv,FlowOutExNtv,SplyExNtv", "frequency": "1d",
               "page_size": 30, "paging_from": "end"}
@@ -82,6 +93,10 @@ async def _load_flows(client: httpx.AsyncClient, asset: str) -> list[tuple[int, 
 
 
 FUNDING = Cached("Binance funding rate", FUNDING_CACHE_S, _load_funding)
+BYBIT_FUNDING = Cached("Bybit funding rate", FUNDING_CACHE_S, _load_bybit_funding)
+# where the funding rate comes from, in this order – the next one only when the one before has no fresh rate
+FUNDING_SOURCES = (("Binance", FUNDING), ("Bybit", BYBIT_FUNDING))
+_funding_source: dict[str, str] = {}  # base → the source of the last rate
 FLOWS = Cached("Coin Metrics exchange flows", FLOWS_CACHE_S, _load_flows)
 
 
@@ -114,9 +129,22 @@ def net_inflow(days: list[tuple[int, float, float, float]], now: int, window: in
 
 
 async def funding(base: str, now: int, days: float = 7) -> float | None:
-    """The average funding rate of ``base`` (ETH, BTC …) over ``days`` days, annualized in %. Overridden in tests."""
-    prints = await FUNDING.get(f"{base.upper()}USDT")
-    return average_funding(prints, now, days) if prints else None
+    """The average funding rate of ``base`` (ETH, BTC …) over ``days`` days, annualized in % – from Binance, else
+    from Bybit (see ``funding_source``). Overridden in tests."""
+    for name, source in FUNDING_SOURCES:
+        prints = await source.get(f"{base.upper()}USDT")
+        rate = average_funding(prints, now, days) if prints else None
+        if rate is not None:
+            if _funding_source.get(base.upper(), "Binance") != name:
+                log.warning("Funding rate of %s now from %s", base.upper(), name)
+            _funding_source[base.upper()] = name
+            return rate
+    return None
+
+
+def funding_source(base: str) -> str:
+    """Where the last funding rate of ``base`` came from (Binance unless it had to fall back)."""
+    return _funding_source.get(base.upper(), "Binance")
 
 
 async def exchange_inflow(base: str, now: int) -> float | None:

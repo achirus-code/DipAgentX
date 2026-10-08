@@ -51,7 +51,8 @@ The app is available in **English and German** (follows the macOS language, can 
 └────────────────────────┘      port 3470         └──────────────────────────────┘      Ed25519        └───────────┘
 ```
 
-The agent evaluates every active bot every `TICK_SECONDS` (default 30 s), places market orders on Revolut X and
+The agent evaluates every active bot every `TICK_SECONDS` (default 30 s), places orders on Revolut X (market orders;
+the momentum trend follower fee-free limit orders first) and
 stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`, SQLite).
 
 ## Strategies
@@ -62,7 +63,7 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 | **Rebound + trailing stop** | when the price is X % below the high of the last N hours | via a trailing stop once the activation profit is reached; optional stop-loss |
 | **Price zones** | below a fixed price | above a target price or at a stop price |
 | **Savings plan** | a fixed amount every N hours (up to a max. amount / number of buys) | optionally everything at the profit target |
-| **Momentum trend follower** | for ETH and BTC: holds a share of its capital that follows the trend, in 10 % steps – the share of six lookbacks (14 to 60 days on the 4-hour closes) pointing up, less in very volatile markets, at least 50 % while the futures funding rate shows panic, optionally halved on large exchange inflows. Each step is its own trade of about 10 % of the capital; live on Revolut X first as a fee-free limit order, after 10 min the rest at market | when the target step falls – one trade per step, also at a loss. Gains stay in the bot and are reinvested |
+| **Momentum trend follower** | for ETH and BTC: holds a share of its capital that follows the trend, in 10 % steps – the share of six lookbacks (14 to 60 days on the 4-hour closes) pointing up, less in very volatile markets, at least 50 % while the futures funding rate shows panic, optionally halved on large exchange inflows. Each step is its own trade of about 10 % of the capital; live on Revolut X as fee-free limit orders that follow the price – what isn't filled within 10 min of a rebalancing goes out at market | when the target step falls – one trade per step, also at a loss, the same way with limit orders first. Gains stay in the bot and are reinvested |
 | **AI decides** | when Claude sees an edge – it looks at trend, volatility of the last hours, momentum, optionally the news and optionally the Crypto Fear & Greed index (as background or as a contrarian signal at extremes) every N minutes (model selectable: Opus 5, Sonnet 5, Haiku 4.5; optional minimum confidence before a trade is executed) | when Claude decides to take the profit; never at a loss (only the optional stop-loss may). Needs `ANTHROPIC_API_KEY` on the agent; every check costs a few cents |
 
 > **Going live with open paper positions:** bots keep simulating an open paper position until it is sold, then buy
@@ -72,8 +73,9 @@ stores bots, trades, settings and the Revolut X key in a Docker volume (`/data`,
 > **Note on the momentum trend follower** (full rules and backtests in German:
 > [docs/momentum-trendfolger.md](docs/momentum-trendfolger.md)): over less than a month its result is chance; in strong rallies it catches
 > only about 55–70 % of the rise (it steps in gradually). The exchange-inflow brake only helps with fresh data and
-> Coin Metrics revises values later – it is off by default. If the Binance funding rate can't be fetched, the status
-> starts with a ⚠ warning and the card shows it as a hint: the floor is off until the data is back. The bot counts as
+> Coin Metrics revises values later – it is off by default. Without a fresh funding rate from Binance the bot uses
+> Bybit's (the status says so); if neither can be fetched, the status starts with a ⚠ warning and the card shows it as
+> a hint: the floor is off until the data is back. The bot counts as
 > one open position for the limits, however many trades it holds; it can go from paper to live with open paper trades
 > (they are closed simulated and the bot starts afresh with its capital).
 >
