@@ -258,6 +258,46 @@ public struct IndicatorsList: View {
     }
 }
 
+/// "Indicators": opens the strategy's indicators in colour and the decision – a popover on the Mac, a sheet on
+/// the iPhone.
+public struct IndicatorsButton: View {
+    let bot: Bot
+    @State private var open = false
+
+    public init(bot: Bot) { self.bot = bot }
+
+    public var body: some View {
+        if let signals = bot.signals, !signals.isEmpty {
+            Button { open = true } label: {
+                Label("Indicators", systemImage: "gauge.with.dots.needle.33percent")
+            }
+            #if os(macOS)
+            .controlSize(.small)
+            .popover(isPresented: $open, arrowEdge: .bottom) {
+                IndicatorsList(signals: signals, decision: bot.decision)
+                    .padding(14)
+                    .frame(width: 340)
+            }
+            #else
+            .buttonStyle(.bordered)
+            .sheet(isPresented: $open) {
+                NavigationStack {
+                    ScrollView {
+                        IndicatorsList(signals: signals, decision: bot.decision)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .navigationTitle(Text("Indicators"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { Button("Done") { open = false } }
+                }
+                .presentationDetents([.medium])
+            }
+            #endif
+        }
+    }
+}
+
 /// Several open trades on the card: the count and their result, then one line per trade.
 public struct TradesStrip: View {
     let bot: Bot

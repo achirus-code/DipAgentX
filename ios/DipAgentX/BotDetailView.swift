@@ -38,9 +38,6 @@ struct BotDetailView: View {
                 if let error {
                     Section { ErrorLabel(message: error) }
                 }
-                if let signals = bot.signals, !signals.isEmpty {
-                    Section("Indicators") { IndicatorsList(signals: signals, decision: bot.decision).padding(.vertical, 4) }
-                }
                 openTrades(bot)
                 if bot.sliced == true, !bot.openTrades.isEmpty {
                     // the trades the position is made of (momentum follower)
@@ -100,6 +97,7 @@ struct BotDetailView: View {
                     }
                 }
                 StatusLine(bot: bot)
+                IndicatorsButton(bot: bot)
                 if bot.paper && !bot.paperRequested {
                     Label("Paper trading is off, but live trading is disabled in the settings – the bot trades simulated.", systemImage: "testtube.2")
                         .font(.footnote).foregroundStyle(.orange)
