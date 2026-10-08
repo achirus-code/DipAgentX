@@ -462,3 +462,9 @@
 "%@ bought at %@ on %@ and simply held, without fees." = "%@ zu %@ am %@ gekauft und einfach gehalten, ohne Gebühren.";
 "Indicators" = "Indikatoren";
 "Decision" = "Entscheidung";
+"Dashed: only held (HODL) since the bot's start" = "Gestrichelt: nur gehalten (HODL) seit dem Start des Bots";
+"Shows what holding would have made since the bot's start – a dashed line in a paler colour." = "Zeigt, was Halten seit dem Start des Bots gebracht hätte – als gestrichelte Linie in hellerer Farbe.";
+"Hide the HODL line of this bot" = "HODL-Linie dieses Bots ausblenden";
+"Show what holding would have made since this bot's start" = "Zeigen, was Halten seit dem Start dieses Bots gebracht hätte";
+"HODL" = "HODL";
+"%@ put in since %@ – every change of the amount bought at the price of then and simply held, without fees." = "%@ eingesetzt seit %@ – jede Änderung des Betrags zum damaligen Kurs gekauft und einfach gehalten, ohne Gebühren.";

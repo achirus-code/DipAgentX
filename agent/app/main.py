@@ -32,7 +32,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.31.1"
+VERSION = "1.32.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 
@@ -548,6 +548,13 @@ async def trades(
         r["paper"] = bool(r["paper"])
         r["reason"] = render(r["reason"], lang)
     return rows
+
+
+@api.get("/bots/{bot_id}/hodl")
+async def hodl_history(bot_id: int, lang: str = Depends(get_lang)) -> list[dict[str, Any]]:
+    """Momentum: the result of holding instead since the bot's start, every 4 hours – the comparison line of the
+    profit chart. Empty for other strategies."""
+    return engine.hodl_history(_bot_or_404(bot_id, lang))
 
 
 @api.get("/bots/{bot_id}/decisions")

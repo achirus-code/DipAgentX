@@ -14,12 +14,28 @@ struct ProfitHistoryScreen: View {
     @State private var hidden: Set<Int> = []
     @State private var detail: Trade?
     @State private var reveal = 0.0
+    /// Momentum bots whose "only held" line is shown – and the lines loaded for them.
+    @State private var hodlShown: Set<Int> = []
+    @State private var hodlLines: [Int: [HodlPoint]] = [:]
 
     private static let historyLimit = 1000
 
     private var data: ProfitHistoryData {
         ProfitHistoryData(trades: history ?? store.trades, bots: store.bots, summary: store.summary, live: live,
-                          currency: currency, range: range, perBot: perBot, hidden: hidden)
+                          currency: currency, range: range, perBot: perBot, hidden: hidden,
+                          hodl: hodlLines.filter { hodlShown.contains($0.key) })
+    }
+
+    private func toggleHodl(_ botId: Int) {
+        if hodlShown.contains(botId) {
+            withAnimation(.smooth(duration: 0.4)) { _ = hodlShown.remove(botId) }
+            return
+        }
+        Task {
+            let line = await store.hodlHistory(botId: botId)
+            hodlLines[botId] = line
+            withAnimation(.smooth(duration: 0.4)) { _ = hodlShown.insert(botId) }
+        }
     }
 
     var body: some View {
@@ -165,6 +181,14 @@ struct ProfitHistoryScreen: View {
                         .foregroundStyle(curve.color)
                 }
             }
+            ForEach(data.hodlCurves) { curve in
+                ForEach(curve.points) { point in
+                    LineMark(x: .value("Date", point.date), y: .value("Result", point.value * reveal), series: .value("Bot", curve.id))
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                        .foregroundStyle(curve.color)
+                }
+            }
             ForEach(markers, id: \.point.id) { marker in
                 let emphasized = marker.point.trade.map { related.contains($0.id) } ?? false
                 PointMark(x: .value("Date", marker.point.date), y: .value("Result", marker.point.value * reveal))
@@ -221,6 +245,9 @@ struct ProfitHistoryScreen: View {
                 }
             }
             Text("Tap a point for the trade's details. The line shows the realized result, fees deducted – it moves with every sale.")
+            if !hodlShown.isEmpty {
+                Text("Dashed: only held (HODL) since the bot's start")
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -261,6 +288,17 @@ struct ProfitHistoryScreen: View {
                                 }
                                 Spacer(minLength: 4)
                                 PnLText(value: row.pnl, currency: currency, font: .subheadline.weight(.semibold))
+                                if data.canCompare(row.id) {
+                                    let on = hodlShown.contains(row.id)
+                                    Button { toggleHodl(row.id) } label: {
+                                        Text("HODL")
+                                            .font(.caption2.weight(.bold))
+                                            .padding(.horizontal, 7).padding(.vertical, 4)
+                                            .foregroundStyle(on ? Color.white : data.color(row.id))
+                                            .background(Capsule().fill(on ? data.color(row.id).opacity(0.55) : data.color(row.id).opacity(0.12)))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)

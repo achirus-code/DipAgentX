@@ -444,11 +444,16 @@ async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Pa
     assert hodl["hodl_value"] == pytest.approx(1000 * float(engine.snapshots["ETH-EUR"]["bid"]) / hodl["start_price"])
     assert 0 < hodl["value"] <= 1000.01
 
-    bot = db.get_bot(bot_id)  # a new amount starts the comparison afresh
+    history = engine.hodl_history(db.get_bot(bot_id))
+    assert history and history[-1]["value"] == pytest.approx(hodl["hodl_value"] - 1000)
+
+    bot = db.get_bot(bot_id)  # a higher amount is money put in: holding "buys" the same at the price of then
     db.update_bot(bot_id, params={**bot["params"], "amount": 2000})
     clock[0] += 60_000
     await engine.tick()
-    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]["start_capital"] == 2000
+    after = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]
+    assert after["start_capital"] == pytest.approx(2000, abs=0.01) and after["deposits"] == 2
+    assert after["since"] == hodl["since"]
 
 
 async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path: Path, monkeypatch):

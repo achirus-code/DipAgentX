@@ -25,7 +25,7 @@ from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
-from .strategies.momentum import hodl_comparison
+from .strategies.momentum import hodl_comparison, hodl_history
 
 log = logging.getLogger("dipagentx.engine")
 
@@ -1163,6 +1163,13 @@ class Engine:
         return status
 
     # --- views for the API ------------------------------------------------------
+
+    def hodl_history(self, bot: dict[str, Any]) -> list[dict[str, Any]]:
+        """Momentum: the result of holding instead, every 4 hours since the start (see ``hodl_history``)."""
+        snap = self.snapshots.get(bot["symbol"])
+        if bot["strategy"] != "momentum" or not snap:
+            return []
+        return hodl_history(bot["state"], self.exchange, bot["symbol"], Decimal(str(snap["bid"])), now_ms())
 
     def describe_bot(self, bot: dict[str, Any], stats: dict[tuple[int, bool], dict[str, Any]], lang: str = "en") -> dict[str, Any]:
         base, quote = split_symbol(bot["symbol"])

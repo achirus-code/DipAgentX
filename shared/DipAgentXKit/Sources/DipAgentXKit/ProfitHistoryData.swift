@@ -33,11 +33,13 @@ public struct ProfitHistoryData {
     public let range: HistoryRange
     public let perBot: Bool
     public let hidden: Set<Int>
+    /// Momentum bots whose "only held" line is shown, with that line (bot id → points).
+    public let hodl: [Int: [HodlPoint]]
     /// The currencies in the order of the agent's summary.
     let currencyOrder: [String]
 
     public init(trades: [Trade], bots: [Bot], summary: Summary?, live: Bool, currency: String, range: HistoryRange,
-                perBot: Bool, hidden: Set<Int>) {
+                perBot: Bool, hidden: Set<Int>, hodl: [Int: [HodlPoint]] = [:]) {
         self.trades = trades
         self.bots = bots
         self.live = live
@@ -45,6 +47,7 @@ public struct ProfitHistoryData {
         self.range = range
         self.perBot = perBot
         self.hidden = hidden
+        self.hodl = hodl
         currencyOrder = summary?.currencies.map(\.currency) ?? []
     }
 
@@ -95,6 +98,29 @@ public struct ProfitHistoryData {
         return points.isEmpty ? [] : [Curve(id: -1, color: .accentColor, points: points)]
     }
 
+    /// Bots that can compare themselves with holding (momentum follower).
+    public func canCompare(_ botId: Int) -> Bool {
+        bots.first { $0.id == botId }?.strategy == "momentum"
+    }
+
+    /// The "only held" lines of the chosen bots – in a paler shade of the bot's colour, drawn dashed: the result
+    /// holding would have had since the bot's start, on the same scale as the bot's own line.
+    public var hodlCurves: [Curve] {
+        let start = range.start
+        return hodl.keys.sorted().filter { !hidden.contains($0) }.compactMap { id in
+            let all = hodl[id] ?? []
+            var shown = all.filter { start == nil || $0.date >= start! }
+            guard !shown.isEmpty else { return nil }
+            if let start, let before = all.last(where: { $0.date < start }) {
+                shown.insert(HodlPoint(t: Int64(start.timeIntervalSince1970 * 1000), value: before.value), at: 0)
+            }
+            let points = shown.enumerated().map { index, point in
+                ProfitPoint(id: "hodl-\(id)-\(index)", date: point.date, value: point.value, trade: nil)
+            }
+            return Curve(id: -1000 - id, color: color(id).opacity(0.45), points: points)
+        }
+    }
+
     public var inRange: [Trade] {
         guard let start = range.start else { return scoped }
         return scoped.filter { $0.date >= start }
@@ -130,7 +156,7 @@ public struct ProfitHistoryData {
 
     /// The values of the shown curves plus the zero line, with a little air above and below.
     public var yDomain: ClosedRange<Double> {
-        let values: [Double] = curves.flatMap { curve in curve.points.map(\.value) } + [0]
+        let values: [Double] = (curves + hodlCurves).flatMap { curve in curve.points.map(\.value) } + [0]
         let low = values.min() ?? 0, high = values.max() ?? 0
         let pad = max((high - low) * 0.08, 1)
         return (low - pad)...(high + pad)
