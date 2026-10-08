@@ -26,6 +26,14 @@ public struct SummaryCard: View {
         self.showHistory = showHistory
     }
 
+    /// The total relative to the capital of the bots in the shown mode – only when every bot with a result has one.
+    private func totalPct(_ total: Double, _ currency: String) -> Double? {
+        let shown = bots.filter { $0.quoteCurrency == currency && $0.paper == (summary.mode != "live") }
+        let capital = shown.compactMap(\.capital).reduce(0, +)
+        guard capital > 0, shown.allSatisfy({ $0.capital != nil || ($0.tradesCount == 0 && $0.position == nil) }) else { return nil }
+        return total / capital * 100
+    }
+
     public var body: some View {
         let result = summary.currencies.first
         let currency = result?.currency ?? cash.first?.currency ?? "EUR"
@@ -55,8 +63,16 @@ public struct SummaryCard: View {
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.snappy(duration: 0.25)) { expanded.toggle() } }
             // The headline: what DipAgentX has earned or lost in total (realized + open, after fees).
-            PnLText(value: result?.total ?? 0, currency: currency, font: .ui(expanded ? 28 : 24, weight: .bold, design: .rounded), calmLosses: true)
-                .help("Realized plus open result of all bots, fees already deducted.")
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                PnLText(value: result?.total ?? 0, currency: currency, font: .ui(expanded ? 28 : 24, weight: .bold, design: .rounded), calmLosses: true)
+                if let pct = totalPct(result?.total ?? 0, currency) {
+                    Text(verbatim: Fmt.pct(pct))
+                        .font(.ui(expanded ? 17 : 15, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(pct.pnlColor)
+                        .help("Of the capital of the bots that manage one (momentum).")
+                }
+            }
+            .help("Realized plus open result of all bots, fees already deducted.")
             HStack(spacing: 0) {
                 metric("Realized", result?.realized ?? 0, currency)
                 metric("Open", result?.unrealized ?? 0, currency)

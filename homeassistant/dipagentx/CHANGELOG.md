@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.4] – 2026-10-08
+
+### Changed
+
+- The percent moved from the bots to the total result at the top: the total in percent of the capital of the bots
+  that manage one (momentum). The bots show their result in money only again.
+
 ## [1.32.3] – 2026-10-08
 
 ### Added
