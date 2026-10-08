@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.3] – 2026-10-08
+
+### Added
+
+- Momentum bots show their total result in percent as well (of the money put in), on the card and in the details.
+
 ## [1.32.2] – 2026-10-08
 
 ### Added

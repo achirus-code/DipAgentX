@@ -291,6 +291,26 @@ extension IndicatorsList {
     }
 }
 
+/// The bot's total result in money and – where the bot has a capital – in percent behind it.
+public struct TotalPnLText: View {
+    let bot: Bot
+    let font: Font
+
+    public init(bot: Bot, font: Font) {
+        self.bot = bot
+        self.font = font
+    }
+
+    public var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: font)
+            if let pct = bot.totalPct {
+                Text(verbatim: Fmt.pct(pct)).font(font).monospacedDigit().foregroundStyle(pct.pnlColor)
+            }
+        }
+    }
+}
+
 /// "Indicators": opens the strategy's indicators in colour and the decision – a popover on the Mac, a sheet on
 /// the iPhone.
 public struct IndicatorsButton: View {

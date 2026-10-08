@@ -244,6 +244,14 @@ public struct Bot: Codable, Identifiable, Equatable {
 
     public var totalPnl: Double { realizedPnl + (position?.unrealizedPnl ?? 0) }
 
+    /// The total result relative to the bot's capital – for bots that manage a capital (momentum: the money put in
+    /// since the comparison started, else the amount). nil for the others.
+    public var totalPct: Double? {
+        guard strategy == "momentum" else { return nil }
+        let base = hodl?.startCapital ?? params["amount"]?.double ?? 0
+        return base > 0 ? totalPnl / base * 100 : nil
+    }
+
     /// The open trades one by one – older agents only send the single position.
     public var openTrades: [BotPosition] { positions ?? (position.map { [$0] } ?? []) }
 
