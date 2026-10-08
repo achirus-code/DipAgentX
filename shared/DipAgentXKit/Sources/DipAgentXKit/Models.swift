@@ -215,10 +215,12 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let losses: Int
     /// All fees of the bot's trades in its current mode – agent 1.31+.
     public let fees: Double?
+    /// Momentum: the bot's capital now against buying and holding since its start – agent 1.31+.
+    public let hodl: HodlComparison?
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
@@ -272,6 +274,28 @@ public struct Bot: Codable, Identifiable, Equatable {
         }
         return BotGoal(kind: kind, target: target, percent: (target / price - 1) * 100, reached: reached)
     }
+}
+
+/// What the bot's capital is worth now and what it would be worth bought at the start and simply held (no fees).
+public struct HodlComparison: Codable, Equatable {
+    public let since: Int64
+    public let startPrice: Double
+    public let startCapital: Double
+    public let value: Double
+    public let hodlValue: Double
+
+    enum CodingKeys: String, CodingKey {
+        case since, value
+        case startPrice = "start_price"
+        case startCapital = "start_capital"
+        case hodlValue = "hodl_value"
+    }
+
+    public var date: Date { Date(ms: since) }
+    public var pct: Double { startCapital > 0 ? (value / startCapital - 1) * 100 : 0 }
+    public var hodlPct: Double { startCapital > 0 ? (hodlValue / startCapital - 1) * 100 : 0 }
+    /// The bot ahead of holding (positive) or behind it.
+    public var advantage: Double { value - hodlValue }
 }
 
 public struct Trade: Codable, Identifiable, Equatable {

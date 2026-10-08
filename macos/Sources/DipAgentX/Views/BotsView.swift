@@ -484,20 +484,34 @@ struct BotDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel("Result")
             Card {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Total").font(.system(size: 10)).foregroundStyle(.secondary)
-                        PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Total").font(.system(size: 10)).foregroundStyle(.secondary)
+                            PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Realized").font(.system(size: 10)).foregroundStyle(.secondary)
+                            PnLText(value: bot.realizedPnl, currency: bot.quoteCurrency)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        detail("Trades", String(bot.tradesCount))
+                        detail("Winners", bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
+                        if let fees = bot.fees { detail("Fees", Fmt.money(fees, bot.quoteCurrency)) }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Realized").font(.system(size: 10)).foregroundStyle(.secondary)
-                        PnLText(value: bot.realizedPnl, currency: bot.quoteCurrency)
+                    if let h = bot.hodl {
+                        HStack(alignment: .top, spacing: 12) {
+                            detail("With the bot", "\(Fmt.money(h.value, bot.quoteCurrency)) (\(Fmt.pct(h.pct)))")
+                            detail("Only held (HODL)", "\(Fmt.money(h.hodlValue, bot.quoteCurrency)) (\(Fmt.pct(h.hodlPct)))")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Difference").font(.system(size: 10)).foregroundStyle(.secondary)
+                                PnLText(value: h.advantage, currency: bot.quoteCurrency)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .help("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees.")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    detail("Trades", String(bot.tradesCount))
-                    detail("Winners", bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
-                    if let fees = bot.fees { detail("Fees", Fmt.money(fees, bot.quoteCurrency)) }
                 }
             }
         }

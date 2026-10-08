@@ -457,3 +457,8 @@
 "Order" = "Order";
 "Limit order (no fee)" = "Limit-Order (ohne Gebühr)";
 "Market order" = "Market-Order";
+"With the bot" = "Mit dem Bot";
+"Only held (HODL)" = "Nur gehalten (HODL)";
+"Difference" = "Unterschied";
+"Against holding" = "Gegen Halten";
+"%@ bought at %@ on %@ and simply held, without fees." = "%@ zu %@ am %@ gekauft und einfach gehalten, ohne Gebühren.";

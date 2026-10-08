@@ -25,6 +25,7 @@ from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
+from .strategies.momentum import hodl_comparison
 
 log = logging.getLogger("dipagentx.engine")
 
@@ -1238,6 +1239,9 @@ class Engine:
             "losses": int(s.get("losses") or 0),
             "fees": float(s.get("fees") or 0),
             "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+            # momentum: the bot's capital now against buying and holding with it since the start
+            "hodl": hodl_comparison(bot["state"], bot["params"], Decimal(str(snap["bid"])))
+            if snap and bot["strategy"] == "momentum" else None,
         }
 
     def summary(self) -> dict[str, Any]:

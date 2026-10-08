@@ -3,6 +3,8 @@ import math
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from app import cryptodata
 from app.exchange import Candle, OrderResult, Ticker
 from app.i18n import message_key, render
@@ -437,3 +439,18 @@ async def test_a_rejected_limit_order_is_retried_at_market(tmp_path: Path, monke
     clock[0] += 6 * 60_000  # after the error pause
     await engine.tick()
     assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1
+
+
+async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_orders=False)
+    await engine.tick()
+    hodl = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]
+    assert hodl["start_capital"] == 1000 and hodl["since"] == clock[0]
+    assert hodl["hodl_value"] == pytest.approx(1000 * float(engine.snapshots["ETH-EUR"]["bid"]) / hodl["start_price"])
+    assert 0 < hodl["value"] <= 1000.01
+
+    bot = db.get_bot(bot_id)  # a new amount starts the comparison afresh
+    db.update_bot(bot_id, params={**bot["params"], "amount": 2000})
+    clock[0] += 60_000
+    await engine.tick()
+    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]["start_capital"] == 2000

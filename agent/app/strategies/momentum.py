@@ -114,6 +114,24 @@ def update_lookbacks(h: History, st: dict, p: dict, last: int) -> None:
     st["at"] = last
 
 
+def hodl_comparison(state: dict, params: dict, price: Decimal) -> dict | None:
+    """What the bot's capital is worth now against having bought the coin with it at the start and simply held
+    (no fees) – the start is set with the amount and again after a reset or a switch of the mode."""
+    st = state.get("momentum") or {}
+    start = st.get("hodl")
+    if not start or price <= 0:
+        return None
+    positions = open_positions(state)
+    realized = Decimal(str(state.get("realized") or 0))
+    capital = Decimal(str(params["amount"])) + realized - Decimal(st.get("realized_from") or "0")
+    value = capital - sum((x.cost for x in positions), Decimal(0)) + sum((x.qty * price for x in positions), Decimal(0))
+    start_capital, start_price = Decimal(start["capital"]), Decimal(start["price"])
+    return {
+        "since": int(start["since"]), "start_price": float(start_price), "start_capital": float(start_capital),
+        "value": float(value), "hodl_value": float(start_capital * price / start_price),
+    }
+
+
 class MomentumStrategy(Strategy):
     key = "momentum"
     name = L("Momentum trend follower", "Momentum-Trendfolger")
@@ -260,7 +278,14 @@ class MomentumStrategy(Strategy):
         realized = Decimal(str(ctx.state.get("realized") or 0))
         if st.get("amount") != p["amount"]:
             st["amount"], st["realized_from"] = p["amount"], str(realized)
+            st.pop("hodl", None)  # a new amount starts the comparison afresh
         capital = Decimal(str(p["amount"])) + realized - Decimal(st["realized_from"])
+        if "hodl" not in st:
+            # the comparison starts with the capital: at the first buy of the open trades (a bot older than the
+            # comparison), else now
+            first = min(positions, key=lambda x: x.opened_at, default=None)
+            st["hodl"] = {"capital": str(capital), "price": str(first.entry_price if first else ctx.market.ask),
+                          "since": first.opened_at if first else ctx.now}
         cash = capital - sum((x.cost for x in positions), Decimal(0))
         exposure = sum((x.qty * bid for x in positions), Decimal(0))
         equity = cash + exposure
