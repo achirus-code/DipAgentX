@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.30.1] – 2026-10-08
+
+### Fixed
+
+- A bot's result, trade count and wins/losses only count trades of its current mode. After switching a bot from
+  paper to live it showed the simulated trades and the paper loss of closing the paper slices as its result.
+
 ## [1.30.0] – 2026-10-06
 
 Performance release: less CPU on the Mac and on small Home Assistant hosts, fewer requests, far fewer log lines.
