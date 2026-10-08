@@ -367,6 +367,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     await engine.tick()  # booked – and the next slice goes out in the same check
     trades = db.list_trades(bot_id)
     assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1
+    assert trades[0]["order_type"] == "limit"
     assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
 
 
@@ -382,6 +383,8 @@ async def test_a_partial_fill_is_booked_after_the_wait_and_the_rest_bought_at_ma
     trades = db.list_trades(bot_id)
     assert ex.cancelled and len(trades) == 2  # half of the limit order, then the rest at market
     assert ex.kinds[-1] == ("market", "buy")
+    assert [t["order_type"] for t in trades] == ["market", "limit"]  # newest first
+    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["fees"] == sum(float(t["fee"]) for t in trades)
     assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
     assert db.get_bot(bot_id)["state"]["taker_from"] == clock[0]
 

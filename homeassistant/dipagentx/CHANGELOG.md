@@ -4,6 +4,15 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.31.0] – 2026-10-08
+
+### Added
+
+- Every live trade records how its order went out: as a fee-free **limit order** or as a **market order**. The
+  history marks limit trades with "LIMIT · NO FEE" and shows the fee of any other trade; the trade details name the
+  order type.
+- **Fees per bot**: the bot details show the sum of all fees of the bot's trades (in its current mode).
+
 ## [1.30.1] – 2026-10-08
 
 ### Fixed

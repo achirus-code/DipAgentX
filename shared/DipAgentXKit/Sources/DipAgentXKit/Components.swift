@@ -157,6 +157,21 @@ public struct Badge: View {
     }
 }
 
+/// What a trade cost: a limit order paid no fee (agent 1.31+), any other trade with a fee shows it.
+public struct FeeBadge: View {
+    let trade: Trade
+
+    public init(trade: Trade) { self.trade = trade }
+
+    public var body: some View {
+        if trade.orderType == "limit" {
+            Badge(text: "LIMIT · NO FEE", color: .green, icon: "checkmark")
+        } else if trade.fee >= 0.005 {
+            Badge(text: "FEE \(Fmt.money(trade.fee, trade.quote))", color: .orange)
+        }
+    }
+}
+
 /// PAPER or LIVE – the mode a bot (or trade) runs in.
 public struct ModeBadge: View {
     let paper: Bool

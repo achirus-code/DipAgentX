@@ -213,10 +213,12 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let tradesCount: Int
     public let wins: Int
     public let losses: Int
+    /// All fees of the bot's trades in its current mode – agent 1.31+.
+    public let fees: Double?
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
@@ -295,10 +297,14 @@ public struct Trade: Codable, Identifiable, Equatable {
     public let createdAt: Int64
     /// The trade (position) a buy opened or added to and a sale closed – agent 1.17+; nil for older trades.
     public let positionId: String?
+    /// How a live order went out: "limit" (waited at the best price, no fee) or "market" – agent 1.31+;
+    /// nil for paper and older trades.
+    public let orderType: String?
 
     enum CodingKeys: String, CodingKey {
         case id, symbol, side, price, fee, pnl, paper, reason
         case positionId = "position_id"
+        case orderType = "order_type"
         case botId = "bot_id"
         case botName = "bot_name"
         case baseQty = "base_qty"

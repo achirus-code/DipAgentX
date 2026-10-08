@@ -272,6 +272,9 @@ public struct TradeDetailPanel: View {
             row("Quantity", "\(Fmt.qty(trade.baseQty)) \(trade.base)")
             row("Proceeds", Fmt.money(trade.quoteAmount, quote))
             row("Fee", Fmt.money(trade.fee, quote))
+            if let type = trade.orderType {
+                row("Order", type == "limit" ? String(localized: "Limit order (no fee)") : String(localized: "Market order"))
+            }
             reason(trade)
         }
         section("Bought") {
@@ -307,6 +310,9 @@ public struct TradeDetailPanel: View {
             row("Quantity", "\(Fmt.qty(trade.baseQty)) \(trade.base)")
             row("Amount", Fmt.money(trade.quoteAmount, quote))
             row("Fee", Fmt.money(trade.fee, quote))
+            if let type = trade.orderType {
+                row("Order", type == "limit" ? String(localized: "Limit order (no fee)") : String(localized: "Market order"))
+            }
             reason(trade)
         }
         section("Sold") {

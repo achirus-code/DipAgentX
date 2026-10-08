@@ -174,6 +174,9 @@ struct BotDetailView: View {
             LabeledContent("Realized") { PnLText(value: bot.realizedPnl, currency: bot.quoteCurrency, font: .body) }
             LabeledContent("Trades", value: String(bot.tradesCount))
             LabeledContent("Winners", value: bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
+            if let fees = bot.fees {
+                LabeledContent("Fees", value: Fmt.money(fees, bot.quoteCurrency))
+            }
         }
     }
 

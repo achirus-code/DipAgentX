@@ -497,6 +497,7 @@ struct BotDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     detail("Trades", String(bot.tradesCount))
                     detail("Winners", bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
+                    if let fees = bot.fees { detail("Fees", Fmt.money(fees, bot.quoteCurrency)) }
                 }
             }
         }
