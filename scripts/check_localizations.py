@@ -31,7 +31,7 @@ IGNORE = {
 IGNORE_LINE = re.compile(
     r"NSLog\(|print\(|forHTTPHeaderField|forKey|Process\(|arguments =|executableURL|URL\(string|"
     r"systemName:|Image\(|case \w+ = \"|CFBundle|Bearer|kSec[A-Z]|infoDictionary|\"/api|client\.(get|post|send|delete)|"
-    r"Text\(verbatim:|service = \"|@AppStorage\("
+    r"Text\(verbatim:|service = \"|@AppStorage\(|case \"[A-Z0-9]+\":"  # the last one: tickers like case "BTC":
 )
 
 

@@ -121,7 +121,7 @@ struct BotCard: View {
         Card {
             VStack(alignment: .leading, spacing: bot.enabled ? 10 : 8) {
                 HStack(spacing: 10) {
-                    IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: bot.enabled ? 34 : 28)
+                    StrategyIcon(strategy: bot.strategy, symbol: bot.strategyIcon, coin: bot.baseCurrency, size: bot.enabled ? 34 : 28)
                         .grayscale(bot.enabled ? 0 : 1)
                         .opacity(bot.enabled ? 1 : 0.55)
                     VStack(alignment: .leading, spacing: 2) {
@@ -374,7 +374,7 @@ struct BotDetailView: View {
         Card(padding: 14) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 42)
+                    StrategyIcon(strategy: bot.strategy, symbol: bot.strategyIcon, coin: bot.baseCurrency, size: 42)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
                             Text(bot.symbol).font(.system(size: 15, weight: .bold, design: .rounded))

@@ -30,9 +30,17 @@ solange die Funding-Rate Panik zeigt.
 - Tagesschluss = Schlusskurs der Kerze 20 bis 24 Uhr UTC.
 - Funding-Rate: Binance-USDT-Perpetual (ETHUSDT/BTCUSDT), öffentliche API `/fapi/v1/fundingRate`, Abstände 8 h. Mittel
   der letzten 7 Tage, auf Jahresrate umgerechnet (0,01 % je 8 h = 10,95 % p. a.). Fehlt die Rate oder ist der letzte
-  Wert älter als 2 Tage, gibt es keine Untergrenze. Der Status beginnt dann mit „⚠ Seit … keine Funding-Rate von
-  Binance – die Untergrenze ist aus“, und die Karte zeigt das als Hinweis. Historie gibt es erst ab 2019-09 (BTC) bzw.
-  2019-11 (ETH).
+  Wert älter als 2 Tage, nimmt der Bot ersatzweise die Funding-Rate derselben Kontrakte auf Bybit
+  (`/v5/market/funding/history`, öffentlich); der Status zeigt dann „(Bybit)“ hinter dem Wert. Liefert auch Bybit
+  nichts, gibt es keine Untergrenze. Der Status beginnt dann mit „⚠ Seit … keine Funding-Rate von Binance oder Bybit –
+  die Untergrenze ist aus“, und die Karte zeigt das als Hinweis. Historie gibt es erst ab 2019-09 (BTC) bzw. 2019-11
+  (ETH).
+- Bybit als Ersatz (geprüft 2022–2026, alle 4 h): im Mittel gleich wie Binance (BTC ±0,0, ETH +0,3 Prozentpunkte),
+  einzelne Wochen aber ±4 Punkte daneben; die Entscheidung „unter +2 %“ stimmt in 82 % (BTC) bzw. 86 % (ETH) der Checks
+  überein. Die ganze Regel mit Bybit statt Binance (50 % Limit-Käufe): ETH ×4,29 statt ×3,74, BTC ×2,22 statt ×2,97 –
+  so viel wie ganz ohne Untergrenze (×2,21). Der Vorsprung der Untergrenze bei BTC hängt also an den Binance-Werten und
+  ist weniger robust als bei ETH. Als Ersatz während eines Binance-Ausfalls ist Bybit trotzdem besser als keine
+  Untergrenze.
 - Börsenzuflüsse (Coin Metrics Community API) nur für die optionale Bremse, standardmäßig aus.
 
 ## 2. Baustein 1: Momentum mit sechs Fenstern und Hysterese
@@ -110,14 +118,27 @@ Beispiel: 14 T +8 %, 21 T +7 %, 30 T +6 %, 40 T +4 % (war an, bleibt an), 50 T +
 
 ## 8. Orders und Kosten (live, Revolut X)
 
-- Revolut X: Maker 0 %, Taker 0,09 % (offiziell angegeben).
-- Strategie-Orders gehen zuerst als Post-Only-Limit-Order zum besten Geldkurs (Kauf) bzw. Briefkurs (Verkauf) raus.
-  Ist die Order nach `maker_wait` Minuten (10) nicht gefüllt, wird sie storniert und der Rest als Market-Order
-  gehandelt. Nach einer ungefüllten oder abgelehnten Limit-Order gehen 30 Minuten lang alle Orders direkt als
-  Market-Order.
+- Revolut X: Maker 0 %, Taker 0,09 % (offiziell angegeben, für Kauf und Verkauf gleich).
+- Strategie-Orders (Kauf und Verkauf) gehen zuerst als Post-Only-Limit-Order raus: Kauf einen Cent unter dem besten
+  Geldkurs, Verkauf einen Cent über dem besten Briefkurs. Der eine Cent Abstand verhindert, dass Post-Only abgelehnt
+  wird, wenn sich der Kurs bewegt, während die Order unterwegs ist.
+- Nachziehen: Läuft der Kurs weg (Geldkurs beim Kauf bzw. Briefkurs beim Verkauf mehr als einen Cent von der Order
+  entfernt), storniert der Bot beim nächsten Check (alle 30 s) die Order, bucht den gefüllten Teil und stellt den Rest
+  zum neuen Kurs ein. Teilfüllungen eines Kaufs landen im selben Trade, es entstehen also keine Mini-Trades.
+- Wartezeit `maker_wait` (10 min) gilt einmal pro Umschichtung, ab ihrer ersten Order – auch wenn die Umschichtung
+  mehrere Trades braucht (z. B. 0 → 50 % = 5 Käufe). Was danach noch fehlt, geht als Market-Order raus. Eine Stufe ist
+  also spätestens nach der Wartezeit plus wenigen Checks umgesetzt. Ein Check ohne Order beendet die Umschichtung; die
+  nächste bekommt wieder die volle Wartezeit.
+- Lehnt die Börse eine Limit-Order ab (Post-Only hätte das Buch gekreuzt), ist das kein Fehler: Der nächste Check
+  versucht es zum dann aktuellen Kurs erneut, nach der Wartezeit als Market-Order. (Bis 1.33 gingen nach einer
+  ungefüllten oder abgelehnten Limit-Order 30 Minuten lang alle Orders als Market-Order raus, und Verkäufe immer
+  sofort als Market-Order.)
 - Manuelle Verkäufe und „alle Positionen schließen“: immer Market-Order (eine noch wartende Limit-Order wird vorher
   storniert, ihr gefüllter Teil gebucht). Papierhandel: Market-Orders mit der eingestellten Papier-Gebühr
   (0,09 % je Seite).
+- Erster Live-Tag (8.10.2026, noch mit der 30-Minuten-Market-Pause): 42 % des Kaufvolumens als Limit-Order ohne
+  Gebühr (ETH 6 von 8 Käufen, BTC 800 von 2.800 €) – die übrigen Käufe gingen nach einer einzigen nicht ganz gefüllten
+  Limit-Order als Market-Order raus.
 - Die reale Kostenlast hängt von der Maker-Füllquote ab. Backtest 2022–2026 mit gemessenem Umsatz (24-mal die mittlere
   Equity pro Jahr):
 

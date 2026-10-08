@@ -14,7 +14,7 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_UP, Decimal
 from typing import Any
 
 import httpx
@@ -45,8 +45,6 @@ HOLDINGS_CHECK_MS = 30 * 60_000  # plus right after every own fill
 MARKET_DATA_CONCURRENCY = 4
 # candles are re-fetched when a new candle starts or after this long, not on every tick
 CANDLE_MAX_AGE_MS = 6 * 3_600_000  # safety net only – candles are normally reused until the next candle starts
-# after a limit order that wasn't (completely) filled, the strategy's orders go out as market orders for this long
-MAKER_PAUSE_MS = 30 * 60_000
 
 Message = dict | str
 
@@ -55,6 +53,12 @@ def round_down(value: Decimal, step: Decimal) -> Decimal:
     if step <= 0:
         return value
     return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
+
+
+def round_up(value: Decimal, step: Decimal) -> Decimal:
+    if step <= 0:
+        return value
+    return (value / step).to_integral_value(rounding=ROUND_UP) * step
 
 
 def split_symbol(symbol: str) -> tuple[str, str]:
@@ -75,9 +79,16 @@ def find_position(state: dict[str, Any], position_id: str | None) -> Position | 
 
 
 def limit_offset(pair: PairInfo) -> Decimal:
-    """How far below the best bid a limit buy goes out: a cent, at least one price step – so post-only isn't refused
-    when the price ticks while the order is on its way."""
+    """How far from the best price a limit order goes out (a buy below the bid, a sell above the ask): a cent, at
+    least one price step – so post-only isn't refused when the price ticks while the order is on its way."""
     return max(pair.quote_step, Decimal("0.01"))
+
+
+def limit_price(side: str, view: MarketView, pair: PairInfo) -> Decimal:
+    """Where a fee-free limit order goes out now: a cent below the best bid (buy) or above the best ask (sell)."""
+    if side == "buy":
+        return round_down(view.bid, pair.quote_step) - limit_offset(pair)
+    return round_up(view.ask, pair.quote_step) + limit_offset(pair)
 
 
 def definitely_not_placed(exc: Exception) -> bool:
@@ -158,6 +169,8 @@ class Engine:
         self._last_check: dict[int, int] = {}
         self._holdings_checked_at = 0
         self._background: set[asyncio.Task] = set()
+        # bots that sent an order during the check that is running – a check without one ends the maker window
+        self._ordered: set[int] = set()
 
     # --- loop -------------------------------------------------------------
 
@@ -336,9 +349,10 @@ class Engine:
             before = self._snapshot(bot)
             state = bot["state"]
             status: Message = bot["status"]
+            self._ordered.discard(bot_id)
             try:
                 if state.get("pending_order"):
-                    status = await self._reconcile(bot, state) or status
+                    status = await self._reconcile(bot, state, view) or status
                     if pending := state.get("pending_order"):
                         status = self._waiting_status(bot, pending)
                         return
@@ -363,6 +377,8 @@ class Engine:
                 status = m("engine.error", error=as_message(exc))
                 state["retry_after"] = now_ms() + backoff_for(exc)
             finally:
+                if bot_id not in self._ordered and not state.get("pending_order"):
+                    state.pop("maker_until", None)  # rebalancing done – the next one gets the whole waiting time
                 self._persist(bot, state, status, before)
 
     async def _evaluate(self, bot: dict[str, Any], state: dict[str, Any], view: MarketView) -> Message:
@@ -381,7 +397,7 @@ class Engine:
 
         _, quote = split_symbol(bot["symbol"])
         params = strategy.normalize(bot["params"])
-        maker = self._maker_wait(params, state)
+        maker = self._maker_until(params, state)
 
         def context(position: Position | None) -> Context:
             return Context(params, position, state, view, quote, self.sell_fee_rate(bot),
@@ -395,7 +411,7 @@ class Engine:
             if isinstance(decision.action, Buy):
                 return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason, maker)
             if isinstance(decision.action, Sell) and position:
-                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
                 return sold[1]
             state.pop("position_targets", None)
             if not self.blocked_buy(bot, state):
@@ -413,7 +429,7 @@ class Engine:
             position_targets[position.id] = state.pop("targets", None)
             statuses[position.id] = decision.status
             if isinstance(decision.action, Sell):
-                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
+                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
                 if sold:
                     return status
                 statuses[position.id] = status
@@ -493,14 +509,19 @@ class Engine:
         self.db.add_event(bot["id"], "info", status)
         return status
 
-    def _maker_wait(self, params: dict, state: dict) -> int | None:
-        """Minutes a strategy's live order may wait as a fee-free limit order – None: a market order right away
-        (switched off, the exchange can't, or a limit order of the last 30 minutes wasn't filled completely)."""
+    def _maker_until(self, params: dict, state: dict) -> int | None:
+        """Until when a strategy's live orders go out as fee-free limit orders – None: market orders (switched off,
+        the exchange can't, or the waiting time is used up).
+
+        The waiting time counts once per rebalancing, from its first order: all orders until the bot holds its target
+        share again (e.g. several slices) share it, and whatever is left after it goes out at market – so a step is
+        never delayed by more than the waiting time. A check that sends no order ends the rebalancing."""
+        state.pop("taker_from", None)  # the 30-minute market pause of 1.31–1.33
         if not params.get("maker_orders") or not self.exchange.supports_limit:
+            state.pop("maker_until", None)
             return None
-        if now_ms() - int(state.get("taker_from") or 0) < MAKER_PAUSE_MS:
-            return None
-        return max(1, int(params.get("maker_wait") or 10))
+        until = state.setdefault("maker_until", now_ms() + max(1, int(params.get("maker_wait") or 10)) * 60_000)
+        return until if now_ms() < until else None
 
     def _waiting_status(self, bot: dict, pending: dict) -> Message:
         limit = pending.get("limit")
@@ -511,14 +532,14 @@ class Engine:
         return m("engine.limit_waiting", price=money(Decimal(limit["price"]), quote), until=until)
 
     async def _sell_unless_loss(self, bot: dict, state: dict, view: MarketView, position: Position, sell: Sell,
-                                quote: str) -> tuple[bool, Message]:
+                                quote: str, maker: int | None = None) -> tuple[bool, Message]:
         """Sell one trade – unless it is a target rule that would realize a loss. Returns (sold, status)."""
         # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
         # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
         net = position.net_proceeds(view.bid, float(self.paper_fee("sell")) if position.paper else float(self.settings.taker_fee), quote)
         if not sell.stop and net < position.cost:
             return False, m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
-        return True, await self._sell(bot, state, view, sell.reason, position)
+        return True, await self._sell(bot, state, view, sell.reason, position, maker)
 
     def max_trades(self, bot: dict) -> int:
         """How many trades the bot may hold at once (1 for strategies without the option)."""
@@ -738,7 +759,7 @@ class Engine:
 
     async def _buy(self, bot: dict, state: dict, view: MarketView, amount: Decimal, reason: Message,
                    maker: int | None = None) -> Message:
-        """Buy for ``amount`` – live with ``maker`` (minutes) first as a limit order at the best bid."""
+        """Buy for ``amount`` – live until ``maker`` (a time) as a fee-free limit order a cent below the best bid."""
         strategy = STRATEGIES[bot["strategy"]]
         if state.get("pending_order"):
             return m("engine.order_running_no_buy")
@@ -787,23 +808,26 @@ class Engine:
             if available < quote_size:
                 raise Problem("err.insufficient", currency=pair.quote, available=money(available, pair.quote),
                               needed=money(quote_size, pair.quote))
-            limit_price = base_size = None
+            price = base_size = None
             if maker:
                 # a cent below the best bid: still a maker order when the price ticks down before it arrives
-                limit_price = round_down(view.bid, pair.quote_step) - limit_offset(pair)
-                base_size = round_down(quote_size / limit_price, pair.base_step) if limit_price > 0 else Decimal(0)
+                price = limit_price("buy", view, pair)
+                base_size = round_down(quote_size / price, pair.base_step) if price > 0 else Decimal(0)
                 if base_size < pair.min_order_size or base_size <= 0:
-                    limit_price = base_size = None  # too small for a limit order: market
+                    price = base_size = None  # too small for a limit order: market
             pending = await self._submit_order(bot, state, "buy", reason, quote_size=quote_size, base_size=base_size,
-                                               limit_price=limit_price, wait_minutes=maker or 0)
+                                               limit_price=price, until=maker)
+        if pending is None:  # the limit order was refused – the next check tries again
+            return m("engine.limit_refused", price=money(price, pair.quote))
         # the pending order already counts towards the limits – don't hold up other bots while it fills
         if pending.get("limit"):
             return await self._track_limit(bot, state, pair, pending)
         return await self._track_order(bot, state, pair, pending)
 
-    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position) -> Message:
-        """Sell one trade – live always at market: Revolut X charges a sale its fee as a limit order too, so waiting
-        for a better price only risks a worse one."""
+    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position,
+                    maker: int | None = None) -> Message:
+        """Sell one trade – live until ``maker`` (a time) as a fee-free limit order a cent above the best ask, else
+        (and always when sold by hand) at market."""
         pair = await self.exchange.pair(bot["symbol"])
         amount = position.qty
 
@@ -835,6 +859,13 @@ class Engine:
         if available + pair.min_order_size < position.qty:
             self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
                                                     available=qty(available), base=pair.base))
+        if maker and not manual:
+            price = limit_price("sell", view, pair)
+            pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id,
+                                               limit_price=price, until=maker)
+            if pending is None:  # refused – the next check tries again
+                return m("engine.limit_refused", price=money(price, pair.quote))
+            return await self._track_limit(bot, state, pair, pending)
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
         return await self._track_order(bot, state, pair, pending)
 
@@ -853,13 +884,16 @@ class Engine:
     async def _submit_order(
         self, bot: dict, state: dict, side: str, reason: Message,
         *, base_size: Decimal | None = None, quote_size: Decimal | None = None, position_id: str | None = None,
-        limit_price: Decimal | None = None, wait_minutes: int = 0,
-    ) -> dict:
-        """Place a market order – or with ``limit_price`` a post-only limit order of ``base_size`` – exactly once.
+        limit_price: Decimal | None = None, until: int | None = None, into: str | None = None,
+    ) -> dict | None:
+        """Place a market order – or with ``limit_price`` a post-only limit order of ``base_size`` that waits until
+        ``until`` – exactly once. ``into``: the trade a buy adds to (the rest of a limit order moved to a new price).
 
         The pending order (with our own client_order_id) is persisted *before* it is sent. If the response
-        gets lost, the next tick looks the order up by that id instead of sending a second one.
+        gets lost, the next tick looks the order up by that id instead of sending a second one. A limit order the
+        exchange refuses (post-only would have crossed the book) returns None – no error, the next check tries again.
         """
+        self._ordered.add(bot["id"])
         pending = {
             "client_order_id": str(uuid.uuid4()),
             "id": None,
@@ -870,9 +904,11 @@ class Engine:
             "base_size": str(base_size) if base_size is not None else None,
             "position_id": position_id,  # the trade a sell closes
         }
+        if into:
+            pending["into"] = into
         if limit_price is not None:
             # what isn't filled until then is cancelled – the strategy buys or sells the rest at market
-            pending["limit"] = {"price": str(limit_price), "until": pending["placed_at"] + wait_minutes * 60_000}
+            pending["limit"] = {"price": str(limit_price), "until": int(until or pending["placed_at"])}
         state["pending_order"] = pending
         self.db.update_bot(bot["id"], state=state)
         try:
@@ -890,8 +926,13 @@ class Engine:
             self.exchange.invalidate_balances()  # the order may have gone through anyway
             if definitely_not_placed(exc):
                 state.pop("pending_order", None)
-                if limit_price is not None:  # e.g. post-only would have crossed the book: next time at market
-                    state["taker_from"] = now_ms()
+                # written right away: the check may end with the same state it started with and then not write
+                self.db.update_bot(bot["id"], state=state)
+                if limit_price is not None:  # e.g. post-only would have crossed the book: the next check tries again
+                    log.info("Bot %s: limit order refused: %s", bot["name"], exc)
+                    self.db.add_event(bot["id"], "info", m("engine.limit_refused_event", side=m(f"side.{side}"),
+                                                           error=as_message(exc)))
+                    return None
                 raise
             raise Problem("err.order_unclear", error=as_message(exc)) from exc
         self.exchange.invalidate_balances()  # balances change with this order – the cache must not serve the old ones
@@ -936,8 +977,9 @@ class Engine:
             return self._apply_order(bot, state, await self.exchange.pair(bot["symbol"]), pending, result)
         return None
 
-    async def _reconcile(self, bot: dict, state: dict) -> Message | None:
-        """Finish a pending order. Returns the new status once the order is settled, else None."""
+    async def _reconcile(self, bot: dict, state: dict, view: MarketView | None = None) -> Message | None:
+        """Finish a pending order. Returns the new status once the order is settled, else None. With ``view`` a
+        waiting limit order follows the best price."""
         pending = state["pending_order"]
         pair = await self.exchange.pair(bot["symbol"])
         overdue = now_ms() - pending["placed_at"] > ORDER_LOOKUP_GRACE_MS
@@ -960,10 +1002,57 @@ class Engine:
                 return self._apply_order(bot, state, pair, pending, result)
             if now_ms() > int(limit["until"]):  # waited long enough: cancel, the rest goes out at market
                 return await self._cancel_limit(bot, state)
+            if view is not None:
+                price = limit_price(pending["side"], view, pair)
+                behind = price > Decimal(limit["price"]) if pending["side"] == "buy" else price < Decimal(limit["price"])
+                if behind:  # the market moved away – a waiting order would only fill once it turns
+                    return await self._move_limit(bot, state, pair, price)
             return None
         if result.terminal and (not short_fill(pending, result) or overdue):
             return self._apply_order(bot, state, pair, pending, result)
         return None
+
+    async def _move_limit(self, bot: dict, state: dict, pair: PairInfo, price: Decimal) -> Message | None:
+        """Move the waiting limit order to ``price``: cancel it, book what it filled and place the rest anew – with
+        the same waiting time. Returns the status once something changed, else None (still being cancelled)."""
+        pending = state["pending_order"]
+        try:
+            await self.exchange.cancel_order(pending["id"])
+        except Exception as exc:  # noqa: BLE001 – filled meanwhile: the read below tells
+            log.warning("Bot %s: cancelling order %s failed: %s", bot["name"], pending["id"], exc)
+        r = await self.exchange.get_order(pending["id"])
+        if not r.terminal:
+            return None  # the cancel is still on its way – the next check looks again
+        if r.status == "filled":  # filled completely before the cancel arrived
+            return self._apply_order(bot, state, pair, pending, r)
+        status: Message | None = None
+        if r.filled_qty > 0:
+            status = self._apply_order(bot, state, pair, pending, r, moving=True)  # book what it filled
+        else:
+            state.pop("pending_order", None)
+        side, limit = pending["side"], pending["limit"]
+        if side == "buy":
+            # the rest of the amount at the new price; a fill so far went into a trade the rest adds to
+            into = pending.get("into") or next((p.id for p in open_positions(state) if p.order_id == r.order_id), None)
+            rest = Decimal(pending["quote_size"]) - r.filled_amount
+            base_size = round_down(rest / price, pair.base_step) if price > 0 else Decimal(0)
+            if base_size < pair.min_order_size:
+                return status  # what is left is too small – the strategy decides at the next check
+            new = await self._submit_order(bot, state, "buy", pending["reason"], quote_size=rest, base_size=base_size,
+                                           limit_price=price, until=int(limit["until"]), into=into)
+        else:
+            position = find_position(state, pending.get("position_id"))
+            if position is None:
+                return status
+            base_size = round_down(position.qty, pair.base_step)
+            if base_size < pair.min_order_size:
+                return status
+            new = await self._submit_order(bot, state, "sell", pending["reason"], base_size=base_size,
+                                           position_id=position.id, limit_price=price, until=int(limit["until"]))
+        if new is None:
+            return m("engine.limit_refused", price=money(price, pair.quote))
+        log.info("Bot %s: limit order moved to %s", bot["name"], price)
+        return self._waiting_status(bot, new)
 
     async def _verify_holdings(self, bots: list[dict[str, Any]], force: bool = False) -> None:
         """Compare the live positions we booked with what the exchange actually holds.
@@ -1089,7 +1178,9 @@ class Engine:
         log.error("Bot %s: %s", bot["name"], render(msg, "en"))
         return msg
 
-    def _apply_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict, r: OrderResult) -> Message:
+    def _apply_order(self, bot: dict, state: dict, pair: PairInfo, pending: dict, r: OrderResult,
+                     moving: bool = False) -> Message:
+        """Book an order that is done. ``moving``: a limit order cancelled to be placed anew at a better price."""
         state.pop("pending_order", None)
         state.pop("retry_after", None)  # the "order unclear" error is resolved with the order
         if self.db.trade_exists(r.order_id):  # never book the same exchange order twice
@@ -1099,11 +1190,10 @@ class Engine:
                                    "position_id": pending.get("position_id")}
         self._holdings_checked_at = 0  # verify the books against the exchange at the next tick
         if (limit := pending.get("limit")) and r.status != "filled":
-            # a limit order not (completely) filled in time: book what it filled, the rest goes out at market –
-            # no error and no pause, and no re-reading for a missing fill (it was cancelled on purpose)
-            state["taker_from"] = now_ms()
+            # a limit order not (completely) filled in time: book what it filled, the rest goes out at market (or
+            # anew at the new price) – no error, and no re-reading for a missing fill (it was cancelled on purpose)
             state["fill_checked"] = r.order_id
-            if r.filled_qty <= 0:
+            if r.filled_qty <= 0 and not moving:
                 msg = m("engine.limit_not_filled", price=money(Decimal(limit["price"]), pair.quote))
                 self.db.add_event(bot["id"], "info", msg)
                 return msg
@@ -1120,7 +1210,8 @@ class Engine:
         if pending["side"] == "buy":
             return self._record_buy(
                 bot, state, pair, r.filled_qty - fee_base, r.filled_amount + fee_quote,
-                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], order_type=order_type,
+                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], into=pending.get("into"),
+                order_type=order_type,
             )
         return self._record_sell(
             bot, state, pair, r.filled_qty + fee_base, r.filled_amount - fee_quote,

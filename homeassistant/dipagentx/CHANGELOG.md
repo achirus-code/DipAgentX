@@ -4,6 +4,34 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.34.0] – 2026-10-08
+
+### Changed
+
+- **Momentum: sales as fee-free limit orders too.** Revolut X charges no fee for maker orders on either side, so the
+  trend follower sells a cent above the best ask first, like it buys a cent below the best bid. Sales by hand and
+  "close all" still go out at market right away.
+- **Limit orders follow the price:** when the market moves away from a waiting limit order, the next check cancels it,
+  books what it filled and places the rest at the new best price (a partly filled buy stays one trade).
+- **Waiting time per rebalancing instead of a 30-minute market pause:** the waiting time (10 min) counts once from the
+  first order of a rebalancing, also when it takes several trades; what is left after it goes out at market, and the
+  next rebalancing waits as a limit order again. Before, one limit order that wasn't filled completely sent every
+  order of the next 30 minutes to the market – on the first live day more than half of the buys paid the fee.
+- A limit order the exchange refuses (post-only would have crossed the book) is no error any more and doesn't pause
+  the bot: the next check tries again at the price of then.
+
+### Added
+
+- **Apps: a new icon for the momentum trend follower** – a green tile with a rising arrow over three steps, and for
+  the ten most important coins (BTC, ETH, XRP, BNB, SOL, DOGE, ADA, TRX, LINK, LTC) a small coin badge in the corner,
+  in the bot list, the bot details and the editor.
+- **Funding rate from Bybit when Binance has none:** without a fresh rate from Binance the momentum follower uses the
+  same contracts on Bybit, and the status says "(Bybit)". Only when both fail is the floor off (⚠ warning as before).
+
+### Fixed
+
+- A refused order could stay behind as an order "in flight" in the database when the check otherwise changed nothing.
+
 ## [1.33.3] – 2026-10-08
 
 ### Changed

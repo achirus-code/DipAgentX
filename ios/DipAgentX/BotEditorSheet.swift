@@ -98,7 +98,8 @@ struct BotEditorSheet: View {
     private var strategySection: some View {
         Section {
             HStack(spacing: 12) {
-                IconTile(symbol: strategy?.icon ?? "cpu", colors: strategyColors(strategyKey), size: 36)
+                StrategyIcon(strategy: strategyKey, symbol: strategy?.icon ?? "cpu", coin: symbol.components(separatedBy: "-").first,
+                             size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strategy?.name ?? strategyKey).font(.headline)
                     if let strategy {
@@ -278,7 +279,7 @@ struct StrategyList: View {
                         if selected != nil { dismiss() }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
-                            IconTile(symbol: s.icon, colors: strategyColors(s.key), size: 40)
+                            StrategyIcon(strategy: s.key, symbol: s.icon, size: 40)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(s.name).font(.headline).foregroundStyle(.primary)
                                 Text(s.description).font(.footnote).foregroundStyle(.secondary)

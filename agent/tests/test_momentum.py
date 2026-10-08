@@ -11,6 +11,8 @@ from app.i18n import message_key, render
 from app.strategies import STRATEGIES, Buy, Context, MarketView, Sell, open_positions
 from tests.test_core import FakeExchange, make_engine
 
+real_funding = cryptodata.funding  # the conftest replaces it with "not available" for every test
+
 HOUR = 3_600_000
 DAY = 24 * HOUR
 STEP = 4 * HOUR
@@ -92,7 +94,7 @@ async def test_missing_funding_data_is_shown_first_and_as_the_hint(tmp_path: Pat
     await engine.tick()
     bot = db.get_bot(bot_id)
     status = render(bot["status"], "de")
-    assert status.startswith("⚠ Seit 2 h keine Funding-Rate von Binance – die Untergrenze ist aus")
+    assert status.startswith("⚠ Seit 2 h keine Funding-Rate von Binance oder Bybit – die Untergrenze ist aus")
     assert "Untergrenze ist aus" in engine.describe_bot(bot, {}, "de")["hint"]
     set_data(monkeypatch, funding=8.0)  # back: no warning any more
     await engine.tick()
@@ -149,6 +151,39 @@ async def test_waits_for_enough_price_history():
     d = await s.evaluate(ctx(young))
     assert d.action is None and message_key(d.status) == "momentum.no_history"
     assert "Waiting for price history (29 of 74 days)" == render(d.status, "en")
+
+
+async def test_funding_falls_back_to_bybit_and_says_so(monkeypatch):
+    prints = [(NOW - k * 8 * HOUR, -0.0001) for k in range(30, -1, -1)]  # −0.01 % every 8 hours: panic
+    calls = []
+
+    async def binance_down(client, symbol):
+        calls.append(("binance", symbol))
+        raise cryptodata.httpx.ConnectError("unreachable")
+
+    async def bybit(client, symbol):
+        calls.append(("bybit", symbol))
+        return prints
+
+    monkeypatch.setattr(cryptodata, "funding", real_funding)
+    monkeypatch.setattr(cryptodata.FUNDING, "load", binance_down)
+    monkeypatch.setattr(cryptodata.BYBIT_FUNDING, "load", bybit)
+    assert round(await cryptodata.funding("eth", NOW), 2) == -10.95
+    assert calls == [("binance", "ETHUSDT"), ("bybit", "ETHUSDT")] and cryptodata.funding_source("ETH") == "Bybit"
+    d = await STRATEGIES["momentum"].evaluate(ctx(PathExchange(steady(-0.003))))
+    assert isinstance(d.action, Buy) and "at least 50 % (Bybit)" in render(d.action.reason, "en")
+
+    async def binance(client, symbol):  # Binance back: Bybit is no longer asked
+        return [(t, 0.0001) for t, _ in prints]
+
+    monkeypatch.setattr(cryptodata.FUNDING, "load", binance)
+    cryptodata.FUNDING.reset()
+    calls.clear()
+    assert round(await cryptodata.funding("ETH", NOW), 2) == 10.95
+    assert not calls and cryptodata.funding_source("ETH") == "Binance"
+    d = await STRATEGIES["momentum"].evaluate(ctx(PathExchange(steady(0.003))))
+    reason = render(d.action.reason, "en")
+    assert "(Bybit)" not in reason and "funding +10.95% p.a." in reason
 
 
 def test_funding_and_inflow_figures():
@@ -308,9 +343,10 @@ class LimitExchange(PathExchange):
         super().__init__(path)
         self.placed, self.kinds, self.cancelled = [], [], []
         self.reject_limit = False
+        self.move = Decimal(0)  # shifts bid, ask and last – the market moving while an order waits
 
     async def ticker(self, symbol):
-        return Ticker(self.price - 1, self.price + 1, self.price)
+        return Ticker(self.price - 1 + self.move, self.price + 1 + self.move, self.price + self.move)
 
     async def place_market_order(self, symbol, side, *, client_order_id, base_size=None, quote_size=None):
         self.kinds = [*self.kinds, ("market", side)]
@@ -371,6 +407,41 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1 - Decimal("0.01")
     assert trades[0]["order_type"] == "limit"
     assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
+    first, second = (ex.orders[k] for k in list(ex.orders)[:2])
+    state = db.get_bot(bot_id)["state"]
+    # both slices share the waiting time of the rebalancing – it counts from its first order
+    assert state["pending_order"]["limit"]["until"] == state["maker_until"] == NOW + 10 * 60_000
+
+
+async def test_a_waiting_limit_order_follows_the_price(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
+    await engine.tick()
+    first_price = ex.kinds[-1][2]
+    ex.fill("0.4", status="partially_filled")
+    ex.move = Decimal(-5)  # the price falls: the order stays where it is (it is the best bid now)
+    clock[0] += 30_000
+    await engine.tick()
+    assert not ex.cancelled and len(ex.placed) == 1
+    ex.move = Decimal(5)  # the price rises: the order follows it
+    clock[0] += 30_000
+    await engine.tick()
+    assert ex.cancelled == ["order-1"] and len(ex.placed) == 2
+    kind, side, price, size = ex.kinds[-1]
+    assert (kind, side) == ("limit", "buy") and price == ex.price + 5 - 1 - Decimal("0.01") > first_price
+    state = db.get_bot(bot_id)["state"]
+    trades = db.list_trades(bot_id)
+    assert len(trades) == 1 and trades[0]["order_type"] == "limit" and Decimal(trades[0]["fee"]) == 0  # the 40 %
+    assert Decimal(state["pending_order"]["quote_size"]) == pytest.approx(Decimal(100) - Decimal(trades[0]["quote_amount"]))
+    assert size * price <= Decimal(state["pending_order"]["quote_size"])  # never more than the rest of the amount
+    assert state["pending_order"]["limit"]["until"] == NOW + 10 * 60_000  # the waiting time keeps running
+    assert "Limit order at" in render(db.get_bot(bot_id)["status"], "en")
+    ex.fill()
+    clock[0] += 30_000
+    await engine.tick()  # the rest is booked into the same trade – one slice, not two
+    positions = open_positions(db.get_bot(bot_id)["state"])
+    assert len(db.list_trades(bot_id)) == 2 and len(positions) == 1
+    assert positions[0].cost == pytest.approx(Decimal(100), abs=Decimal("0.05"))
+    assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
 
 
 async def test_a_partial_fill_is_booked_after_the_wait_and_the_rest_bought_at_market(tmp_path: Path, monkeypatch):
@@ -388,7 +459,9 @@ async def test_a_partial_fill_is_booked_after_the_wait_and_the_rest_bought_at_ma
     assert [t["order_type"] for t in trades] == ["market", "limit"]  # newest first
     assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["fees"] == sum(float(t["fee"]) for t in trades)
     assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
-    assert db.get_bot(bot_id)["state"]["taker_from"] == clock[0]
+    clock[0] += 30_000
+    await engine.tick()  # the waiting time of this rebalancing is used up: the next slice goes out at market too
+    assert ex.kinds[-1] == ("market", "buy")
 
 
 async def test_a_limit_order_never_filled_is_no_error_and_goes_out_at_market(tmp_path: Path, monkeypatch):
@@ -399,23 +472,53 @@ async def test_a_limit_order_never_filled_is_no_error_and_goes_out_at_market(tmp
     bot = db.get_bot(bot_id)
     events = db.list_events(bot_id)
     assert not [e for e in events if e["level"] == "error"]
-    assert any("not filled – the next order goes out as a market order" in render(e["message"], "en") for e in events)
+    assert any("not filled within the waiting time – the rest goes out as a market order" in render(e["message"], "en")
+               for e in events)
     assert ex.kinds[-1] == ("market", "buy") and len(db.list_trades(bot_id)) == 1
     assert not bot["state"].get("retry_after")
-    clock[0] += 31 * 60_000  # 30 minutes later limit orders again
-    await engine.tick()
+    for _ in range(12):  # the rest of the rebalancing at market, until the bot holds its target
+        clock[0] += 30_000
+        await engine.tick()
+    bot = db.get_bot(bot_id)
+    assert [k[0] for k in ex.kinds] == ["limit"] + ["market"] * 10 and "maker_until" not in bot["state"]
+    await engine.discard_position(bot_id, open_positions(bot["state"])[0].id)
+    clock[0] += 30_000
+    await engine.tick()  # a new rebalancing waits as a limit order again
     assert ex.kinds[-1][0] == "limit"
 
 
-async def test_sells_right_away_at_market(tmp_path: Path, monkeypatch):
+async def test_sells_with_a_limit_order_a_cent_above_the_ask(tmp_path: Path, monkeypatch):
     from app.strategies import Position
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     bot = db.get_bot(bot_id)
     state = bot["state"]
     state["positions"] = [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]
     view = await engine.market_view("ETH-EUR")
-    await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0])
-    assert ex.kinds[-1] == ("market", "sell") and not open_positions(state)
+    status = await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0], NOW + 10 * 60_000)
+    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1 + Decimal("0.01"), Decimal("0.05"))
+    assert "Limit order at" in render(status, "en") and open_positions(state)
+    ex.fill("0.5", status="partially_filled")
+    ex.move = Decimal(-3)  # the price falls: the rest follows it down
+    await engine._reconcile(bot, state, await engine.market_view("ETH-EUR"))
+    assert ex.cancelled == ["order-1"] and ex.kinds[-1] == ("limit", "sell", ex.price + 1 - 3 + Decimal("0.01"),
+                                                             Decimal("0.025"))
+    assert open_positions(state)[0].qty == Decimal("0.025")  # half sold, the rest waits
+    ex.fill()
+    await engine._reconcile(bot, state)
+    assert not open_positions(state) and not state.get("pending_order")
+    sells = db.list_trades(bot_id)
+    assert [t["order_type"] for t in sells] == ["limit", "limit"] and all(Decimal(t["fee"]) == 0 for t in sells)
+    assert not await engine._complete_fill(bot, state) if state.get("fill_check") else True
+    assert not engine._sold_but_still_open(bot, state)
+
+
+async def test_sells_by_hand_go_out_at_market(tmp_path: Path, monkeypatch):
+    from app.strategies import Position
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
+    db.update_bot(bot_id, enabled=False, state={"positions": [
+        Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]})
+    await engine.close_position(bot_id)
+    assert ex.kinds[-1] == ("market", "sell") and not open_positions(db.get_bot(bot_id)["state"])
     assert db.list_trades(bot_id)[0]["order_type"] == "market"
 
 
@@ -425,15 +528,26 @@ async def test_market_orders_when_switched_off(tmp_path: Path, monkeypatch):
     assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1
 
 
-async def test_a_rejected_limit_order_is_retried_at_market(tmp_path: Path, monkeypatch):
+async def test_a_refused_limit_order_is_no_error_and_tried_again(tmp_path: Path, monkeypatch):
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     ex.reject_limit = True
     await engine.tick()
-    state = db.get_bot(bot_id)["state"]
-    assert not state.get("pending_order") and state["taker_from"] == clock[0] and not ex.kinds
-    clock[0] += 6 * 60_000  # after the error pause
+    bot = db.get_bot(bot_id)
+    assert not bot["state"].get("pending_order") and not bot["state"].get("retry_after") and not ex.kinds
+    assert "refused by the exchange" in render(bot["status"], "en")
+    assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
+    clock[0] += 30_000
+    await engine.tick()  # refused again – still within the waiting time
+    assert not ex.kinds
+    ex.reject_limit = False
+    clock[0] += 30_000
     await engine.tick()
-    assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1
+    assert ex.kinds[-1][:2] == ("limit", "buy")
+    ex.reject_limit = True
+    db.update_bot(bot_id, state={**db.get_bot(bot_id)["state"], "pending_order": None})
+    clock[0] += 10 * 60_000  # the waiting time is used up: market
+    await engine.tick()
+    assert ex.kinds[-1] == ("market", "buy")
 
 
 async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Path, monkeypatch):

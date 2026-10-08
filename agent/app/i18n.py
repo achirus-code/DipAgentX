@@ -319,8 +319,16 @@ CATALOG: dict[str, L] = {
         "Limit-Order zu {price} wartet (ohne Gebühr) – was bis {until} nicht ausgeführt ist, geht als Market-Order raus",
     ),
     "engine.limit_not_filled": L(
-        "Limit order at {price} not filled – the next order goes out as a market order",
-        "Limit-Order zu {price} nicht ausgeführt – die nächste Order geht als Market-Order raus",
+        "Limit order at {price} not filled within the waiting time – the rest goes out as a market order",
+        "Limit-Order zu {price} in der Wartezeit nicht ausgeführt – der Rest geht als Market-Order raus",
+    ),
+    "engine.limit_refused": L(
+        "Limit order at {price} refused by the exchange – trying again at the next check",
+        "Limit-Order zu {price} von der Börse abgelehnt – nächster Versuch beim nächsten Check",
+    ),
+    "engine.limit_refused_event": L(
+        "Limit order ({side}) refused: {error} – trying again at the next check, after the waiting time at market",
+        "Limit-Order ({side}) abgelehnt: {error} – nächster Versuch beim nächsten Check, nach der Wartezeit als Market-Order",
     ),
     "momentum.no_history": L("Waiting for price history ({have} of {need} days)",
                              "Warte auf Kursverlauf ({have} von {need} Tagen)"),
@@ -343,8 +351,8 @@ CATALOG: dict[str, L] = {
                               "Ziel {target} % · {detail} · Ergebnis {profit}"),
     "momentum.trend": L("trend: {up} of {n} lookbacks up", "Trend: {up} von {n} Zeitfenstern aufwärts"),
     "momentum.funding_down": L(
-        "⚠ No funding rate from Binance for {since} – the floor is off (the trend still trades)",
-        "⚠ Seit {since} keine Funding-Rate von Binance – die Untergrenze ist aus (der Trend handelt weiter)",
+        "⚠ No funding rate from Binance or Bybit for {since} – the floor is off (the trend still trades)",
+        "⚠ Seit {since} keine Funding-Rate von Binance oder Bybit – die Untergrenze ist aus (der Trend handelt weiter)",
     ),
     "momentum.warn": L("{warning} · {status}", "{warning} · {status}"),
     "momentum.vol": L("volatility {vol} %", "Schwankung {vol} %"),
@@ -352,6 +360,7 @@ CATALOG: dict[str, L] = {
     "momentum.funding": L("funding {rate} p.a.", "Funding {rate} p. a."),
     "momentum.funding_floor": L("funding {rate} p.a. below {limit} – at least {floor} %",
                                 "Funding {rate} p. a. unter {limit} – mindestens {floor} %"),
+    "momentum.via": L("{text} ({source})", "{text} ({source})"),
     "momentum.funding_missing": L("funding rate not available – no floor", "Funding-Rate nicht verfügbar – keine Untergrenze"),
     "momentum.inflow": L("exchange inflow {flow}", "Börsenzufluss {flow}"),
     "momentum.inflow_brake": L("exchange inflow {flow} – halved", "Börsenzufluss {flow} – halbiert"),
