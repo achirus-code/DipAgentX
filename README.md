@@ -292,6 +292,8 @@ All routes except `/api/health` require `Authorization: Bearer <API_TOKEN>`; tex
 | `GET /api/exchange` · `POST /api/exchange/keypair` · `PUT/DELETE /api/exchange/credentials` · `GET /api/exchange/public-ip` | Revolut X setup |
 | `GET /api/backup` · `POST /api/restore` | backup as `.tgz` (database snapshot + Revolut X key), restore from it |
 
+Every route with its bodies and fields: [`docs/api.md`](docs/api.md) (German).
+
 ## License
 
 [MIT](LICENSE) © Tillmann David
