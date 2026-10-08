@@ -188,7 +188,7 @@ struct BotDetailView: View {
                 LabeledContent("Only held (HODL)") {
                     Text(verbatim: "\(Fmt.money(h.hodlValue, bot.quoteCurrency)) (\(Fmt.pct(h.hodlPct)))").monospacedDigit()
                 }
-                LabeledContent("Difference to the bot") {
+                LabeledContent("Bot performance") {
                     VStack(alignment: .trailing, spacing: 1) {
                         PnLText(value: h.advantage, currency: bot.quoteCurrency, font: .body.weight(.semibold))
                         Text(verbatim: Fmt.pct(h.advantagePct)).font(.caption.weight(.medium)).monospacedDigit()
