@@ -98,7 +98,7 @@ struct BotEditorView: View {
                     let unavailable = s.key == "ai" && store.status?.aiConfigured == false
                     Button { select(s); choosingStrategy = false } label: {
                         HStack(alignment: .top, spacing: 12) {
-                            IconTile(symbol: s.icon, colors: strategyColors(s.key), size: 36)
+                            StrategyIcon(strategy: s.key, symbol: s.icon, size: 36)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(s.name).font(.system(size: 13, weight: .semibold))
                                 Text(s.description)
@@ -228,7 +228,8 @@ struct BotEditorView: View {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        IconTile(symbol: strategy?.icon ?? "cpu", colors: strategyColors(strategyKey), size: 30)
+                        StrategyIcon(strategy: strategyKey, symbol: strategy?.icon ?? "cpu", coin: symbol.components(separatedBy: "-").first,
+                                     size: 30)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(strategy?.name ?? strategyKey).font(.system(size: 12.5, weight: .semibold))
                             if let strategy {

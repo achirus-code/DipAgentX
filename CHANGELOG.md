@@ -22,6 +22,9 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ### Added
 
+- **Apps: a new icon for the momentum trend follower** – a green tile with a rising arrow over three steps, and for
+  the ten most important coins (BTC, ETH, XRP, BNB, SOL, DOGE, ADA, TRX, LINK, LTC) a small coin badge in the corner,
+  in the bot list, the bot details and the editor.
 - **Funding rate from Bybit when Binance has none:** without a fresh rate from Binance the momentum follower uses the
   same contracts on Bybit, and the status says "(Bybit)". Only when both fail is the floor off (⚠ warning as before).
 

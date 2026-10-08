@@ -78,7 +78,7 @@ struct BotDetailView: View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 48)
+                    StrategyIcon(strategy: bot.strategy, symbol: bot.strategyIcon, coin: bot.baseCurrency, size: 48)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Text(bot.symbol).font(.title3.bold())

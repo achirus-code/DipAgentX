@@ -129,7 +129,7 @@ struct BotRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                IconTile(symbol: bot.strategyIcon, colors: strategyColors(bot.strategy), size: 40)
+                StrategyIcon(strategy: bot.strategy, symbol: bot.strategyIcon, coin: bot.baseCurrency, size: 40)
                     .grayscale(bot.enabled ? 0 : 1)
                     .opacity(bot.enabled ? 1 : 0.55)
                 VStack(alignment: .leading, spacing: 3) {
