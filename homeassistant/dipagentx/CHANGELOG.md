@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.1] – 2026-10-08
+
+### Changed
+
+- Bot details: the indicators open with an **Indicators** button (popover on the Mac, sheet on the iPhone) instead of
+  taking up a section of their own.
+
 ## [1.32.0] – 2026-10-08
 
 ### Added
