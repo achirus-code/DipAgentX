@@ -468,3 +468,7 @@
 "Show what holding would have made since this bot's start" = "Zeigen, was Halten seit dem Start dieses Bots gebracht hätte";
 "HODL" = "HODL";
 "%@ put in since %@ – every change of the amount bought at the price of then and simply held, without fees." = "%@ eingesetzt seit %@ – jede Änderung des Betrags zum damaligen Kurs gekauft und einfach gehalten, ohne Gebühren.";
+"%@ days" = "%@ Tage";
+"Up above %@, down below %@ – in between a lookback stays as it was." = "Aufwärts über %@, abwärts unter %@ – dazwischen bleibt ein Zeitfenster, wie es war.";
+"Up" = "Aufwärts";
+"Down" = "Abwärts";

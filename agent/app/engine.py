@@ -1247,6 +1247,9 @@ class Engine:
             "signals": [{"text": render(x["text"], lang), "tone": x["tone"]}
                         for x in (bot["state"].get("momentum") or {}).get("signals") or []]
             if bot["enabled"] and bot["strategy"] == "momentum" else None,
+            "lookbacks": {**(bot["state"].get("momentum") or {}).get("thresholds", {}),
+                          "items": (bot["state"].get("momentum") or {}).get("lookbacks") or []}
+            if bot["enabled"] and (bot["state"].get("momentum") or {}).get("lookbacks") else None,
             "decision": render(d, lang)
             if bot["enabled"] and (d := (bot["state"].get("momentum") or {}).get("decision")) else None,
             # momentum: the bot's capital now against buying and holding with it since the start

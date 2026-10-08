@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.2] – 2026-10-08
+
+### Added
+
+- Indicators: the trend shows every lookback (14 to 60 days) in detail – the price change over it and whether it
+  counts as up or down, with the thresholds.
+
 ## [1.32.1] – 2026-10-08
 
 ### Changed

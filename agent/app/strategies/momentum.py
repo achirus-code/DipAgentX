@@ -253,6 +253,14 @@ class MomentumStrategy(Strategy):
             have = (last - h.starts[0]) // DAY_MS if h.starts else 0
             return None, m("momentum.no_history", have=have, need=need // DAY_MS)
         update_lookbacks(h, st, p, last)
+        # every lookback in detail for the apps: the change over it and whether it counts as up
+        close = h.at(last)
+        st["lookbacks"] = [
+            {"days": n, "up": bool(st["on"][str(n)]),
+             "change": float((close / ref - 1) * 100) if close and (ref := h.at(last - n * DAY_MS)) else None}
+            for n in LOOKBACKS
+        ]
+        st["thresholds"] = {"entry": p["entry"], "exit": p["exit"]}
         up = sum(st["on"].values())
         share = up / len(LOOKBACKS)
         parts = [m("momentum.trend", up=up, n=len(LOOKBACKS))]
