@@ -296,6 +296,12 @@ public final class AppStore {
         return try? await client.get("/trades", query: ["limit": String(limit)])
     }
 
+    /// Momentum: the result of holding instead since the bot's start – the comparison line of the profit chart.
+    public func hodlHistory(botId: Int) async -> [HodlPoint] {
+        guard let client else { return [] }
+        return (try? await client.get("/bots/\(botId)/hodl")) ?? []
+    }
+
     public func strategy(_ key: String) -> Strategy? { strategies.first { $0.key == key } }
 
     // MARK: - Bot actions

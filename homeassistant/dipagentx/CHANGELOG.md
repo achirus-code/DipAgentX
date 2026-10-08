@@ -4,6 +4,20 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.0] – 2026-10-08
+
+### Added
+
+- Bot details (momentum): **Indicators** – each indicator on its own line in green, orange or red by what it means
+  for the decision – and the **decision** below in one sentence (target, what the bot holds, what it does).
+- Profit history: a **HODL** switch per momentum bot shows what holding would have made since the bot's start, as a
+  dashed line in a paler shade of the bot's colour (new endpoint `GET /api/bots/{id}/hodl`).
+
+### Changed
+
+- The comparison with holding no longer starts afresh when the amount changes: the change counts as money put in
+  (or taken out), which holding "buys" at the price of then. A paper reset or a switch of the mode still restarts it.
+
 ## [1.31.1] – 2026-10-08
 
 ### Changed

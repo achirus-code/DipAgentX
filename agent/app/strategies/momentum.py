@@ -15,7 +15,7 @@ from bisect import bisect_right
 from decimal import Decimal
 
 from .. import cryptodata
-from ..i18n import L, dur, m, num, pct
+from ..i18n import L, dur, m, money, num, pct
 from .base import DAY_MS, HOUR_MS, Buy, Context, Decision, Param, Sell, Strategy, open_positions
 
 LOOKBACKS = (14, 21, 30, 40, 50, 60)  # days
@@ -114,22 +114,52 @@ def update_lookbacks(h: History, st: dict, p: dict, last: int) -> None:
     st["at"] = last
 
 
+def hodl_deposits(st: dict) -> list[dict]:
+    """The money put into the comparison with holding: the start and every change of the amount, each "bought" at
+    the price of then. Older states kept a single start (capital, price, since)."""
+    start = st.get("hodl") or {}
+    if "deposits" in start:
+        return start["deposits"]
+    if not start:
+        return []
+    return [{"at": int(start["since"]), "capital": start["capital"], "price": start["price"]}]
+
+
 def hodl_comparison(state: dict, params: dict, price: Decimal) -> dict | None:
-    """What the bot's capital is worth now against having bought the coin with it at the start and simply held
-    (no fees) – the start is set with the amount and again after a reset or a switch of the mode."""
+    """What the bot's capital is worth now against having bought the coin with the same money (the start and every
+    later change of the amount) and simply held, no fees. Starts afresh after a reset or a switch of the mode."""
     st = state.get("momentum") or {}
-    start = st.get("hodl")
-    if not start or price <= 0:
+    deposits = hodl_deposits(st)
+    if not deposits or price <= 0:
         return None
     positions = open_positions(state)
     realized = Decimal(str(state.get("realized") or 0))
     capital = Decimal(str(params["amount"])) + realized - Decimal(st.get("realized_from") or "0")
     value = capital - sum((x.cost for x in positions), Decimal(0)) + sum((x.qty * price for x in positions), Decimal(0))
-    start_capital, start_price = Decimal(start["capital"]), Decimal(start["price"])
+    put_in = sum((Decimal(d["capital"]) for d in deposits), Decimal(0))
+    coins = sum((Decimal(d["capital"]) / Decimal(d["price"]) for d in deposits), Decimal(0))
     return {
-        "since": int(start["since"]), "start_price": float(start_price), "start_capital": float(start_capital),
-        "value": float(value), "hodl_value": float(start_capital * price / start_price),
+        "since": int(deposits[0]["at"]), "start_price": float(Decimal(deposits[0]["price"])),
+        "start_capital": float(put_in), "deposits": len(deposits),
+        "value": float(value), "hodl_value": float(coins * price),
     }
+
+
+def hodl_history(state: dict, exchange, symbol: str, price: Decimal, now: int) -> list[dict]:
+    """The result of holding instead (value minus the money put in) at every 4-hour close since the start – from the
+    closes the bot loads anyway – and now."""
+    deposits = hodl_deposits(state.get("momentum") or {})
+    if not deposits:
+        return []
+    closes = (_closes.get(exchange) or {}).get(symbol) or {}
+    points = []
+    for t in [t for t in sorted(closes) if t + STEP_MS >= int(deposits[0]["at"])] + [now]:
+        close = price if t == now else closes[t]
+        at = t if t == now else t + STEP_MS  # a close belongs to the end of its candle
+        own = [d for d in deposits if int(d["at"]) <= at] or deposits[:1]
+        coins = sum((Decimal(d["capital"]) / Decimal(d["price"]) for d in own), Decimal(0))
+        points.append({"t": at, "value": float(coins * close - sum((Decimal(d["capital"]) for d in own), Decimal(0)))})
+    return points
 
 
 class MomentumStrategy(Strategy):
@@ -289,15 +319,21 @@ class MomentumStrategy(Strategy):
         # the capital: the amount plus what the bot's sales gained or lost since the amount was set
         realized = Decimal(str(ctx.state.get("realized") or 0))
         if st.get("amount") != p["amount"]:
+            if st.get("hodl") and st.get("amount") is not None:
+                # a new amount is money put in (or taken out) – holding "buys" the same at the price of now
+                before = Decimal(str(st["amount"])) + realized - Decimal(st["realized_from"])
+                deposits = hodl_deposits(st)
+                deposits.append({"at": ctx.now, "capital": str(Decimal(str(p["amount"])) - before),
+                                 "price": str(ctx.market.ask)})
+                st["hodl"] = {"deposits": deposits}
             st["amount"], st["realized_from"] = p["amount"], str(realized)
-            st.pop("hodl", None)  # a new amount starts the comparison afresh
         capital = Decimal(str(p["amount"])) + realized - Decimal(st["realized_from"])
         if "hodl" not in st:
             # the comparison starts with the capital: at the first buy of the open trades (a bot older than the
             # comparison), else now
             first = min(positions, key=lambda x: x.opened_at, default=None)
-            st["hodl"] = {"capital": str(capital), "price": str(first.entry_price if first else ctx.market.ask),
-                          "since": first.opened_at if first else ctx.now}
+            st["hodl"] = {"deposits": [{"at": first.opened_at if first else ctx.now, "capital": str(capital),
+                                        "price": str(first.entry_price if first else ctx.market.ask)}]}
         cash = capital - sum((x.cost for x in positions), Decimal(0))
         exposure = sum((x.qty * bid for x in positions), Decimal(0))
         equity = cash + exposure
@@ -305,6 +341,17 @@ class MomentumStrategy(Strategy):
         invested = float(exposure / equity * 100) if equity > 0 else 0.0
         ctx.targets(note=m("momentum.target", target=num(level * 10, 0)))
         status = m("momentum.status", invested=num(invested, 0), target=num(level * 10, 0), detail=detail)
+        # the decision in one sentence for the bot details
+        facts = dict(target=num(level * 10, 0), amount=money(target, q), invested=num(invested, 0), have=money(exposure, q))
+        if level == st.get("level"):
+            key = "momentum.decide_hold"
+        elif target - exposure >= equity * MIN_BUY:
+            key = "momentum.decide_buy"
+        elif exposure - target >= equity * MIN_BUY and positions:
+            key = "momentum.decide_sell"
+        else:
+            key = "momentum.decide_hold"
+        st["decision"] = m(key, **facts)
         ctx.state.pop("warning", None)
         if (since := st.get("funding_missing_since")) is not None:
             # without the funding rate the floor can't protect – say so first (and as the card's hint), not hidden

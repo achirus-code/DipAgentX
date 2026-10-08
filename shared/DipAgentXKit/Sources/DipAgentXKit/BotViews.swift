@@ -168,7 +168,7 @@ public struct StatusLine: View {
         for (index, signal) in signals.enumerated() {
             if index > 0 { result += AttributedString(" · ") }
             var part = AttributedString(signal.text)
-            part.foregroundColor = signal.tone == "good" ? .green : signal.tone == "bad" ? .red : .orange
+            part.foregroundColor = signal.color
             result += part
         }
         return result
@@ -218,6 +218,43 @@ public struct PositionStrip: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.accentColor.opacity(0.08)))
+    }
+}
+
+public extension BotSignal {
+    /// Green lets the bot invest, orange holds it partly back, red keeps it out.
+    var color: Color { tone == "good" ? .green : tone == "bad" ? .red : .orange }
+}
+
+/// The strategy's indicators one per line, coloured by what they mean for the decision – and the decision below.
+public struct IndicatorsList: View {
+    let signals: [BotSignal]
+    let decision: String?
+
+    public init(signals: [BotSignal], decision: String?) {
+        self.signals = signals
+        self.decision = decision
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(signals.enumerated()), id: \.offset) { _, signal in
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Circle().fill(signal.color).frame(width: 7, height: 7)
+                    Text(verbatim: signal.text)
+                        .font(.ui(12, weight: .medium))
+                        .foregroundStyle(signal.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let decision {
+                Divider().padding(.vertical, 2)
+                Text("Decision").font(.ui(10, weight: .semibold)).foregroundStyle(.secondary)
+                Text(verbatim: decision)
+                    .font(.ui(12, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

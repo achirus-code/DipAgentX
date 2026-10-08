@@ -331,6 +331,12 @@ struct BotDetailView: View {
                         if let error {
                             Text(error).font(.system(size: 11)).foregroundStyle(.red)
                         }
+                        if let signals = bot.signals, !signals.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                SectionLabel("Indicators")
+                                Card { IndicatorsList(signals: signals, decision: bot.decision) }
+                            }
+                        }
                         if bot.tradesMode, !bot.openTrades.isEmpty {
                             tradesSection(bot)
                         } else if let position = bot.position {
@@ -510,7 +516,9 @@ struct BotDetailView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .help("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees.")
+                        .help((h.deposits ?? 1) > 1
+                          ? Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) put in since \(h.date.formatted(date: .abbreviated, time: .shortened)) – every change of the amount bought at the price of then and simply held, without fees.")
+                          : Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees."))
                     }
                 }
             }

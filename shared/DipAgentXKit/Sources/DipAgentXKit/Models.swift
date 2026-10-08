@@ -217,12 +217,14 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let fees: Double?
     /// Momentum: its indicators one by one with what each means for the decision – agent 1.31.1+.
     public let signals: [BotSignal]?
+    /// Momentum: the decision in one sentence (target, what it holds, what it does) – agent 1.31.2+.
+    public let decision: String?
     /// Momentum: the bot's capital now against buying and holding since its start – agent 1.31+.
     public let hodl: HodlComparison?
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals, decision
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
@@ -289,11 +291,13 @@ public struct HodlComparison: Codable, Equatable {
     public let since: Int64
     public let startPrice: Double
     public let startCapital: Double
+    /// How often money was put in: the start and every change of the amount (agent 1.31.2+).
+    public let deposits: Int?
     public let value: Double
     public let hodlValue: Double
 
     enum CodingKeys: String, CodingKey {
-        case since, value
+        case since, value, deposits
         case startPrice = "start_price"
         case startCapital = "start_capital"
         case hodlValue = "hodl_value"
@@ -304,6 +308,14 @@ public struct HodlComparison: Codable, Equatable {
     public var hodlPct: Double { startCapital > 0 ? (hodlValue / startCapital - 1) * 100 : 0 }
     /// The bot ahead of holding (positive) or behind it.
     public var advantage: Double { value - hodlValue }
+}
+
+/// The result of holding instead of the bot at one point in time (momentum, every 4 hours since the start).
+public struct HodlPoint: Codable, Equatable {
+    public let t: Int64
+    public let value: Double
+
+    public var date: Date { Date(ms: t) }
 }
 
 public struct Trade: Codable, Identifiable, Equatable {

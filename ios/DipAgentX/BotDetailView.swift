@@ -38,6 +38,9 @@ struct BotDetailView: View {
                 if let error {
                     Section { ErrorLabel(message: error) }
                 }
+                if let signals = bot.signals, !signals.isEmpty {
+                    Section("Indicators") { IndicatorsList(signals: signals, decision: bot.decision).padding(.vertical, 4) }
+                }
                 openTrades(bot)
                 if bot.sliced == true, !bot.openTrades.isEmpty {
                     // the trades the position is made of (momentum follower)
@@ -191,7 +194,11 @@ struct BotDetailView: View {
             } header: {
                 Text("Against holding")
             } footer: {
-                Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees.")
+                if (h.deposits ?? 1) > 1 {
+                    Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) put in since \(h.date.formatted(date: .abbreviated, time: .shortened)) – every change of the amount bought at the price of then and simply held, without fees.")
+                } else {
+                    Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees.")
+                }
             }
         }
     }

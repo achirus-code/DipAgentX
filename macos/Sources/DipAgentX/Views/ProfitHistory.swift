@@ -46,6 +46,9 @@ struct ProfitHistoryView: View {
     @State private var reveal = 0.0
     /// The trade whose details are shown next to the chart.
     @State private var detail: Trade?
+    /// Momentum bots whose "only held" line is shown – and the lines loaded for them.
+    @State private var hodlShown: Set<Int> = []
+    @State private var hodlLines: [Int: [HodlPoint]] = [:]
 
     private static let historyLimit = 1000
 
@@ -57,7 +60,20 @@ struct ProfitHistoryView: View {
 
     private var data: ProfitHistoryData {
         ProfitHistoryData(trades: trades, bots: store.bots, summary: store.summary, live: live, currency: currency,
-                          range: range, perBot: perBot, hidden: hidden)
+                          range: range, perBot: perBot, hidden: hidden,
+                          hodl: hodlLines.filter { hodlShown.contains($0.key) })
+    }
+
+    private func toggleHodl(_ botId: Int) {
+        if hodlShown.contains(botId) {
+            withAnimation(.smooth(duration: 0.4)) { _ = hodlShown.remove(botId) }
+            return
+        }
+        Task {
+            let line = await store.hodlHistory(botId: botId)
+            hodlLines[botId] = line
+            withAnimation(.smooth(duration: 0.4)) { _ = hodlShown.insert(botId) }
+        }
     }
 
     private var currencies: [String] { data.currencies }
@@ -263,6 +279,14 @@ struct ProfitHistoryView: View {
                         .foregroundStyle(curve.color)
                 }
             }
+            ForEach(data.hodlCurves) { curve in
+                ForEach(curve.points) { point in
+                    LineMark(x: .value("Date", point.date), y: .value("Result", point.value * reveal), series: .value("Bot", curve.id))
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                        .foregroundStyle(curve.color)
+                }
+            }
             let related = related
             ForEach(markers, id: \.point.id) { marker in
                 let emphasized = marker.point.trade.map { related.contains($0.id) } ?? false
@@ -369,6 +393,12 @@ struct ProfitHistoryView: View {
             }
             Text("The line shows the realized result, fees deducted – it moves with every sale.")
                 .foregroundStyle(.tertiary)
+            if !hodlShown.isEmpty {
+                HStack(spacing: 4) {
+                    Rectangle().fill(Color.secondary).frame(width: 14, height: 2).mask(HStack(spacing: 2) { ForEach(0..<3) { _ in Rectangle() } })
+                    Text("Dashed: only held (HODL) since the bot's start")
+                }
+            }
             Spacer()
             if trades.count >= Self.historyLimit {
                 Text("Latest \(String(Self.historyLimit)) trades").foregroundStyle(.tertiary)
@@ -398,6 +428,8 @@ struct ProfitHistoryView: View {
                         Text("Profit/loss").gridColumnAlignment(.trailing)
                         Text("Fees").gridColumnAlignment(.trailing)
                         Text("Last trade").gridColumnAlignment(.trailing)
+                        Text("HODL").gridColumnAlignment(.center)
+                            .help("Shows what holding would have made since the bot's start – a dashed line in a paler colour.")
                     }
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -433,6 +465,18 @@ struct ProfitHistoryView: View {
             PnLText(value: row.pnl, currency: currency, font: .system(size: 12, weight: .semibold))
             Text(verbatim: Fmt.money(row.fees, currency)).foregroundStyle(.secondary)
             Text(verbatim: row.last?.formatted(date: .abbreviated, time: .shortened) ?? "–").foregroundStyle(.secondary)
+            if data.canCompare(row.id) {
+                let on = hodlShown.contains(row.id)
+                Button { toggleHodl(row.id) } label: {
+                    Image(systemName: on ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 13))
+                        .foregroundStyle(on ? color(row.id).opacity(0.55) : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(on ? "Hide the HODL line of this bot" : "Show what holding would have made since this bot's start")
+            } else {
+                Text(verbatim: "–").foregroundStyle(.tertiary)
+            }
         }
         .font(.system(size: 12))
         .monospacedDigit()
