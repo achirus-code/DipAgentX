@@ -20,3 +20,6 @@ ios/Local.xcconfig
 ios/build/
 xcuserdata/
 shared/DipAgentXKit/.build/
+
+# private notes
+M6F-plus-Erklaerung.md
