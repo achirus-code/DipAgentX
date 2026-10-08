@@ -141,7 +141,7 @@ struct BotRow: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 4)
-                TotalPnLText(bot: bot, font: .body.weight(.semibold))
+                PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .body.weight(.semibold))
             }
             if bot.enabled {
                 GoalLines(bot: bot)
