@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.33.2] – 2026-10-08
+
+### Changed
+
+- The indicator dots in the status are smaller than the pulsing status dot.
+
 ## [1.33.1] – 2026-10-08
 
 ### Changed
