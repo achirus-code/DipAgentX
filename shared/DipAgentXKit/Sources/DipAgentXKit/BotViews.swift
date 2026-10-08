@@ -143,7 +143,7 @@ public struct StatusLine: View {
                     withAnimation(on ? .easeInOut(duration: 1).repeatForever() : .default) { pulse = on }
                 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(statusText)
+                Text(statusAttributed)
                     .font(.ui(10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -156,6 +156,22 @@ public struct StatusLine: View {
                 }
             }
         }
+    }
+
+    /// The status with the strategy's indicators coloured by what they mean for the decision: green lets the bot
+    /// invest, orange holds it partly back, red keeps it out.
+    private var statusAttributed: AttributedString {
+        let text = statusText
+        guard bot.enabled, let signals = bot.signals, let first = signals.first,
+              let range = text.range(of: first.text) else { return AttributedString(text) }
+        var result = AttributedString(String(text[..<range.lowerBound]))
+        for (index, signal) in signals.enumerated() {
+            if index > 0 { result += AttributedString(" · ") }
+            var part = AttributedString(signal.text)
+            part.foregroundColor = signal.tone == "good" ? .green : signal.tone == "bad" ? .red : .orange
+            result += part
+        }
+        return result
     }
 
     private var statusText: String {
@@ -183,9 +199,9 @@ public struct PositionStrip: View {
     public var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                (position.paper == false ? Text("Open live position") : Text("Open position"))
+                Text("Open position")
                     .font(.ui(9.5, weight: .semibold))
-                    .foregroundStyle(position.paper == false ? Color.red : .secondary)
+                    .foregroundStyle(.secondary)
                 // how big the position is: its current value and what went in
                 Text("Value \(Fmt.money(position.value, bot.quoteCurrency)) · invested \(Fmt.money(position.cost, bot.quoteCurrency))")
                     .font(.ui(10.5, weight: .medium)).monospacedDigit()
@@ -213,13 +229,11 @@ public struct TradesStrip: View {
 
     public var body: some View {
         let trades = bot.openTrades
-        let live = trades.contains { $0.paper == false }
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                (live ? Text("Open live trades \(String(trades.count))/\(String(bot.maxTrades ?? trades.count))")
-                      : Text("Open trades \(String(trades.count))/\(String(bot.maxTrades ?? trades.count))"))
+                Text("Open trades \(String(trades.count))/\(String(bot.maxTrades ?? trades.count))")
                     .font(.ui(9.5, weight: .semibold))
-                    .foregroundStyle(live ? Color.red : .secondary)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 PnLText(value: trades.reduce(0) { $0 + $1.unrealizedPnl }, currency: bot.quoteCurrency,
                         font: .ui(11, weight: .semibold))

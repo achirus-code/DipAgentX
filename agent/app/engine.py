@@ -14,7 +14,7 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime
-from decimal import ROUND_DOWN, ROUND_UP, Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 import httpx
@@ -57,12 +57,6 @@ def round_down(value: Decimal, step: Decimal) -> Decimal:
     return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
 
 
-def round_up(value: Decimal, step: Decimal) -> Decimal:
-    if step <= 0:
-        return value
-    return (value / step).to_integral_value(rounding=ROUND_UP) * step
-
-
 def split_symbol(symbol: str) -> tuple[str, str]:
     base, _, quote = symbol.partition("-")
     return base, quote
@@ -78,6 +72,12 @@ def find_position(state: dict[str, Any], position_id: str | None) -> Position | 
     if position_id is None:
         return positions[0] if positions else None
     return next((p for p in positions if p.id == position_id), None)
+
+
+def limit_offset(pair: PairInfo) -> Decimal:
+    """How far below the best bid a limit buy goes out: a cent, at least one price step – so post-only isn't refused
+    when the price ticks while the order is on its way."""
+    return max(pair.quote_step, Decimal("0.01"))
 
 
 def definitely_not_placed(exc: Exception) -> bool:
@@ -395,7 +395,7 @@ class Engine:
             if isinstance(decision.action, Buy):
                 return await self._buy(bot, state, view, decision.action.quote_amount, decision.action.reason, maker)
             if isinstance(decision.action, Sell) and position:
-                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
+                sold = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
                 return sold[1]
             state.pop("position_targets", None)
             if not self.blocked_buy(bot, state):
@@ -413,7 +413,7 @@ class Engine:
             position_targets[position.id] = state.pop("targets", None)
             statuses[position.id] = decision.status
             if isinstance(decision.action, Sell):
-                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote, maker)
+                sold, status = await self._sell_unless_loss(bot, state, view, position, decision.action, quote)
                 if sold:
                     return status
                 statuses[position.id] = status
@@ -511,14 +511,14 @@ class Engine:
         return m("engine.limit_waiting", price=money(Decimal(limit["price"]), quote), until=until)
 
     async def _sell_unless_loss(self, bot: dict, state: dict, view: MarketView, position: Position, sell: Sell,
-                                quote: str, maker: int | None = None) -> tuple[bool, Message]:
+                                quote: str) -> tuple[bool, Message]:
         """Sell one trade – unless it is a target rule that would realize a loss. Returns (sold, status)."""
         # Safety net: a target rule never sells at a loss. Fees, cent rounding and the sell fee are included –
         # strategies compare the gross profit, which a 2 € order can lose to a fee rounded up to 0.01.
         net = position.net_proceeds(view.bid, float(self.paper_fee("sell")) if position.paper else float(self.settings.taker_fee), quote)
         if not sell.stop and net < position.cost:
             return False, m("engine.hold_no_loss", net=money(net, quote), cost=money(position.cost, quote))
-        return True, await self._sell(bot, state, view, sell.reason, position, maker)
+        return True, await self._sell(bot, state, view, sell.reason, position)
 
     def max_trades(self, bot: dict) -> int:
         """How many trades the bot may hold at once (1 for strategies without the option)."""
@@ -760,7 +760,8 @@ class Engine:
                               needed=money(quote_size, pair.quote))
             limit_price = base_size = None
             if maker:
-                limit_price = round_down(view.bid, pair.quote_step)
+                # a cent below the best bid: still a maker order when the price ticks down before it arrives
+                limit_price = round_down(view.bid, pair.quote_step) - limit_offset(pair)
                 base_size = round_down(quote_size / limit_price, pair.base_step) if limit_price > 0 else Decimal(0)
                 if base_size < pair.min_order_size or base_size <= 0:
                     limit_price = base_size = None  # too small for a limit order: market
@@ -771,9 +772,9 @@ class Engine:
             return await self._track_limit(bot, state, pair, pending)
         return await self._track_order(bot, state, pair, pending)
 
-    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position,
-                    maker: int | None = None) -> Message:
-        """Sell one trade – live with ``maker`` (minutes) first as a limit order at the best ask."""
+    async def _sell(self, bot: dict, state: dict, view: MarketView, reason: Message, position: Position) -> Message:
+        """Sell one trade – live always at market: Revolut X charges a sale its fee as a limit order too, so waiting
+        for a better price only risks a worse one."""
         pair = await self.exchange.pair(bot["symbol"])
         amount = position.qty
 
@@ -805,10 +806,6 @@ class Engine:
         if available + pair.min_order_size < position.qty:
             self.db.add_event(bot["id"], "error", m("engine.sell_less_available", booked=qty(position.qty),
                                                     available=qty(available), base=pair.base))
-        if maker and not manual:
-            pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id,
-                                               limit_price=round_up(view.ask, pair.quote_step), wait_minutes=maker)
-            return await self._track_limit(bot, state, pair, pending)
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
         return await self._track_order(bot, state, pair, pending)
 
@@ -1239,6 +1236,10 @@ class Engine:
             "losses": int(s.get("losses") or 0),
             "fees": float(s.get("fees") or 0),
             "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+            # momentum: its indicators one by one, each with what it means for the decision (good / warn / bad)
+            "signals": [{"text": render(x["text"], lang), "tone": x["tone"]}
+                        for x in (bot["state"].get("momentum") or {}).get("signals") or []]
+            if bot["enabled"] and bot["strategy"] == "momentum" else None,
             # momentum: the bot's capital now against buying and holding with it since the start
             "hodl": hodl_comparison(bot["state"], bot["params"], Decimal(str(snap["bid"])))
             if snap and bot["strategy"] == "momentum" else None,

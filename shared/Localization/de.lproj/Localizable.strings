@@ -77,7 +77,6 @@
 "Start bot" = "Bot starten";
 "Stopped" = "Gestoppt";
 "Waiting for the first check …" = "Wartet auf erste Prüfung …";
-"Open live position" = "Offene Live-Position";
 "Open position" = "Offene Position";
 "%@ %@ · entry %@" = "%@ %@ · Einstieg %@";
 "Value %@ · invested %@" = "Wert %@ · investiert %@";
@@ -315,7 +314,6 @@
 
 /* Several trades per bot */
 "%@ to the next trade" = "%@ bis zum nächsten Trade";
-"Open live trades %@/%@" = "Offene Live-Trades %@/%@";
 "Open trades %@/%@" = "Offene Trades %@/%@";
 "Value %@" = "Wert %@";
 "Target %@" = "Ziel %@";

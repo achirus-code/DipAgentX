@@ -359,7 +359,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert ex.kinds[0][:2] == ("limit", "buy") and ex.kinds[0][2] == ex.price - 1  # the best bid
+    assert ex.kinds[0][:2] == ("limit", "buy") and ex.kinds[0][2] == ex.price - 1 - Decimal("0.01")  # a cent below the best bid
     assert bot["state"]["pending_order"]["limit"] and not db.list_trades(bot_id)
     assert "Limit order at" in render(bot["status"], "en") and "no fee" in render(bot["status"], "en")
     await engine.tick()  # still waiting: nothing is booked, nothing new placed
@@ -368,7 +368,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     clock[0] += 60_000
     await engine.tick()  # booked – and the next slice goes out in the same check
     trades = db.list_trades(bot_id)
-    assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1
+    assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1 - Decimal("0.01")
     assert trades[0]["order_type"] == "limit"
     assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
 
@@ -407,21 +407,16 @@ async def test_a_limit_order_never_filled_is_no_error_and_goes_out_at_market(tmp
     assert ex.kinds[-1][0] == "limit"
 
 
-async def test_sells_with_a_limit_order_at_the_ask(tmp_path: Path, monkeypatch):
+async def test_sells_right_away_at_market(tmp_path: Path, monkeypatch):
     from app.strategies import Position
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     bot = db.get_bot(bot_id)
     state = bot["state"]
     state["positions"] = [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]
     view = await engine.market_view("ETH-EUR")
-    status = await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0], maker=10)
-    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1, Decimal("0.05"))  # the best ask
-    assert "Limit order at" in render(status, "en") and open_positions(state)
-    ex.fill()
-    await engine._reconcile(bot, state)
-    assert not open_positions(state) and not state.get("pending_order")
-    sell = db.list_trades(bot_id)[0]
-    assert sell["side"] == "sell" and Decimal(sell["fee"]) == 0
+    await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0])
+    assert ex.kinds[-1] == ("market", "sell") and not open_positions(state)
+    assert db.list_trades(bot_id)[0]["order_type"] == "market"
 
 
 async def test_market_orders_when_switched_off(tmp_path: Path, monkeypatch):
@@ -454,3 +449,11 @@ async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Pa
     clock[0] += 60_000
     await engine.tick()
     assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]["start_capital"] == 2000
+
+
+async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_orders=False)
+    await engine.tick()
+    signals = engine.describe_bot(db.get_bot(bot_id), db.trade_stats(), "en")["signals"]
+    assert signals[0]["text"].startswith("trend:") and signals[0]["tone"] == "good"
+    assert all(s["tone"] in {"good", "warn", "bad"} for s in signals) and len(signals) >= 2

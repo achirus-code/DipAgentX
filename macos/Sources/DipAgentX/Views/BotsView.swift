@@ -502,8 +502,8 @@ struct BotDetailView: View {
                     }
                     if let h = bot.hodl {
                         HStack(alignment: .top, spacing: 12) {
-                            detail("With the bot", "\(Fmt.money(h.value, bot.quoteCurrency)) (\(Fmt.pct(h.pct)))")
-                            detail("Only held (HODL)", "\(Fmt.money(h.hodlValue, bot.quoteCurrency)) (\(Fmt.pct(h.hodlPct)))")
+                            hodlValue("With the bot", h.value, pct: h.pct, quote: bot.quoteCurrency)
+                            hodlValue("Only held (HODL)", h.hodlValue, pct: h.hodlPct, quote: bot.quoteCurrency)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Difference").font(.system(size: 10)).foregroundStyle(.secondary)
                                 PnLText(value: h.advantage, currency: bot.quoteCurrency)
@@ -622,6 +622,19 @@ struct BotDetailView: View {
             do { try await store.resetPaper(bot); error = nil } catch { self.error = error.localizedDescription }
         }
         .padding(.top, 4)
+    }
+
+    /// A value of the comparison with holding: styled like the other details, the amount never cut off, its change below.
+    private func hodlValue(_ title: LocalizedStringKey, _ value: Double, pct: Double, quote: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            Text(verbatim: Fmt.money(value, quote))
+                .font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+                .lineLimit(1).fixedSize()
+            Text(verbatim: Fmt.pct(pct)).font(.system(size: 10, weight: .medium)).monospacedDigit()
+                .foregroundStyle(pct.pnlColor)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func deleteSection(_ bot: Bot) -> some View {
