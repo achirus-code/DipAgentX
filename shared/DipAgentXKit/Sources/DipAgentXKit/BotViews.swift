@@ -242,20 +242,19 @@ public struct TrafficLight: View {
     public init(tone: String) { self.tone = tone }
 
     public var body: some View {
-        VStack(spacing: 1.5) {
+        VStack(spacing: 1) {
             light(.red, on: tone == "bad")
             light(.orange, on: tone == "warn")
             light(.green, on: tone == "good")
         }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 2)
+        .padding(1.5)
         .background(Capsule().fill(Color.primary.opacity(0.12)))
         .accessibilityElement()
         .accessibilityLabel(tone == "good" ? Text("Green") : tone == "bad" ? Text("Red") : Text("Orange"))
     }
 
     private func light(_ color: Color, on: Bool) -> some View {
-        Circle().fill(on ? color : color.opacity(0.18)).frame(width: 4, height: 4)
+        Circle().fill(on ? color : color.opacity(0.18)).frame(width: 3, height: 3)
     }
 }
 
