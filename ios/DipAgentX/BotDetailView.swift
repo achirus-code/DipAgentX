@@ -161,7 +161,7 @@ struct BotDetailView: View {
                     if several {
                         Text("Trade \(String(index + 1)) of \(String(bot.maxTrades ?? trades.count))")
                     } else {
-                        Text(trade.paper == false ? "Open live position" : "Open position")
+                        Text("Open position")
                     }
                 }
             }
