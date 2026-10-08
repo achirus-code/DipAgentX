@@ -138,7 +138,7 @@ struct BotCard: View {
                     .opacity(bot.enabled ? 1 : 0.8)
                     Spacer()
                     if !bot.enabled {
-                        PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 12, weight: .semibold, design: .rounded))
+                        TotalPnLText(bot: bot, font: .system(size: 12, weight: .semibold, design: .rounded))
                             .opacity(0.8)
                     }
                     RunToggle(bot: bot)
@@ -149,7 +149,7 @@ struct BotCard: View {
                     HStack(alignment: .firstTextBaseline) {
                         GoalLines(bot: bot)
                         Spacer()
-                        PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
+                        TotalPnLText(bot: bot, font: .system(size: 13, weight: .bold, design: .rounded))
                     }
 
                     StatusLine(bot: bot)
@@ -489,7 +489,7 @@ struct BotDetailView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Total").font(.system(size: 10)).foregroundStyle(.secondary)
-                            PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .system(size: 13, weight: .bold, design: .rounded))
+                            TotalPnLText(bot: bot, font: .system(size: 13, weight: .bold, design: .rounded))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         VStack(alignment: .leading, spacing: 2) {

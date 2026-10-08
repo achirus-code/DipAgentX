@@ -172,7 +172,7 @@ struct BotDetailView: View {
     @ViewBuilder
     private func result(_ bot: Bot) -> some View {
         Section("Result") {
-            LabeledContent("Total") { PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .body.weight(.bold)) }
+            LabeledContent("Total") { TotalPnLText(bot: bot, font: .body.weight(.bold)) }
             LabeledContent("Realized") { PnLText(value: bot.realizedPnl, currency: bot.quoteCurrency, font: .body) }
             LabeledContent("Trades", value: String(bot.tradesCount))
             LabeledContent("Winners", value: bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
