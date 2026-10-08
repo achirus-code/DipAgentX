@@ -25,6 +25,7 @@ from .exchange import Candle, Exchange, OrderResult, PairInfo, Ticker
 from .i18n import Problem, as_message, dump, dur, m, message_key, money, qty, render
 from .revolutx import RevolutXError
 from .strategies import STRATEGIES, Buy, Context, MarketView, Position, Sell, has_position, open_positions, store_positions
+from .strategies.momentum import hodl_comparison
 
 log = logging.getLogger("dipagentx.engine")
 
@@ -1089,19 +1090,22 @@ class Engine:
         fee_base = r.fee if r.fee_currency == pair.base else Decimal(0)
         fee_quote = r.fee if r.fee_currency == pair.quote else Decimal(0)
         fee_in_quote = fee_quote + fee_base * r.avg_price
+        order_type = "limit" if pending.get("limit") else "market"
         if pending["side"] == "buy":
             return self._record_buy(
                 bot, state, pair, r.filled_qty - fee_base, r.filled_amount + fee_quote,
-                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"],
+                r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], order_type=order_type,
             )
         return self._record_sell(
             bot, state, pair, r.filled_qty + fee_base, r.filled_amount - fee_quote,
             r.avg_price, fee_in_quote, r.order_id, False, pending["reason"], position_id=pending.get("position_id"),
+            order_type=order_type,
         )
 
     # --- bookkeeping ----------------------------------------------------------
 
-    def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason, into=None) -> Message:
+    def _record_buy(self, bot, state, pair, bought, spent, price, fee, order_id, paper, reason, into=None,
+                    order_type=None) -> Message:
         """Book a buy: a new trade – or more of an existing one (``into``, or the savings plan's only position)."""
         positions = open_positions(state)
         state.pop("targets", None)  # the next check computes what the bot waits for now
@@ -1123,13 +1127,14 @@ class Engine:
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="buy",
             price=str(price), base_qty=str(bought), quote_amount=str(spent), fee=str(fee), pnl=None,
-            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, order_type=order_type,
         )
         status = m("engine.bought", qty=qty(bought), base=pair.base, amount=money(spent, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
         return status
 
-    def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason, position_id=None) -> Message:
+    def _record_sell(self, bot, state, pair, sold, proceeds, price, fee, order_id, paper, reason, position_id=None,
+                     order_type=None) -> Message:
         positions = open_positions(state)
         position = find_position(state, position_id)
         position = next((p for p in positions if position and p.id == position.id), None)
@@ -1154,7 +1159,7 @@ class Engine:
         self.db.add_trade(
             bot_id=bot["id"], bot_name=bot["name"], symbol=bot["symbol"], side="sell",
             price=str(price), base_qty=str(sold), quote_amount=str(proceeds), fee=str(fee), pnl=str(pnl),
-            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id,
+            order_id=order_id, paper=int(paper), reason=reason, position_id=position.id, order_type=order_type,
         )
         status = m("engine.sold", qty=qty(sold), base=pair.base, amount=money(proceeds, pair.quote), pnl=money(pnl, pair.quote))
         self.db.add_event(bot["id"], "trade", m("paren", text=status, detail=reason))
@@ -1232,7 +1237,11 @@ class Engine:
             "trades_count": int(s.get("trades") or 0),
             "wins": int(s.get("wins") or 0),
             "losses": int(s.get("losses") or 0),
+            "fees": float(s.get("fees") or 0),
             "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+            # momentum: the bot's capital now against buying and holding with it since the start
+            "hodl": hodl_comparison(bot["state"], bot["params"], Decimal(str(snap["bid"])))
+            if snap and bot["strategy"] == "momentum" else None,
         }
 
     def summary(self) -> dict[str, Any]:

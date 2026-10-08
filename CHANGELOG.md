@@ -4,6 +4,19 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.31.0] – 2026-10-08
+
+### Added
+
+- Every live trade records how its order went out: as a fee-free **limit order** or as a **market order**. The
+  history marks limit trades with "LIMIT · NO FEE" and shows the fee of any other trade; the trade details name the
+  order type.
+- **Fees per bot**: the bot details show the sum of all fees of the bot's trades (in its current mode).
+- **Against holding** (momentum follower): the bot details compare the bot's capital now with having bought the coin
+  with it at the start and simply held (no fees) – with the difference in euros. The comparison starts with the
+  amount and again after a new amount, a reset or a switch between paper and live; for a running bot it starts at
+  its first open trade.
+
 ## [1.30.1] – 2026-10-08
 
 ### Fixed

@@ -79,6 +79,8 @@ MIGRATIONS: list[str] = [
     "CREATE INDEX IF NOT EXISTS trades_created ON trades(created_at);",
     # 2: the trade (position) a buy opened or added to and a sale closed – links each sale to its buys
     "ALTER TABLE trades ADD COLUMN position_id TEXT;",
+    # 3: how a live order went out – 'limit' (waited as a maker order, no fee) or 'market'; NULL for paper/older
+    "ALTER TABLE trades ADD COLUMN order_type TEXT;",
 ]
 
 DEFAULT_LIMITS: dict[str, Any] = {
@@ -330,7 +332,8 @@ class Database:
                       COUNT(*) AS trades,
                       SUM(CASE WHEN pnl IS NOT NULL THEN CAST(pnl AS REAL) ELSE 0 END) AS realized,
                       SUM(CASE WHEN pnl IS NOT NULL AND CAST(pnl AS REAL) > 0 THEN 1 ELSE 0 END) AS wins,
-                      SUM(CASE WHEN pnl IS NOT NULL AND CAST(pnl AS REAL) <= 0 THEN 1 ELSE 0 END) AS losses
+                      SUM(CASE WHEN pnl IS NOT NULL AND CAST(pnl AS REAL) <= 0 THEN 1 ELSE 0 END) AS losses,
+                      SUM(CAST(fee AS REAL)) AS fees
                FROM trades GROUP BY bot_id, paper"""
         )
         return {(r["bot_id"], bool(r["paper"])): r for r in rows}

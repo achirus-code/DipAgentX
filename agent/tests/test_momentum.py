@@ -3,6 +3,8 @@ import math
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from app import cryptodata
 from app.exchange import Candle, OrderResult, Ticker
 from app.i18n import message_key, render
@@ -367,6 +369,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     await engine.tick()  # booked – and the next slice goes out in the same check
     trades = db.list_trades(bot_id)
     assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1
+    assert trades[0]["order_type"] == "limit"
     assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
 
 
@@ -382,6 +385,8 @@ async def test_a_partial_fill_is_booked_after_the_wait_and_the_rest_bought_at_ma
     trades = db.list_trades(bot_id)
     assert ex.cancelled and len(trades) == 2  # half of the limit order, then the rest at market
     assert ex.kinds[-1] == ("market", "buy")
+    assert [t["order_type"] for t in trades] == ["market", "limit"]  # newest first
+    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["fees"] == sum(float(t["fee"]) for t in trades)
     assert not [e for e in db.list_events(bot_id) if e["level"] == "error"]
     assert db.get_bot(bot_id)["state"]["taker_from"] == clock[0]
 
@@ -434,3 +439,18 @@ async def test_a_rejected_limit_order_is_retried_at_market(tmp_path: Path, monke
     clock[0] += 6 * 60_000  # after the error pause
     await engine.tick()
     assert ex.kinds == [("market", "buy")] and len(db.list_trades(bot_id)) == 1
+
+
+async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_orders=False)
+    await engine.tick()
+    hodl = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]
+    assert hodl["start_capital"] == 1000 and hodl["since"] == clock[0]
+    assert hodl["hodl_value"] == pytest.approx(1000 * float(engine.snapshots["ETH-EUR"]["bid"]) / hodl["start_price"])
+    assert 0 < hodl["value"] <= 1000.01
+
+    bot = db.get_bot(bot_id)  # a new amount starts the comparison afresh
+    db.update_bot(bot_id, params={**bot["params"], "amount": 2000})
+    clock[0] += 60_000
+    await engine.tick()
+    assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]["start_capital"] == 2000

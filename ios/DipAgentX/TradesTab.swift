@@ -98,6 +98,7 @@ struct TradeListRow: View {
                     (trade.isBuy ? Text("Buy \(trade.base)") : Text("Sell \(trade.base)"))
                         .font(.subheadline.weight(.semibold))
                     if trade.paper { Badge(text: "PAPER", color: .paper) }
+                    FeeBadge(trade: trade)
                 }
                 Text(verbatim: showBot ? "\(trade.botName) · \(Fmt.qty(trade.baseQty)) @ \(Fmt.price(trade.price, trade.quote))"
                                        : "\(Fmt.qty(trade.baseQty)) @ \(Fmt.price(trade.price, trade.quote))")

@@ -168,12 +168,31 @@ struct BotDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func result(_ bot: Bot) -> some View {
         Section("Result") {
             LabeledContent("Total") { PnLText(value: bot.totalPnl, currency: bot.quoteCurrency, font: .body.weight(.bold)) }
             LabeledContent("Realized") { PnLText(value: bot.realizedPnl, currency: bot.quoteCurrency, font: .body) }
             LabeledContent("Trades", value: String(bot.tradesCount))
             LabeledContent("Winners", value: bot.wins + bot.losses == 0 ? "–" : "\(bot.wins)/\(bot.wins + bot.losses)")
+            if let fees = bot.fees {
+                LabeledContent("Fees", value: Fmt.money(fees, bot.quoteCurrency))
+            }
+        }
+        if let h = bot.hodl {
+            Section {
+                LabeledContent("With the bot") {
+                    Text(verbatim: "\(Fmt.money(h.value, bot.quoteCurrency)) (\(Fmt.pct(h.pct)))").monospacedDigit()
+                }
+                LabeledContent("Only held (HODL)") {
+                    Text(verbatim: "\(Fmt.money(h.hodlValue, bot.quoteCurrency)) (\(Fmt.pct(h.hodlPct)))").monospacedDigit()
+                }
+                LabeledContent("Difference") { PnLText(value: h.advantage, currency: bot.quoteCurrency, font: .body.weight(.semibold)) }
+            } header: {
+                Text("Against holding")
+            } footer: {
+                Text("\(Fmt.money(h.startCapital, bot.quoteCurrency)) bought at \(Fmt.price(h.startPrice, bot.quoteCurrency)) on \(h.date.formatted(date: .abbreviated, time: .shortened)) and simply held, without fees.")
+            }
         }
     }
 
