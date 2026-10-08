@@ -149,7 +149,7 @@ public struct StatusLine: View {
                     if !split.head.isEmpty {
                         Text(verbatim: split.head).font(.ui(10.5)).foregroundStyle(.secondary)
                     }
-                    FlowLayout(spacing: 8, lineSpacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(split.signals.enumerated()), id: \.offset) { _, signal in
                             HStack(spacing: 4) {
                                 TrafficLight(tone: signal.tone)
@@ -255,54 +255,6 @@ public struct TrafficLight: View {
 
     private func light(_ color: Color, on: Bool) -> some View {
         Circle().fill(on ? color : color.opacity(0.18)).frame(width: 3, height: 3)
-    }
-}
-
-/// Lays its children out left to right and wraps to the next line when the width runs out.
-public struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-    var lineSpacing: CGFloat = 4
-
-    public init(spacing: CGFloat = 8, lineSpacing: CGFloat = 4) {
-        self.spacing = spacing
-        self.lineSpacing = lineSpacing
-    }
-
-    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = rows(width: proposal.width ?? .infinity, subviews: subviews)
-        let width = rows.map { $0.width }.max() ?? 0
-        let height = rows.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in rows(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX
-            for index in row.items {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + lineSpacing
-        }
-    }
-
-    private func rows(width: CGFloat, subviews: Subviews) -> [(items: [Int], width: CGFloat, height: CGFloat)] {
-        var rows: [(items: [Int], width: CGFloat, height: CGFloat)] = []
-        var current: (items: [Int], width: CGFloat, height: CGFloat) = ([], 0, 0)
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let needed = current.items.isEmpty ? size.width : current.width + spacing + size.width
-            if needed > width, !current.items.isEmpty {
-                rows.append(current)
-                current = ([index], size.width, size.height)
-            } else {
-                current = (current.items + [index], needed, max(current.height, size.height))
-            }
-        }
-        if !current.items.isEmpty { rows.append(current) }
-        return rows
     }
 }
 
