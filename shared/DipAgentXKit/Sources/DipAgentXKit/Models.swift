@@ -60,6 +60,8 @@ public struct ServerStatus: Codable {
     public let takerFee: Double?
     /// Whether the agent has an Anthropic API key for the "AI decides" strategy (nil: older agent).
     public let aiConfigured: Bool?
+    /// Simulated trades plus open paper trades on the agent (agent 1.33+) – the apps offer to remove them.
+    public let paperData: Int?
 
     enum CodingKeys: String, CodingKey {
         case version, exchange
@@ -71,6 +73,7 @@ public struct ServerStatus: Codable {
         case tickSeconds = "tick_seconds"
         case takerFee = "taker_fee"
         case aiConfigured = "ai_configured"
+        case paperData = "paper_data"
     }
 }
 

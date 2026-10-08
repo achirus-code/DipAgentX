@@ -1,6 +1,6 @@
 # DipAgentX – Client-API (App ↔ Agent)
 
-Kurzreferenz der HTTP-API, über die die Mac- und iPhone-App mit dem Agenten sprechen. Stand: Agent 1.32.
+Kurzreferenz der HTTP-API, über die die Mac- und iPhone-App mit dem Agenten sprechen. Stand: Agent 1.33.
 
 ## Grundlagen
 
@@ -82,6 +82,7 @@ Wichtige Felder eines Bots:
 | GET, PUT | `/limits` | `{"max_open_positions": 2, "max_total_invested": 6000, "one_position_per_symbol": true}` – 0 = unbegrenzt |
 | GET, PUT | `/paper-fees` | `{"buy": 0.0, "sell": 0.0009}` (Anteil, 0.0009 = 0,09 %) – bucht Papier-Trades neu |
 | PUT | `/live-trading` | `{"enabled": true, "confirm": "LIVE"}` – Ausschalten verkauft alle Live-Positionen |
+| DELETE | `/paper` | Alle Papier-Trades und offenen Papier-Trades aller Bots löschen – Live-Daten bleiben; `GET /status` meldet die Menge als `paper_data` |
 
 ## Revolut X verbinden
 

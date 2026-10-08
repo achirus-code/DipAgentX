@@ -345,6 +345,13 @@ public final class AppStore {
         return result.closedPositions
     }
 
+    /// Removes every paper trade, simulated transaction and open paper trade of all bots – live data stays.
+    public func removeAllPaper() async throws {
+        guard let client else { return }
+        try await client.delete("/paper")
+        await refresh()
+    }
+
     // MARK: - Revolut X setup
 
     public func generateKeypair() async throws {

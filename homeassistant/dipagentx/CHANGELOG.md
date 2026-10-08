@@ -4,6 +4,14 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.33.0] – 2026-10-08
+
+### Added
+
+- **Remove all paper data** (settings → trading mode, while live trading is on): deletes every paper trade,
+  simulated transaction and open paper trade of all bots; live trades and positions stay. The button only shows up
+  while there is paper data (`paper_data` in `GET /api/status`, new `DELETE /api/paper`).
+
 ## [1.32.6] – 2026-10-08
 
 ### Changed

@@ -473,3 +473,8 @@
 "Up" = "Aufwärts";
 "Down" = "Abwärts";
 "Of the capital of the bots that manage one (momentum)." = "Bezogen auf das Kapital der Bots, die eines verwalten (Momentum).";
+"Remove all paper data (%@)" = "Alle Papier-Daten entfernen (%@)";
+"Remove all paper data" = "Alle Papier-Daten entfernen";
+"Remove" = "Entfernen";
+"All paper data removed." = "Alle Papier-Daten entfernt.";
+"Delete all paper trades, simulated transactions and open paper trades? Live data stays." = "Alle Papier-Trades, simulierten Transaktionen und offenen Papier-Trades löschen? Live-Daten bleiben erhalten.";

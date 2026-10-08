@@ -64,6 +64,21 @@ struct LiveTradingSection: View {
                     case .disableWarning: disableWarning
                     }
 
+                    if live && step == .idle, let paper = store.status?.paperData, paper > 0 {
+                        ConfirmButton(
+                            title: "Remove all paper data (\(String(paper)))",
+                            confirmTitle: "Delete all paper trades, simulated transactions and open paper trades? Live data stays.",
+                            icon: "trash",
+                            tint: .red
+                        ) {
+                            do {
+                                try await store.removeAllPaper()
+                                info = String(localized: "All paper data removed.")
+                            } catch {
+                                self.error = error.localizedDescription
+                            }
+                        }
+                    }
                     if live && step == .idle {
                         note("When switching back to paper mode, all open live positions are sold immediately.", icon: "info.circle")
                     } else if !live && openLivePositions > 0 {
