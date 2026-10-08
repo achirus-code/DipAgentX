@@ -226,6 +226,9 @@ class MomentumStrategy(Strategy):
         up = sum(st["on"].values())
         share = up / len(LOOKBACKS)
         parts = [m("momentum.trend", up=up, n=len(LOOKBACKS))]
+        # each indicator with what it means for the decision: good = lets the bot invest, warn = holds it partly
+        # back (or works without data), bad = keeps it out – the apps colour it
+        tones = ["good" if share >= 2 / 3 else "warn" if share > 1 / 3 else "bad"]
         scale = 1.0
         vol = realized_vol(h, market.now)
         if vol is not None:
@@ -233,6 +236,7 @@ class MomentumStrategy(Strategy):
                 scale = min(1.0, p["vol_target"] / 100 / max(vol, 0.05))
             parts.append(m("momentum.vol_capped" if scale < 1 else "momentum.vol", vol=num(vol * 100, 0),
                            limit=num(p["vol_target"], 0)))
+            tones.append("warn" if scale < 1 else "good")
         weight = share * scale
         base = ctx.market.symbol.split("-")[0]
         if p["funding_floor"] <= 0:
@@ -243,24 +247,31 @@ class MomentumStrategy(Strategy):
                 # shown in front of the status and as the card's hint (see evaluate): without the rate the floor is off
                 st.setdefault("funding_missing_since", market.now)
                 parts.append(m("momentum.funding_missing"))
+                tones.append("warn")
             else:
                 st.pop("funding_missing_since", None)
                 if rate < p["funding_below"]:
                     floor = p["funding_floor"] / 100 * scale
                     parts.append(m("momentum.funding_floor", rate=pct(rate), limit=pct(p["funding_below"]),
                                    floor=num(round(floor * 100), 0)))
+                    tones.append("good")  # panic: the floor keeps the bot in
                     weight = max(weight, floor)
                 else:
                     parts.append(m("momentum.funding", rate=pct(rate)))
+                    tones.append("good")
         if p["inflow_brake"]:
             flow = await cryptodata.exchange_inflow(base, market.now)
             if flow is None:
                 parts.append(m("momentum.inflow_missing"))
+                tones.append("warn")
             elif flow > p["inflow_above"]:
                 parts.append(m("momentum.inflow_brake", flow=pct(flow)))
+                tones.append("bad")
                 weight /= 2
             else:
                 parts.append(m("momentum.inflow", flow=pct(flow)))
+                tones.append("good")
+        st["signals"] = [{"text": part, "tone": tone} for part, tone in zip(parts, tones)]
         level = round(min(1.0, max(0.0, weight)) * 10)
         detail = parts[0]
         for part in parts[1:]:

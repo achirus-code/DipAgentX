@@ -143,7 +143,7 @@ public struct StatusLine: View {
                     withAnimation(on ? .easeInOut(duration: 1).repeatForever() : .default) { pulse = on }
                 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(statusText)
+                Text(statusAttributed)
                     .font(.ui(10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -156,6 +156,22 @@ public struct StatusLine: View {
                 }
             }
         }
+    }
+
+    /// The status with the strategy's indicators coloured by what they mean for the decision: green lets the bot
+    /// invest, orange holds it partly back, red keeps it out.
+    private var statusAttributed: AttributedString {
+        let text = statusText
+        guard bot.enabled, let signals = bot.signals, let first = signals.first,
+              let range = text.range(of: first.text) else { return AttributedString(text) }
+        var result = AttributedString(String(text[..<range.lowerBound]))
+        for (index, signal) in signals.enumerated() {
+            if index > 0 { result += AttributedString(" · ") }
+            var part = AttributedString(signal.text)
+            part.foregroundColor = signal.tone == "good" ? .green : signal.tone == "bad" ? .red : .orange
+            result += part
+        }
+        return result
     }
 
     private var statusText: String {

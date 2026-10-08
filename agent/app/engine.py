@@ -1236,6 +1236,10 @@ class Engine:
             "losses": int(s.get("losses") or 0),
             "fees": float(s.get("fees") or 0),
             "market": {"price": snap["price"], "change_24h": snap["change_24h"]} if snap else None,
+            # momentum: its indicators one by one, each with what it means for the decision (good / warn / bad)
+            "signals": [{"text": render(x["text"], lang), "tone": x["tone"]}
+                        for x in (bot["state"].get("momentum") or {}).get("signals") or []]
+            if bot["enabled"] and bot["strategy"] == "momentum" else None,
             # momentum: the bot's capital now against buying and holding with it since the start
             "hodl": hodl_comparison(bot["state"], bot["params"], Decimal(str(snap["bid"])))
             if snap and bot["strategy"] == "momentum" else None,

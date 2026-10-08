@@ -449,3 +449,11 @@ async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Pa
     clock[0] += 60_000
     await engine.tick()
     assert engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]["start_capital"] == 2000
+
+
+async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path: Path, monkeypatch):
+    ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch, maker_orders=False)
+    await engine.tick()
+    signals = engine.describe_bot(db.get_bot(bot_id), db.trade_stats(), "en")["signals"]
+    assert signals[0]["text"].startswith("trend:") and signals[0]["tone"] == "good"
+    assert all(s["tone"] in {"good", "warn", "bad"} for s in signals) and len(signals) >= 2

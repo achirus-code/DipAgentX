@@ -215,12 +215,14 @@ public struct Bot: Codable, Identifiable, Equatable {
     public let losses: Int
     /// All fees of the bot's trades in its current mode – agent 1.31+.
     public let fees: Double?
+    /// Momentum: its indicators one by one with what each means for the decision – agent 1.31.1+.
+    public let signals: [BotSignal]?
     /// Momentum: the bot's capital now against buying and holding since its start – agent 1.31+.
     public let hodl: HodlComparison?
     public let market: MarketInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl
+        case id, name, strategy, symbol, params, enabled, paper, status, hint, targets, position, positions, wins, losses, market, fees, hodl, signals
         case sliced
         case maxTrades = "max_trades"
         case strategyName = "strategy_name"
@@ -274,6 +276,12 @@ public struct Bot: Codable, Identifiable, Equatable {
         }
         return BotGoal(kind: kind, target: target, percent: (target / price - 1) * 100, reached: reached)
     }
+}
+
+/// One indicator of a strategy and its effect: "good" lets the bot invest, "warn" holds it partly back, "bad" keeps it out.
+public struct BotSignal: Codable, Equatable {
+    public let text: String
+    public let tone: String
 }
 
 /// What the bot's capital is worth now and what it would be worth bought at the start and simply held (no fees).
