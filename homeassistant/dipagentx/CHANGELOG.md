@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.32.5] – 2026-10-08
+
+### Changed
+
+- Comparison with holding: "Difference to the bot", with the difference in percent of the money put in below.
+
 ## [1.32.4] – 2026-10-08
 
 ### Changed

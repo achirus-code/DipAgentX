@@ -30,7 +30,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: DipAgentX
-        CFBundleShortVersionString: "1.32.4"
+        CFBundleShortVersionString: "1.32.5"
         CFBundleVersion: "1"
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, de]
