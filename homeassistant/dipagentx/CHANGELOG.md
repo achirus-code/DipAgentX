@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.33.3] – 2026-10-08
+
+### Changed
+
+- Bot status: each indicator gets a small traffic light (red, orange, green – the light of its effect is on)
+  instead of a dot.
+
 ## [1.33.2] – 2026-10-08
 
 ### Changed
