@@ -158,8 +158,8 @@ public struct StatusLine: View {
         }
     }
 
-    /// The status with the strategy's indicators coloured by what they mean for the decision: green lets the bot
-    /// invest, orange holds it partly back, red keeps it out.
+    /// The status with a small coloured dot in front of each of the strategy's indicators – green lets the bot
+    /// invest, orange holds it partly back, red keeps it out; the text itself stays grey.
     private var statusAttributed: AttributedString {
         let text = statusText
         guard bot.enabled, let signals = bot.signals, let first = signals.first,
@@ -167,9 +167,9 @@ public struct StatusLine: View {
         var result = AttributedString(String(text[..<range.lowerBound]))
         for (index, signal) in signals.enumerated() {
             if index > 0 { result += AttributedString(" · ") }
-            var part = AttributedString(signal.text)
-            part.foregroundColor = signal.color
-            result += part
+            var dot = AttributedString("● ")
+            dot.foregroundColor = signal.color
+            result += dot + AttributedString(signal.text)
         }
         return result
     }
