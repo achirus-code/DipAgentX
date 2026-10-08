@@ -332,6 +332,8 @@ public struct HodlComparison: Codable, Equatable {
     public var hodlPct: Double { startCapital > 0 ? (hodlValue / startCapital - 1) * 100 : 0 }
     /// The bot ahead of holding (positive) or behind it.
     public var advantage: Double { value - hodlValue }
+    /// The advantage in percent of the money put in.
+    public var advantagePct: Double { startCapital > 0 ? advantage / startCapital * 100 : 0 }
 }
 
 /// The result of holding instead of the bot at one point in time (momentum, every 4 hours since the start).

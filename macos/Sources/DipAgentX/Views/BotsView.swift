@@ -506,8 +506,10 @@ struct BotDetailView: View {
                             hodlValue("With the bot", h.value, pct: h.pct, quote: bot.quoteCurrency)
                             hodlValue("Only held (HODL)", h.hodlValue, pct: h.hodlPct, quote: bot.quoteCurrency)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Difference").font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text("Difference to the bot").font(.system(size: 10)).foregroundStyle(.secondary)
                                 PnLText(value: h.advantage, currency: bot.quoteCurrency)
+                                Text(verbatim: Fmt.pct(h.advantagePct)).font(.system(size: 10, weight: .medium)).monospacedDigit()
+                                    .foregroundStyle(h.advantagePct.pnlColor)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
