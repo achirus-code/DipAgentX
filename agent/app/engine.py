@@ -80,6 +80,12 @@ def find_position(state: dict[str, Any], position_id: str | None) -> Position | 
     return next((p for p in positions if p.id == position_id), None)
 
 
+def limit_offset(pair: PairInfo) -> Decimal:
+    """How far from the best price a limit order goes out (a buy below the bid, a sell above the ask): a cent, at
+    least one price step – so post-only isn't refused when the price moves while the order is on its way."""
+    return max(pair.quote_step, Decimal("0.01"))
+
+
 def definitely_not_placed(exc: Exception) -> bool:
     """True only if the exchange clearly refused the order.
 
@@ -760,7 +766,8 @@ class Engine:
                               needed=money(quote_size, pair.quote))
             limit_price = base_size = None
             if maker:
-                limit_price = round_down(view.bid, pair.quote_step)
+                # a cent below the best bid: still a maker order when the price ticks down before it arrives
+                limit_price = round_down(view.bid, pair.quote_step) - limit_offset(pair)
                 base_size = round_down(quote_size / limit_price, pair.base_step) if limit_price > 0 else Decimal(0)
                 if base_size < pair.min_order_size or base_size <= 0:
                     limit_price = base_size = None  # too small for a limit order: market
@@ -807,7 +814,8 @@ class Engine:
                                                     available=qty(available), base=pair.base))
         if maker and not manual:
             pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id,
-                                               limit_price=round_up(view.ask, pair.quote_step), wait_minutes=maker)
+                                               limit_price=round_up(view.ask, pair.quote_step) + limit_offset(pair),
+                                               wait_minutes=maker)
             return await self._track_limit(bot, state, pair, pending)
         pending = await self._submit_order(bot, state, "sell", reason, base_size=amount, position_id=position.id)
         return await self._track_order(bot, state, pair, pending)

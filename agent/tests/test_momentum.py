@@ -359,7 +359,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     ex, db, engine, bot_id, clock = limit_engine(tmp_path, monkeypatch)
     await engine.tick()
     bot = db.get_bot(bot_id)
-    assert ex.kinds[0][:2] == ("limit", "buy") and ex.kinds[0][2] == ex.price - 1  # the best bid
+    assert ex.kinds[0][:2] == ("limit", "buy") and ex.kinds[0][2] == ex.price - 1 - Decimal("0.01")  # a cent below the best bid
     assert bot["state"]["pending_order"]["limit"] and not db.list_trades(bot_id)
     assert "Limit order at" in render(bot["status"], "en") and "no fee" in render(bot["status"], "en")
     await engine.tick()  # still waiting: nothing is booked, nothing new placed
@@ -368,7 +368,7 @@ async def test_buys_with_a_fee_free_limit_order_at_the_bid(tmp_path: Path, monke
     clock[0] += 60_000
     await engine.tick()  # booked – and the next slice goes out in the same check
     trades = db.list_trades(bot_id)
-    assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1
+    assert len(trades) == 1 and Decimal(trades[0]["fee"]) == 0 and Decimal(trades[0]["price"]) == ex.price - 1 - Decimal("0.01")
     assert trades[0]["order_type"] == "limit"
     assert len(ex.placed) == 2 and ex.kinds[-1][0] == "limit"
 
@@ -415,7 +415,7 @@ async def test_sells_with_a_limit_order_at_the_ask(tmp_path: Path, monkeypatch):
     state["positions"] = [Position(Decimal("0.05"), Decimal("100"), 0, Decimal(2000), paper=False, id="p1").to_state()]
     view = await engine.market_view("ETH-EUR")
     status = await engine._sell(bot, state, view, {"k": "x", "a": {}}, open_positions(state)[0], maker=10)
-    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1, Decimal("0.05"))  # the best ask
+    assert ex.kinds[-1] == ("limit", "sell", ex.price + 1 + Decimal("0.01"), Decimal("0.05"))  # a cent above the best ask
     assert "Limit order at" in render(status, "en") and open_positions(state)
     ex.fill()
     await engine._reconcile(bot, state)
