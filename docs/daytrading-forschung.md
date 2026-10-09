@@ -149,8 +149,8 @@ fünf besten Trades, bei BTC 63 %. 2025 war bei beiden Coins fast null.
 ### Was das heißt
 
 1. **Die Strategie hätte Geld verdient**, auch im Zeitraum, den ich beim Entwurf nicht angesehen habe – ETH ×3,3 statt
-   ×1,1 beim Halten, BTC ×1,8 bei einem Drittel weniger Rückgang als beim Halten (−27 % gegen −32 % im Prüfzeitraum,
-   über 2020–26 −48 % gegen −77 %).
+   ×1,1 beim Halten, BTC ×1,8 statt ×1,9 – bei etwa halb so großem Rückgang (Prüfzeitraum ETH −25 % gegen −69 %
+   beim Halten, BTC −27 % gegen −53 %).
 2. **Aber sie schlägt nicht die einfachste Alternative.** Ganztägig long, solange der Kurs über dem 50-Tage-Schnitt
    liegt, brachte in beiden Coins mehr. Der Großteil des Gewinns kommt also vom Trendfilter, nicht vom Daytrading.
    Und der Momentum-Trendfolger (`docs/momentum-trendfolger.md`) ist noch einmal deutlich besser.
