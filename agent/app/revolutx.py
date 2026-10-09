@@ -112,6 +112,9 @@ class RevolutXClient:
         params = {"interval": interval, "since": since, "until": until}
         return (await self.request("GET", f"/candles/{symbol}", params))["data"]
 
+    async def order_book(self, symbol: str, limit: int = 50) -> dict:
+        return await self.request("GET", f"/order-book/{symbol}", {"limit": limit})
+
     # --- Account / config ------------------------------------------------
 
     async def balances(self) -> list[dict]:

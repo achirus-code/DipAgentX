@@ -272,6 +272,19 @@ CATALOG: dict[str, L] = {
     "ai.sell": L("Claude: sell ({confidence})", "Claude: verkaufen ({confidence})"),
     "ai.waiting": L("Claude: wait ({confidence}) · next check in {left}", "Claude: warten ({confidence}) · nächste Prüfung in {left}"),
     "ai.holding": L("Claude: hold ({confidence}, {profit}) · next check in {left}", "Claude: halten ({confidence}, {profit}) · nächste Prüfung in {left}"),
+    "ai.with_budget": L("{status} · API {spent} of {budget} this month", "{status} · API {spent} von {budget} diesen Monat"),
+    "ai.budget_used_up": L("Monthly API budget used up ({spent} of {budget}) – Claude is asked again in {left}; take-profit and stop keep running",
+                           "Monatliches API-Budget aufgebraucht ({spent} von {budget}) – Claude wird in {left} wieder gefragt; Gewinnziel und Stop laufen weiter"),
+    "ai.stop_hit": L("Stop reached – selling", "Stop erreicht – Verkauf"),
+    "ai.stop_reason": L("Claude's stop at {price} reached ({profit})", "Claudes Stop bei {price} erreicht ({profit})"),
+    "ai.target_hit": L("Take-profit reached – selling", "Gewinnziel erreicht – Verkauf"),
+    "ai.target_reason": L("Claude's take-profit at {price} reached ({profit})", "Claudes Gewinnziel bei {price} erreicht ({profit})"),
+    "ai.daily_limit": L("Daily loss limit reached ({lost} of max. {limit}) – no new trade for {left}",
+                        "Tagesverlust-Limit erreicht ({lost} bei max. {limit}) – kein neuer Trade für {left}"),
+    "ai.loss_streak": L("{count} losing trades in a row – pausing new trades for {left}",
+                        "{count} Verlust-Trades in Folge – Pause für neue Trades noch {left}"),
+    "ai.no_stop": L("Claude wanted to buy without a stop – not executed · next check in {left}",
+                    "Claude wollte ohne Stop kaufen – nicht ausgeführt · nächste Prüfung in {left}"),
     # --- engine
     "engine.instance_locked": L(
         "Another DipAgentX engine is already running with this data directory – this instance does not trade.",
@@ -321,6 +334,18 @@ CATALOG: dict[str, L] = {
     "engine.limit_not_filled": L(
         "Limit order at {price} not filled within the waiting time – the rest goes out as a market order",
         "Limit-Order zu {price} in der Wartezeit nicht ausgeführt – der Rest geht als Market-Order raus",
+    ),
+    "engine.limit_waiting_only": L(
+        "Limit order at {price} waiting (no fee) – cancelled if not filled by {until}",
+        "Limit-Order zu {price} wartet (ohne Gebühr) – wird storniert, wenn bis {until} nicht ausgeführt",
+    ),
+    "engine.limit_not_filled_only": L(
+        "Limit order at {price} not filled within the waiting time – cancelled, no market order",
+        "Limit-Order zu {price} in der Wartezeit nicht ausgeführt – storniert, keine Market-Order",
+    ),
+    "engine.limit_refused_event_only": L(
+        "Limit order ({side}) refused: {error} – trying again at the next check",
+        "Limit-Order ({side}) abgelehnt: {error} – nächster Versuch beim nächsten Check",
     ),
     "engine.limit_refused": L(
         "Limit order at {price} refused by the exchange – trying again at the next check",

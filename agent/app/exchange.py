@@ -41,6 +41,7 @@ class Candle:
     high: Decimal
     low: Decimal
     close: Decimal
+    volume: Decimal = Decimal(0)  # in the base currency
 
 
 @dataclass
@@ -105,6 +106,11 @@ class Exchange:
         raise NotImplementedError
 
     async def get_order(self, order_id: str) -> OrderResult: ...
+
+    async def order_book(self, symbol: str, depth: int = 50) -> tuple[list[tuple[Decimal, Decimal]], list[tuple[Decimal, Decimal]]] | None:
+        """(bids, asks) as (price, quantity), best first – None where the exchange offers none."""
+        return None
+
     async def find_order(self, symbol: str, client_order_id: str, since: int) -> OrderResult | None:
         """Look up an order by our own client_order_id (used when the placement response got lost)."""
     async def close(self) -> None: ...
@@ -167,9 +173,17 @@ class RevolutXExchange(Exchange):
     async def candles(self, symbol: str, interval: int, since: int, until: int) -> list[Candle]:
         raw = await self.client.candles(symbol, interval, since, until)
         candles = [
-            Candle(int(c["start"]), dec(c["open"]), dec(c["high"]), dec(c["low"]), dec(c["close"])) for c in raw
+            Candle(int(c["start"]), dec(c["open"]), dec(c["high"]), dec(c["low"]), dec(c["close"]), dec(c.get("volume")))
+            for c in raw
         ]
         return sorted(candles, key=lambda c: c.start)
+
+    async def order_book(self, symbol: str, depth: int = 50) -> tuple[list[tuple[Decimal, Decimal]], list[tuple[Decimal, Decimal]]] | None:
+        data = ((await self.client.order_book(symbol, depth)) or {}).get("data") or {}
+        side = lambda rows: [(dec(r["p"]), dec(r["q"])) for r in rows or [] if r.get("p") and r.get("q")]  # noqa: E731
+        bids = sorted(side(data.get("bids")), key=lambda r: r[0], reverse=True)
+        asks = sorted(side(data.get("asks")), key=lambda r: r[0])
+        return bids, asks
 
     async def pairs(self) -> dict[str, PairInfo]:
         if not self._pairs or time.time() - self._pairs_at > 3600:
