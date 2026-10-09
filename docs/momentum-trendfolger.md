@@ -84,6 +84,122 @@ Beispiel: 14 T +8 %, 21 T +7 %, 30 T +6 %, 40 T +4 % (war an, bleibt an), 50 T +
 - Aus, weil Coin Metrics Werte nachträglich korrigiert und ein Tag erst 30 Stunden nach Tagesbeginn nutzbar ist.
   Nicht im Backtest geprüft.
 
+## 5a. Optional: BTC als Bremse (Standard aus, nur für Coins außer BTC)
+
+- Der ETH-Bot hält höchstens so viel, wie der Trend von BTC erlauben würde: Anteil der sechs BTC-Zeitfenster, die
+  aufwärts zeigen (gleiche Schwellen `entry` / `exit`, BTC-EUR-4-h-Kurse), mal dem Schwankungsfaktor von ETH.
+- Die Funding-Untergrenze bleibt nur, wenn auch das BTC-Funding unter `funding_below` liegt. Panik nur bei ETH reicht
+  nicht mehr.
+- Wirkt nach der Untergrenze und vor der Zufluss-Bremse. Fehlen die BTC-Kurse, ist die Bremse aus (Signal „BTC-Kurse
+  nicht verfügbar“).
+- Im Bot sichtbar als eigenes Signal: „BTC-Trend 4 von 6 aufwärts – keine Bremse“ (grün), „… – höchstens 70 %“ (rot),
+  „… auch BTC-Funding zeigt Panik – Untergrenze bleibt“ (grün).
+
+Backtest mit Nachbau des Bots, ETH-EUR, März 2020 bis September 2026, ohne Gebühr (Details in
+`docs/btc-eth-verbindung.md`, Teil 3):
+
+| | Gewinn | pro Jahr | größter Rückgang | 2022–26 | schlechteste 12 Monate |
+|---|---|---|---|---|---|
+| ETH halten | +1.050 % | 45 % | −79 % | −28 % | – |
+| ETH-Bot ohne Bremse | +4.531 % | 79 % | −40 % | +298 % | −31 % |
+| ETH-Bot mit BTC-Bremse | +4.190 % | 77 % | −29 % | +313 % | −19 % |
+
+Der kleinere Rückgang hielt in allen sechs geprüften Grundeinstellungen (−29 bis −31 % statt −37 bis −40 %). Der
+Preis: In starken ETH-Läufen bleibt der Bot zurück (2021 +323 % statt +362 %, 2025 +46 % statt +63 %), und wie viel
+Ertrag die Bremse kostet, hängt stark von der Funding-Einstellung ab (bei den Standardwerten 7 %, bei einer
+Funding-Schwelle von 0 % fast 30 %). Für den BTC-Bot mit ETH als Bremse lohnte es sich nicht.
+
+### Doppel-Check: M6F+ gegen MV6F+ (M6F+ mit BTC-Bremse)
+
+Nachbau des Bots auf 4-h-Kerzen, Limit-Orders ohne Gebühr. Der BTC-Bot ist in beiden Varianten gleich, die Bremse
+wirkt nur auf ETH. Depot = 3.000 € im ETH-Bot und 2.000 € im BTC-Bot, nicht angeglichen.
+
+ETH-EUR / BTC-EUR, März 2020 bis September 2026, mit Funding:
+
+| | Gewinn | pro Jahr | größter Rückgang | schlechteste 12 Monate | Rendite / Rückgang |
+|---|---|---|---|---|---|
+| BTC halten | +818 % | 40 % | −74 % | −72 % | 0,55 |
+| ETH halten | +1.050 % | 45 % | −77 % | −73 % | 0,58 |
+| M6F+ BTC (= MV6F+ BTC) | +2.297 % | 62 % | −29 % | −27 % | 2,13 |
+| M6F+ ETH | +4.531 % | 79 % | −39 % | −31 % | 2,06 |
+| **MV6F+ ETH** | +4.125 % | 77 % | **−29 %** | **−19 %** | **2,65** |
+| M6F+ Depot | +3.637 % | 74 % | −34 % | −25 % | 2,14 |
+| **MV6F+ Depot** | +3.394 % | 72 % | **−24 %** | **−18 %** | **3,00** |
+
+ETH-USDT / BTC-USDT, November 2017 bis Oktober 2026 (vor September 2019 ohne Funding-Daten, also ohne Untergrenze):
+
+| | Gewinn | pro Jahr | größter Rückgang | schlechteste 12 Monate | Rendite / Rückgang |
+|---|---|---|---|---|---|
+| BTC halten | +1.166 % | 33 % | −83 % | −83 % | 0,40 |
+| ETH halten | +716 % | 27 % | −94 % | −92 % | 0,28 |
+| M6F+ BTC (= MV6F+ BTC) | +8.135 % | 64 % | −53 % | −49 % | 1,21 |
+| M6F+ ETH | +14.006 % | 74 % | −51 % | −49 % | 1,47 |
+| **MV6F+ ETH** | **+18.274 %** | **79 %** | **−37 %** | **−25 %** | **2,16** |
+| M6F+ Depot | +11.657 % | 71 % | −47 % | −46 % | 1,49 |
+| **MV6F+ Depot** | **+14.218 %** | **74 %** | **−37 %** | **−30 %** | **1,99** |
+
+ETH je Jahr (USDT): 2018 −16 % → **+10 %**, 2019 +26 → +39 %, 2020 +312 → +318 %, 2021 +321 → +292 %, 2022 −8 → −1 %,
+2023 +43 → +36 %, 2024 +50 → +57 %, 2025 +81 → +60 %, 2026 +16 → +19 %. Mit Market-Orders (0,12 % je Seite) bleibt
+das Bild gleich (2017–2026: ETH ×111 → ×146, Rückgang −52 → −38 %).
+
+Prüfungen:
+
+- **2017–2019** wurde mit dem echten Bot erstmals gerechnet (ETH +96 % → +180 %, Rückgang −51 → −37 %). Ganz
+  unabhängig ist das nicht: Die Idee kam aus einer Tagesrechnung, die diese Jahre enthielt.
+- **Acht andere Coins**, die nie in einem Test vorkamen (XRP, LTC, ADA, BNB, LINK, DOGE, SOL, DOT, jeweils mit eigenem
+  Funding, ab 2017–2020): Rückgang mit Bremse **bei allen 8 kleiner** (Median 19 Punkte), Rendite bei 6 von 8 höher
+  (Median +7 Punkte pro Jahr), Rendite/Rückgang bei 7 von 8 besser. Ausnahme DOGE (−16 Punkte pro Jahr): Meme-Läufe
+  ohne BTC-Trend verpasst die Bremse.
+- **Block-Bootstrap** ETH 2017–2026 (2.000 Läufe, Blöcke ~60 Tage): Rückgang mit Bremse in 99 % der Läufe kleiner
+  (Median 13 Punkte). Rendite im Median +3 Punkte pro Jahr, aber unsicher (90-%-Band −7 bis +12).
+- **Rollierend:** MV6F+ endet nach 1 / 2 / 3 Jahren in 59 / 53 / 59 % der Starttage vorn.
+
+Fazit: Der kleinere Rückgang ist auf allen geprüften Daten belegt. Ob die Bremse auch mehr Rendite bringt, hängt am
+Zeitraum: 2017–2026 ja, 2020–2026 leicht nein (−2 Punkte pro Jahr). Sie kostet in starken ETH-Läufen (2021, 2025).
+
+### Einstieg an jedem Tag: hält MV6F+ so stabil wie M6F+?
+
+Start eines neuen Bots an jedem Tag, mit dem echten Neustart des Bots (Zeitfenster aus den letzten 14 Tagen
+aufgebaut, auch für BTC), Limit-Orders ohne Gebühr.
+
+EUR, Starts 2020-03 bis 2026-09 (2.385 Starts, mit Funding):
+
+| | im Plus nach 6 Mon. / 1 / 2 / 3 J. | nach 1 J. Median / 5-%-Quantil / schlechtester | tiefster Stand unter Einstand im 1. J. (Median / schlimmster) |
+|---|---|---|---|
+| BTC halten | 63 / 60 / 71 / 100 % | +37 / −54 / −72 % | −21 / −73 % |
+| ETH halten | 60 / 58 / 65 / 76 % | +24 / −56 / −73 % | −29 / −79 % |
+| M6F+ BTC | 74 / 81 / 100 / 100 % | +46 / −15 / −27 % | −8 / −28 % |
+| M6F+ ETH | 72 / 83 / 97 / 100 % | +50 / −13 / −31 % | −8 / −39 % |
+| **MV6F+ ETH** | **80 / 91 / 100 / 100 %** | +51 / **−6** / **−19 %** | −7 / **−29 %** |
+| M6F+ Depot | 74 / 88 / 99 / 100 % | +48 / −9 / −25 % | −6 / −32 % |
+| **MV6F+ Depot** | **81 / 92 / 100 / 100 %** | +46 / **−2** / **−18 %** | −5 / **−25 %** |
+
+USDT, Starts 2017-11 bis 2026-10 (3.263 Starts, mit dem Bärenmarkt 2018):
+
+| | im Plus nach 6 Mon. / 1 / 2 / 3 J. | nach 1 J. Median / 5-%-Quantil / schlechtester | nach 3 J. 5-%-Quantil / schlechtester | tiefster Stand im 1. J. (Median / schlimmster) |
+|---|---|---|---|---|
+| BTC halten | 57 / 63 / 75 / 100 % | +38 / −64 / −83 % | +18 / −10 % | −26 / −83 % |
+| ETH halten | 56 / 55 / 65 / 85 % | +14 / −73 / −92 % | −30 / −55 % | −40 / −94 % |
+| M6F+ ETH | 68 / 84 / 98 / 100 % | +49 / −17 / −49 % | +72 / +28 % | −9 / −49 % |
+| **MV6F+ ETH** | **72 / 84 / 100 / 100 %** | **+60 / −10 / −25 %** | **+83 / +46 %** | −7 / **−37 %** |
+| M6F+ Depot | 69 / 85 / 99 / 100 % | +58 / −18 / −45 % | +92 / +47 % | −8 / −46 % |
+| **MV6F+ Depot** | **74 / 86 / 100 / 100 %** | **+65 / −11 / −31 %** | **+99 / +57 %** | −7 / **−38 %** |
+
+Einstieg genau an ungünstigen Tagen (USDT, ETH-Bot; nach 1 / 2 / 3 Jahren, tiefster Stand im ersten Jahr):
+
+| Einstieg | ETH halten | M6F+ ETH | MV6F+ ETH |
+|---|---|---|---|
+| ETH-Hoch 13.1.2018 | −92 / −90 / −24 %, tief −94 % | −49 / −30 / +308 %, tief −49 % | **−24 / +11 / +559 %, tief −26 %** |
+| Hoch 11.5.2021 | −50 / −57 / −30 %, tief −59 % | +12 / +15 / +79 %, tief −35 % | **+93 / +87 / +215 %, tief −6 %** |
+| ETH-Hoch 9.11.2021 | −77 / −55 / −37 %, tief −81 % | −30 / ±0 / +38 %, tief −30 % | **−14 / +10 / +58 %, tief −15 %** |
+| vor FTX 1.11.2022 | +17 / +60 / +144 %, tief −31 % | −2 / +40 / +229 %, tief −22 % | −2 / +47 / +205 %, tief −14 % |
+| Hoch 11.3.2024 | −53 / −50 %, tief −54 % | −11 / +48 %, tief −28 % | −13 / +45 %, tief −29 % |
+| ETH-Hoch 23.8.2025 | −48 %, tief −68 % | −7 %, tief −34 % | **+3 %, tief −21 %** |
+
+MV6F+ endet bei 47–60 % der Starts vor M6F+ (Median −0,8 bis +4 %). Der Vorteil liegt nicht im Durchschnitt, sondern
+in den schlechten Starts: Das schlechteste Ergebnis nach einem Jahr steigt von −31 auf −19 % (EUR) bzw. von −49 auf
+−25 % (USDT), nach zwei Jahren war bei MV6F+ jeder Start im Plus.
+
 ## 6. Stufe und Zielposition
 
 - Stufe = `round(Gewicht × 10)`, 0 bis 10, mit Pythons `round` (bei genau ,5 zur geraden Zahl). Kaufmännische Rundung
@@ -165,6 +281,7 @@ Beispiel: 14 T +8 %, 21 T +7 %, 30 T +6 %, 40 T +4 % (war an, bleibt an), 50 T +
 | `vol_target` | 100 % |
 | `funding_floor` / `funding_below` | 50 % / +2 % p. a. |
 | `inflow_brake` / `inflow_above` | aus / 1 % |
+| `btc_brake` | aus |
 | `maker_orders` / `maker_wait` | an / 10 min |
 
 ## 11. Beispiel eines Checks
