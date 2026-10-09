@@ -9,6 +9,8 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 - **Own icon for the lead-lag bot** in the iOS and macOS apps: two step lines – BTC jumps first, the coin follows a
   moment later – on a tile from Bitcoin orange to Ethereum blue, with the coin badge of the traded coin like the
   momentum follower.
+- **Menu bar icon with an open trade** (macOS): the regular chart with the Revolut X, knocked out of a full circle,
+  instead of the squeezed `chart…circle.fill` symbol that looked smaller than the idle icon.
 
 ## [1.37.0] – 2026-10-09
 

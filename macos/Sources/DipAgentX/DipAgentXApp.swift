@@ -158,6 +158,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func icon(_ symbol: String, rotatedBy angle: CGFloat = 0) -> NSImage? {
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "DipAgentX") else { return nil }
         base.isTemplate = true
+        if symbol.hasSuffix(".circle.fill"), let plain = NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: nil) {
+            return inDisc(withX(plain))
+        }
         if symbol.hasPrefix("chart") { return withX(base) }
         guard angle != 0 else { return base }
         let size = NSSize(width: 18, height: 18) // the menu bar renders the symbol at this size anyway
@@ -188,6 +191,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSGraphicsContext.current?.compositingOperation = .sourceOver
             NSColor.black.setFill()
             revolutX(in: box)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "DipAgentX"
+        return image
+    }
+
+    /// Open position: the regular chart + X, knocked out of a full disc – same look, just as a circle.
+    private static func inDisc(_ icon: NSImage) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            let width: CGFloat = 12
+            let inner = NSRect(x: 3.2, y: 3.6, width: width, height: width * icon.size.height / icon.size.width)
+            icon.draw(in: inner, from: .zero, operation: .destinationOut, fraction: 1)
             return true
         }
         image.isTemplate = true
