@@ -56,6 +56,31 @@ BinanceFetch = Callable[[list[str]], Awaitable[Quotes]]
 RevxFetch = Callable[[list[str]], Awaitable[Quotes | None]]
 
 
+# The newest jump for the lead-lag bot (strategy "leadlag"): {"at": ms, "direction", "btc_usdt_jump_pct",
+# "coins": {"ETH-EUR": {"lagged": bool, "same_minute_pct": float | None}}}. Set by the monitor, read by the strategy.
+_latest_signal: dict[str, Any] | None = None
+_listeners: list[Callable[[], None]] = []
+
+
+def publish(signal: dict[str, Any] | None) -> None:
+    """Hand a jump to the trading bots and wake the engine at once (instead of up to 30 s later)."""
+    global _latest_signal
+    _latest_signal = signal
+    for listener in list(_listeners):
+        try:
+            listener()
+        except Exception as exc:  # noqa: BLE001 – a listener must never stop the measurement
+            log.warning("Lead-lag listener failed: %s", exc)
+
+
+def latest_signal() -> dict[str, Any] | None:
+    return _latest_signal
+
+
+def on_signal(listener: Callable[[], None]) -> None:
+    _listeners.append(listener)
+
+
 def enabled() -> bool:
     return os.getenv("LEADLAG_MONITOR", "1").strip().lower() not in ("0", "false", "off", "no")
 
@@ -255,6 +280,10 @@ class LeadLagMonitor:
         self._revx_next = min(self._revx_next, now)
         self.open.append(event)
         self._store(event)
+        publish({"at": event["at"], "direction": event["direction"], "btc_usdt_jump_pct": btc,
+                 "coins": {sym: {"lagged": c["lagged"],
+                                 "same_minute_pct": (c["revx"] or {}).get("same_minute_pct", c["binance_same_minute_pct"])}
+                           for sym, c in coins.items()}})
         lagging = [s for s, c in coins.items() if c["lagged"]]
         log.info("Lead-lag: BTC %+.2f %% in 60 s – lagging on Revolut X: %s – following up for 15 min",
                  btc, ", ".join(lagging) or "none")

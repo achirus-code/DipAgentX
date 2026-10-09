@@ -32,7 +32,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.36.1"
+VERSION = "1.37.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 
@@ -105,6 +105,7 @@ async def _revx_quotes(symbols: list[str]) -> dict[str, tuple[float, float]] | N
 
 
 leadlag_monitor = leadlag.LeadLagMonitor(db, lambda symbols: leadlag.binance_quotes(_leadlag_http, symbols), _revx_quotes)
+leadlag.on_signal(engine.wake)  # the lead-lag bot trades within seconds of a BTC jump, not at the next 30-s tick
 
 
 @asynccontextmanager
