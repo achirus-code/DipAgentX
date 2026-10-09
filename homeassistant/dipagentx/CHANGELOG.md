@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.38.1] – 2026-10-09
+
+### Fixed
+
+- **Trade list**: the "No fee" badge (and the other badges) stay on one line instead of wrapping into two.
+
 ## [1.38.0] – 2026-10-09
 
 ### Changed

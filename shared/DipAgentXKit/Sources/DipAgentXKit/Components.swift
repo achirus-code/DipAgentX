@@ -148,8 +148,9 @@ public struct Badge: View {
     public var body: some View {
         HStack(spacing: 3) {
             if let icon { Image(systemName: icon).font(.ui(8, weight: .bold)) }
-            Text(text).font(.ui(9.5, weight: .semibold))
+            Text(text).font(.ui(9.5, weight: .semibold)).lineLimit(1)
         }
+        .fixedSize()
         .padding(.horizontal, 6)
         .padding(.vertical, 2.5)
         .foregroundStyle(color)
