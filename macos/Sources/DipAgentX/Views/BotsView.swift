@@ -383,6 +383,7 @@ struct BotDetailView: View {
                         Text(bot.strategyName).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    BotInfoButton(bot: bot)
                     Button {
                         Task { try? await store.setRunning(bot, !bot.enabled) }
                     } label: {
