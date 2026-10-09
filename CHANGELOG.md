@@ -4,6 +4,16 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Added
+
+- **New strategy "Lead-lag: follows BTC"** (`leadlag`). Buys the coin within seconds after BTC-USDT jumped by at least
+  0.5 % in one minute while the coin rose less than half as much, and sells after 15 minutes (stop-loss 1.5 %). It
+  trades the signal of the lead-lag measurement: the monitor hands every jump to the bots and wakes the engine at once
+  instead of at the next 30-second tick. Market orders, because speed matters more than the fee. Each buy says how
+  many seconds after the jump the order went out. Meant for paper trading first – the measurement
+  (`/api/research/leadlag`) still has to show that Revolut X lags like Binance. Coins must be in `LEADLAG_COINS`
+  (default BTC, ETH, SOL, XRP, DOGE, ADA, LINK, AVAX, LTC, SUI).
+
 ## [1.36.1] – 2026-10-09
 
 ### Changed
