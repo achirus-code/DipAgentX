@@ -4,6 +4,8 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.37.0] – 2026-10-09
+
 ### Added
 
 - **New strategy "Lead-lag: follows BTC"** (`leadlag`). Buys the coin within seconds after BTC-USDT jumped by at least
