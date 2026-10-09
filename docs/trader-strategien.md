@@ -65,6 +65,100 @@ Gesamterwartung: **Die Trendfolger (T3, T5) bringen Gewinn, aber keiner schlägt
 konträren Angst-Käufe (T1a, T1b) sind die interessanteste Ergänzung, weil sie selten handeln. Die Range-Deviation
 (T2) und der DCA-Bot (T7) bringen wenig bis nichts.
 
-## Teil 2 – Ergebnisse
+## Teil 2 – Ergebnisse (nach dem Test geschrieben)
 
-(folgt nach dem Test)
+Gerechnet am 2026-10-09 nach dem Commit von Teil 1. „×“ = Endvermögen als Vielfaches des Einsatzes, Binance-Tageskerzen
+2017-08-17 bis 2026-10-08, 0,2 % Kosten je Runde.
+
+### Alle Regeln auf einen Blick
+
+| Regel (Trader) | BTC × · Rückgang | ETH × · Rückgang | 2022–26 BTC / ETH | Trades · Treffer |
+|---|---|---|---|---|
+| Halten | ×19,1 · −83 % | ×8,2 · −94 % | ×1,77 / ×0,67 | – |
+| **Momentum-Trendfolger M6 (unser Bot, Vergleich)** | **×38,4 · −54 %** | **×29,0 · −54 %** | **×1,87 / ×1,84** | täglich angepasst |
+| T1a Angst-Kauf bei Fear & Greed ≤ 15 (GCR) | ×1,1 · −61 % | ×0,5 · −85 % | ×0,59 / ×0,40 | 18 · 33 % |
+| T1b Kauf bei negativem Funding (GCR) | ×5,2 · −45 % | ×0,7 · −74 % | ×1,00 / ×0,42 | 24 · 71 % / 22 · 55 % |
+| T2 Deviation unter das 30-Tage-Tief (CryptoCred, Mayne) | ×0,4 · −73 % | ×0,1 · −92 % | ×0,45 / ×0,36 | 77 · 23 % |
+| **T3 Ausbruch über das 30-Tage-Hoch, raus unter 15-Tage-Tief (Pentoshi, Kaleo)** | **×26,7 · −62 %** | **×20,3 · −64 %** | ×1,18 / ×1,21 | 34 · 44 % |
+| T4 Retest nach dem Ausbruch (Kaleo) | ×43,4 · −51 % | ×20,8 · −57 % | ×1,36 / ×1,50 | 29 · 45 % |
+| T5 Bull-Market-Support-Band (Rekt Capital, Cowen) | ×2,9 · −76 % | ×7,3 · −78 % | ×2,05 / ×1,05 | wöchentlich |
+| T5b Band + Teilverkauf bei +40 % (Cowen) | ×2,2 · −70 % | ×6,5 · −64 % | ×2,16 / ×1,18 | wöchentlich |
+| T6 Halving-Zyklus (Rekt Capital, Loukas), BTC ab 2011 | ×420.605 (Halten ×272.440) · −82 % | ×107.398 (Halten ×2.688) · −68 % | ×6,9 / ×3,5 | 4 Zyklen |
+| T7 DCA-Bot, EUR 2020–26 (3Commas-Stil) | ×8,1 (Halten ×11,2) · −70 % | ×18,5 (Halten ×19,7) · −71 % | – | 494 / 715 · 100 % |
+
+### Was die Regeln zeigen
+
+- **Konträre Angst-Käufe (GCR) funktionieren als Regel nicht.** Fear & Greed ≤ 15 kaufte 2018 viermal in den
+  fallenden Markt und 2022 zweimal – zwei Drittel der Käufe nach 60 Tagen im Minus. Negatives Funding hat bei BTC
+  2019–2021 gut funktioniert (71 % Treffer), seit 2022 nicht mehr, bei ETH nie. Was GCR wirklich tat –
+  einschätzen, wann die Masse falsch liegt –, ist kein Schwellenwert. Den brauchbaren Kern hat unser Momentum-Bot
+  schon: Die Funding-Untergrenze in M6F hält bei Panik-Funding eine halbe Position.
+- **Range-Deviations (CryptoCred, Mayne) verlieren klar**, auch auf Tageskerzen: 77 Trades, 23 % Treffer, Endvermögen
+  ×0,4. Ein Stich unter das 30-Tage-Tief ist in Krypto öfter der Beginn eines Abwärtstrends als eine Falle.
+- **Ausbrüche (Pentoshi, Kaleo) sind die einzige Trader-Regel mit robustem Gewinn.** Alle neun Varianten (Ausbruch
+  über das 20-/30-/55-Tage-Hoch, Ausstieg unter das 10-/15-/20-Tage-Tief) lagen auf beiden Coins über oder nahe
+  Halten, bei etwa zwei Dritteln des Rückgangs (BTC ×15–40, ETH ×12–38). Auf den alten Daten, die nie in einem Test
+  vorkamen (BTC 2011–2017), schlugen 4 von 9 Varianten das Halten bei −64 bis −74 % statt −93 % Rückgang. Bei ETH
+  2016–17 (×327 Halten in 20 Monaten) blieben sie darunter.
+- **Der Retest (T4) war Glück der gewählten Zahlen:** In den Nachbar-Varianten oft schlechter als der einfache
+  Ausbruch, auf den alten BTC-Daten ×13–40 statt ×3.655–28.227. Die Wartezeit auf den Retest verpasst die großen
+  Läufe.
+- **Das Bull-Market-Support-Band ist zu langsam.** Es steigt nach dem Hoch ein (BTC Ende Dezember 2017 bei 13.716 $)
+  und wird in Seitwärtsphasen hin- und hergeschüttelt. Seit 2022 bei BTC gut (×2,05 gegen ×1,77), insgesamt weit
+  unter Halten.
+- **Der Halving-Zyklus sieht fantastisch aus, ist aber kein Beweis.** Die Regel ist aus genau diesen vier Zyklen
+  abgeleitet. Mit vier Datenpunkten lässt sich jedes Muster finden; wer 2025 auf den Zyklus-Ausstieg gesetzt hat,
+  hat die Zahlen nicht aus dem Backtest, sondern aus dem Glauben, dass es wieder so kommt.
+- **Der DCA-Bot gewinnt jeden Zyklus (100 %), verliert aber gegen Halten.** Ein Zyklus hing 834 Tage fest (BTC),
+  der Rückgang lag bei −70 %. Die hohe Trefferquote, mit der solche Bots beworben werden, kommt von kleinen
+  Gewinnzielen und großen, nicht realisierten Verlusten.
+- **Hyperliquid-Wale** lassen sich nicht nachbauen: Positionen sind nur ab heute sichtbar, die größten Gewinner
+  handeln mit Hebel und short, und nach einer Auswertung haben die meisten Achtstelligen unter 200 % Rendite – sie
+  hatten vor allem viel Kapital.
+
+### Mischungen mit dem Momentum-Bot
+
+| | BTC × · Rückgang | ETH × · Rückgang |
+|---|---|---|
+| M6 allein | ×38,4 · −54 % | ×29,0 · −54 % |
+| 50 % M6 + 50 % Ausbruch T3 | ×33,4 · −58 % | ×26,6 · −57 % |
+| 70 % M6 + 30 % Funding-Kauf T1b | ×24,7 · −43 % | ×12,6 · −42 % |
+
+Keine Mischung schlägt den Momentum-Bot allein.
+
+### Vorhersage gegen Ergebnis
+
+| # | Vorhersage | Ergebnis |
+|---|---|---|
+| T1a | wenige Trades, fast alle im Plus | **falsch** – 18 Trades, nur 33 % im Plus |
+| T1b | Ø +5–10 % je Trade | BTC ja (+8,4 %), ETH **falsch** (+1,8 %, Endvermögen ×0,7) |
+| T2 | kleines Plus | **falsch** – klarer Verlust |
+| T3 | nahe Halten bei halbem Rückgang | ja, eher besser (über Halten, zwei Drittel des Rückgangs) |
+| T4 | schlechter als T3 | in der gewählten Variante falsch, über die Nachbarn hinweg richtig |
+| T5 | leicht unter Halten | **falsch** – weit darunter |
+| T5b | unter T5 | ja bei BTC, bei ETH fast gleich |
+| T6 | sehr gut, aber wertlos | ja |
+| T7 | > 90 % Treffer, großer Rückgang, unter Halten | ja |
+
+Die Gesamterwartung „Trendfolger bringen Gewinn, keiner schlägt den Momentum-Trendfolger“ stimmte. Die konträren
+Käufe, die ich für die beste Ergänzung hielt, waren die größte Enttäuschung.
+
+### Fazit
+
+Hinter den erfolgreichen Krypto-Tradern steckt, soweit sich ihre Methoden als Regel fassen lassen, vor allem eines:
+**mit dem Trend auf hohen Zeitebenen gehen, Ausbrüche kaufen, raus, wenn der Trend bricht.** Genau das macht der
+Momentum-Trendfolger schon – mit sechs Zeitfenstern statt einem, mit Volatilitätsdeckel und Funding-Untergrenze, und
+deshalb besser als jede einzelne Trader-Regel hier. Was die bekanntesten Namen darüber hinaus auszeichnet
+(GCRs Gespür für Stimmung, Hsakas Orderflow, Cobies frühe Investments), steckt nicht in einer Regel, und ihre
+öffentlichen Erfolge sind nicht geprüft.
+
+**Empfehlung:** kein neuer Bot. Den Momentum-Trendfolger weiterlaufen lassen. Wer eine zweite, unabhängige Regel
+daneben will, nimmt den einfachen Ausbruch (30-Tage-Hoch rein, 15-Tage-Tief raus) – er hat mehr Rückgang und weniger
+Ertrag, aber andere Ein- und Ausstiegszeitpunkte.
+
+### Grenzen
+
+- Tagesschlusskurse, 0,2 % Kosten je Runde; Stops auf Tageskerzen zum Stop-Kurs.
+- USDT statt EUR (Wechselkurs ausgeblendet), ein Coin je Bot, kein Zins auf Cash.
+- Die Regeln sind meine Fassung der Trader-Stile; die Trader selbst entscheiden mit Ermessen.
+- M6 ist hier eine tägliche Vereinfachung ohne Funding-Untergrenze; der echte Bot (M6F) lag in früheren Tests höher.
