@@ -1,4 +1,4 @@
-"""AI day trader: Claude's plan (take-profit, stop) runs between two checks, orders are limit-only, and the checks are
+"""AI swing trader: Claude's plan (take-profit, stop) runs between two checks, orders are limit-only, and the checks are
 paced by the monthly API budget."""
 
 from decimal import Decimal
@@ -282,6 +282,8 @@ async def test_brief_has_intraday_data():
     assert set(data["timeframes"]) == {"4h", "1h", "15m", "5m"}
     assert data["spread_pct"] == pytest.approx(0.1005, rel=1e-3)
     assert data["rules"]["maker_fee_pct"] == 0 and data["rules"]["limit_wait_minutes"] == 10
+    assert data["rules"]["backtested_regime_ok"] in (True, False) and "by_setup" in data["backtest"]
+    assert "swing_plan" in data
     assert {"trend", "structure", "rsi14", "adx14", "atr14_pct", "last_candles"} <= set(data["timeframes"]["15m"])
     assert brief.chart_png and brief.chart_png.startswith(b"\x89PNG")  # the chart goes along as an image
     assert data["market_leader"]["symbol"] == "BTC-EUR"
@@ -310,7 +312,7 @@ def test_model_defaults_to_fable_and_rejects_unknown():
     assert normalize({})["model"] == "claude-fable-5-1"
     assert normalize({"model": "claude-sonnet-5"})["model"] == "claude-fable-5-1"  # no longer offered
     assert normalize({"model": "claude-opus-5-5"})["model"] == "claude-opus-5-5"
-    assert normalize({})["budget"] == 100 and normalize({})["effort"] == "auto"
+    assert normalize({})["budget"] == 50 and normalize({})["effort"] == "auto"
 
 
 def test_call_cost_from_usage():
@@ -386,10 +388,50 @@ def test_candle_patterns_and_scanner_breakout():
     candles[-1] = Candle(last.start, Decimal("2000"), Decimal("2060"), Decimal("1999"), Decimal("2058"), Decimal("20"))
     names = ta.candle_patterns(candles, ta.atr(candles))
     assert "wide-range" in names[-1] and "1 ago" in names[-1]
-    signals = ta.scan(candles, {}, {}, 2058.0)
-    assert [s.key for s in signals] == ["breakout"] and "volume" in signals[0].text
+    regime = {"4h": {"trend": "up"}, "1h": {"trend": "up", "adx14": 30}, "15m": {"trend": "sideways"}}
+    signals = ta.scan(candles, regime, {}, 2058.0)
+    assert [s.key for s in signals] == ["breakout"] and "volume" in signals[0].text and "weaker" in signals[0].text
+    regime["15m"]["trend"] = "up"
+    assert [s.key for s in ta.scan(candles, regime, {}, 2058.0)] == ["momentum"]
+    # outside the backtested regime (4 h not up, or 1 h ADX below 25) nothing wakes Claude for a new long …
+    assert ta.scan(candles, {"4h": {"trend": "sideways"}, "1h": {"trend": "up", "adx14": 30}}, {}, 2058.0) == []
+    assert ta.scan(candles, {"4h": {"trend": "up"}, "1h": {"trend": "up", "adx14": 20}}, {}, 2058.0) == []
+    # … but a breakdown below the 2 h low does when a position is open
+    candles[-1] = Candle(last.start, Decimal("2000"), Decimal("2001"), Decimal("1900"), Decimal("1905"), Decimal("20"))
+    assert ta.scan(candles, {}, {}, 1905.0) == []
+    assert [s.key for s in ta.scan(candles, {}, {}, 1905.0, position=True)] == ["breakdown"]
     hammer = Candle(0, Decimal("100"), Decimal("100.6"), Decimal("97"), Decimal("100.5"))
     assert "hammer" in ta.candle_patterns([hammer, hammer], None)[-1]
+
+
+def test_scanner_24h_breakout_and_pullback_only_at_15m_closes():
+    regime = {"4h": {"trend": "up"}, "1h": {"trend": "up", "adx14": 30}, "15m": {"trend": "up", "ema20_vs_price_pct": 0.05, "atr14_pct": 0.3},
+              "5m": {"rsi14": 45}}
+    candles = zigzag(300, 2000, 0.0, 0.002, minutes=5)
+    last = candles[-1]
+    candles[-1] = Candle(last.start, Decimal("2000"), Decimal("2080"), Decimal("1999"), Decimal("2078"), Decimal("20"))
+    signals = ta.scan(candles, regime, {}, 2078.0)
+    assert [s.key for s in signals] == ["breakout_24h"]
+    # a small bullish candle near the 15m EMA20 in the regime: a pullback – but only when a 15-minute candle closed
+    quiet = zigzag(60, 2000, 0.0, 0.002, minutes=5)
+    start = quiet[-1].start - quiet[-1].start % (15 * 60_000) + 10 * 60_000  # the third 5-minute candle of a quarter hour
+    quiet[-1] = Candle(start, Decimal("1999"), Decimal("2001"), Decimal("1998.5"), Decimal("2000.5"), Decimal("1"))
+    assert [s.key for s in ta.scan(quiet, regime, {}, 2000.5)] == ["pullback"]
+    quiet[-1] = Candle(start - 5 * 60_000, Decimal("1999"), Decimal("2001"), Decimal("1998.5"), Decimal("2000.5"), Decimal("1"))
+    assert ta.scan(quiet, regime, {}, 2000.5) == []
+
+
+def test_swing_stop_sits_below_the_1h_swing_low():
+    c60 = zigzag(96, 2000, 0.001, 0.02)  # hourly candles with clear swings
+    price = float(c60[-1].close)
+    plan = ta.swing_stop(c60, price, atr5=1.0)
+    assert plan and plan["stop"] < plan["swing_low_1h"] < price
+    assert plan["distance_pct"] > 0 and plan["target_3r"] == pytest.approx(price * (1 + 3 * plan["distance_pct"] / 100), rel=1e-2)
+    # never inside the 5-minute noise: with a huge 5-minute ATR the stop moves further down
+    wide = ta.swing_stop(c60, price, atr5=price * 0.05)
+    assert wide["stop"] <= price * 0.95 + 1e-6
+    assert ta.swing_stop(c60[:5], price, 1.0) is None
+    assert ta.regime_ok({"4h": {"trend": "up (weak)"}, "1h": {"adx14": 25}}) and not ta.regime_ok({"4h": {"trend": "up"}, "1h": {"adx14": 24}})
 
 
 def test_order_book_summary_shows_the_imbalance():
@@ -471,7 +513,7 @@ async def test_the_scanner_wakes_claude_with_more_thinking(tmp_path: Path, claud
     await engine.tick()
     assert claude.efforts == ["low"]  # a routine look
 
-    def fake_scan(c5, tf, sess, price):
+    def fake_scan(c5, tf, sess, price, position=False):
         return [ta.Signal("breakout", "5m close above the 2 h high on 3.0x volume")]
 
     monkeypatch.setattr(ta, "scan", fake_scan)

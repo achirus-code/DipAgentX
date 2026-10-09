@@ -394,10 +394,10 @@
       <div class="ai-grid">
         <div>
           <span class="ai-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/></svg><span class="de">Neu · KI-Strategie mit Claude</span><span class="en">New · AI strategy with Claude</span></span>
-          <h2 class="ai-title"><span class="de">Claude Fable 5.1 als Daytrader – nur mit Limit-Orders.</span><span class="en">Claude Fable 5.1 as a day trader – limit orders only.</span></h2>
+          <h2 class="ai-title"><span class="de">Claude Fable 5.1 als Swingtrader – Regeln aus dem Backtest, nur Limit-Orders.</span><span class="en">Claude Fable 5.1 as a swing trader – rules from the backtest, limit orders only.</span></h2>
           <p class="muted" style="margin-top:14px;font-size:18px">
-            <span class="de">Der <strong style="color:var(--text)">KI-Daytrader</strong> gibt Claude ein Intraday-Briefing und lässt es selbst handeln: kaufen oder warten, halten oder verkaufen – jeder Kauf mit Gewinnziel und Stop, die der Bot zwischen zwei Prüfungen alle 30 Sekunden selbst überwacht. Wie oft Claude gefragt wird, richtet sich nach deinem monatlichen API-Budget.</span>
-            <span class="en">The <strong style="color:var(--text)">AI day trader</strong> hands Claude an intraday brief and lets it trade: buy or wait, hold or sell – every buy with a take-profit and a stop that the bot watches every 30 seconds between two checks. How often Claude is asked follows your monthly API budget.</span>
+            <span class="de">Der <strong style="color:var(--text)">KI-Swingtrader</strong> gibt Claude ein Briefing mit Chart, Zahlen und der Backtest-Bilanz jedes Setups und lässt es handeln: kaufen oder warten, halten oder verkaufen – nur im 4-h-Aufwärtstrend, Stop unter dem 1-h-Swing-Tief, Ziel 3R, gehalten über Stunden bis Tage. Gewinnziel und Stop überwacht der Bot zwischen zwei Prüfungen alle 30 Sekunden selbst. Wie oft Claude gefragt wird, richtet sich nach deinem monatlichen API-Budget.</span>
+            <span class="en">The <strong style="color:var(--text)">AI swing trader</strong> hands Claude a brief with the chart, the numbers and the backtest record of every setup and lets it trade: buy or wait, hold or sell – only in a 4 h uptrend, stop below the 1 h swing low, target 3R, held for hours to days. The bot watches take-profit and stop every 30 seconds between two checks. How often Claude is asked follows your monthly API budget.</span>
           </p>
 
           <div class="ai-points">
@@ -568,7 +568,7 @@
         </div>
         <div class="card strat ai-strat">
           <div class="icon ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/><path d="M5 16l.6 1.4 1.4.6-1.4.6L5 20l-.6-1.4L3 18l1.4-.6z"/></svg></div>
-          <h3><span class="de">KI-Daytrader</span><span class="en">AI day trader</span> <a class="mini-link" href="#ai"><span class="de">Details ↓</span><span class="en">Details ↓</span></a></h3>
+          <h3><span class="de">KI-Swingtrader</span><span class="en">AI swing trader</span> <a class="mini-link" href="#ai"><span class="de">Details ↓</span><span class="en">Details ↓</span></a></h3>
           <dl>
             <dt><span class="de">Kauft</span><span class="en">Buys</span></dt>
             <dd><span class="de">intraday, wenn Claude ein Setup mit klar besserem Chance-Risiko-Verhältnis sieht – mit Gewinnziel und Stop, als gebührenfreie Limit-Order</span><span class="en">intraday, when Claude sees a setup with a clearly better reward than risk – with take-profit and stop, as a fee-free limit order</span></dd>
@@ -642,7 +642,7 @@
               <tr><td><code>exchange</code></td><td><code>revolutx</code></td><td><span class="de"><code>mock</code> = simulierter Markt zum Ausprobieren, ganz ohne Revolut X</span><span class="en"><code>mock</code> = simulated market for trying things out, no Revolut X needed</span></td></tr>
               <tr><td><code>tick_seconds</code></td><td><code>30</code></td><td><span class="de">Wie oft die Bots den Markt prüfen</span><span class="en">How often the bots check the market</span></td></tr>
               <tr><td><code>taker_fee</code></td><td><code>0.0009</code></td><td><span class="de">Gebühr für simulierte Paper-Trades</span><span class="en">Fee used for simulated paper trades</span></td></tr>
-              <tr><td><code>anthropic_api_key</code></td><td>–</td><td><span class="de">Nur für den KI-Daytrader – Key von console.anthropic.com</span><span class="en">Only for the AI day trader – key from console.anthropic.com</span></td></tr>
+              <tr><td><code>anthropic_api_key</code></td><td>–</td><td><span class="de">Nur für den KI-Swingtrader – Key von console.anthropic.com</span><span class="en">Only for the AI swing trader – key from console.anthropic.com</span></td></tr>
               <tr><td><code>mock_speed</code></td><td><code>1</code></td><td><span class="de">Nur bei <code>mock</code>: Zeitraffer (60 = eine Marktstunde pro Minute)</span><span class="en">Only for <code>mock</code>: time lapse (60 = one market hour per minute)</span></td></tr>
             </tbody>
           </table>

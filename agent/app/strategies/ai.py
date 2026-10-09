@@ -1,16 +1,18 @@
-"""AI day trader: Claude (Fable 5.1 by default) trades one pair intraday the way a disciplined day trader does.
+"""AI swing trader: Claude (Fable 5.1 by default) trades one pair the way the backtest says it paid off – entries from
+the day trader's playbook, held like swing trades.
 
 - Top-down market read: trend and market phase on 4 h, 1 h, 15 min and 5 min, support/resistance, VWAP, the previous
   day's range, volume, candle patterns, the order book and BTC as the market leader (``ai_analysis``) – plus the
   chart as an image (``ai_chart``), so Claude sees the candles like a trader on the screen.
-- A scanner on every new 5-minute candle wakes Claude when a setup forms (breakout, pullback in an uptrend,
-  capitulation, volume spike); price alerts Claude sets and large moves wake it too. Without a trigger Claude looks
-  in at the pace the monthly API budget allows.
+- The backtest (Binance ETH-EUR/BTC-EUR 5-minute candles 2020–2026, docs/ki-swingtrader.md) shapes the rules: the
+  scanner wakes Claude only in the regime that made money (4 h uptrend, 1 h ADX ≥ 25) and only for the setups that
+  did (breakouts of the 2 h/24 h high on volume, pullbacks in a 1 h uptrend); the brief carries the backtested stop
+  (below the last 1 h swing low) and target (3R) and the track record of every setup; the prompt asks for swing
+  trades of hours to days, no break-even stop, no trailing stop, no time exit.
 - Every buy comes with a plan – take-profit, stop, optional trailing stop and time limit – that the bot runs every
-  tick by itself: the stop goes to break-even at +1R, a trailing stop follows from +1R, the stop is never lowered.
-- Discipline in code: a daily loss limit, a pause after a losing streak, the max. stop distance, position size by
-  setup quality (25–100 % of the amount).
-- Claude sees its own results by setup (win rate, average R) and keeps notes from one check to the next.
+  tick by itself; the stop is never lowered and never further away than the max. stop-loss (5 %).
+- Discipline in code: a daily loss limit, a pause after a losing streak, position size by setup quality (25–100 % of
+  the amount). Claude sees its own results by setup and keeps notes from one check to the next.
 
 Orders go out only as fee-free limit orders (post-only, a cent inside the spread, following the price like the
 momentum bot) – an order that isn't filled within the waiting time is cancelled, never sent to the market.
@@ -84,10 +86,13 @@ SENTIMENT_CONTRARIAN = (
     "new buys. In between, ignore it."
 )
 
-SYSTEM_PROMPT = """You are the day trader of one crypto spot pair on Revolut X, running inside an automated bot. \
-The goal is to grow the capital with intraday trades – minutes to a few hours – that have a positive expectancy. \
-Professional day traders earn their money with a small number of good setups, strict risk control and patience; \
-most of the time the right action is to wait. Being flat is a position.
+SYSTEM_PROMPT = """You are the swing trader of one crypto spot pair on Revolut X, running inside an automated bot. \
+The goal is to grow the capital with trades that have a positive expectancy. Your rules come from a backtest of \
+this very playbook on six years of ETH-EUR and BTC-EUR data (the brief carries the numbers): intraday trading with \
+tight stops lost money in every variant; the same entries held for hours to days with a stop below the 1-hour swing \
+low and a 3R target made money in every period. So you trade like a swing trader with a day trader's entry: \
+patient, few trades, wide enough stops, targets that pay for the losers. Most of the time the right action is to \
+wait. Being flat is a position.
 
 ## What you get at every check
 - A chart image with three panels, top to bottom: 1-hour candles of the last 3 days, 15-minute candles of the last \
@@ -99,63 +104,62 @@ direction and structure, where the price sits relative to the levels, consolidat
 ADX/efficiency/ATR and the last candle patterns, support and resistance zones with their touches, previous day's \
 high/low/close and VWAP, relative volume, Bollinger squeeze, order book depth and imbalance, BTC as the market \
 leader (for other coins), the open position with its plan, why you were woken, your notes from the last check, \
-and your own track record by setup. Trust the numbers over your reading of the image when they disagree.
+the backtest evidence per setup (backtest) and your own live track record by setup. Trust the numbers over your \
+reading of the image when they disagree.
 
-## How to decide – top-down, like a professional
-1. Context first: what is the 4 h and 1 h trend, and what phase is the market in (trend, range, chop)? For an \
-altcoin, what is BTC doing? Trade with the higher timeframe; a long against a 1 h downtrend needs an exceptional \
-reason (a capitulation flush into strong support with a clear reversal).
-2. Location: where is the price relative to support, resistance, VWAP and the previous day's range? Good longs start \
-near support or right after reclaiming a level – not in the middle of the range and not right under resistance.
-3. Setup: take only setups from this playbook, and only when they are clean:
-   - trend_pullback: in an uptrend, a pullback to the rising EMA20/VWAP or a former resistance that held, with \
-selling volume drying up and a 5-minute candle turning up.
-   - breakout / breakout_retest: a tight consolidation or squeeze below resistance breaks on clearly rising volume; \
-better still the retest of the broken level from above.
-   - range_support: in a clear range, a test of the lower boundary that holds (wick, rejection) with room to the top.
-   - reversal: after a strong flush, exhaustion (climax volume, long lower wicks, RSI deeply oversold, \
-divergence) and a reclaim of a level – only with confirmation, never catching a falling knife.
-   - momentum: a strong, orderly impulse with rising volume where a shallow pause offers an entry.
-4. Trigger and confirmation: the entry candle should confirm the idea. No confirmation, no trade – the next check or \
-a price alert can catch it.
-5. Risk: the stop goes where the idea is proven wrong (below the swing low / the level), not at an arbitrary \
-percentage, and beyond normal noise (more than about one 5-minute ATR away). The take-profit goes before the next \
-resistance. The distance to the take-profit should be at least 1.5×, better 2× the distance to the stop; if the \
-structure doesn't allow that, there is no trade.
-6. Size: size_pct of the amount by quality – 100 for an A setup where everything lines up, 50 for a good one with \
-a flaw, 25 for a speculative one. If you would only take it at 25, consider waiting.
-7. Managing a position: the bot moves the stop to break-even at +1R and runs your trailing stop from +1R. On each \
-check decide whether the trade still behaves as expected: hold and maybe tighten the stop or adjust the target, or \
-close it when the reason for the trade is gone (lost level, momentum died, time limit passed without progress). \
-Don't widen stops, don't add hope.
-8. Review: your own statistics by setup are the most honest feedback you get. Lean into setups that work for this \
-pair, avoid the ones that keep failing, and after losses become pickier, not more active.
+## The rules the backtest supports
+1. Regime first: new longs only when the 4 h trend is up and the 1 h chart is trending (ADX14 >= 25) – the brief \
+says so in rules.backtested_regime_ok. Outside that regime wait, whatever the 5-minute chart looks like. For an \
+altcoin, BTC falling hard is a reason to wait too.
+2. Setups that paid: trend_pullback (pullback to the rising 15m EMA20 / VWAP in a 1 h uptrend, selling volume \
+drying up, a 5-minute candle turning up), momentum (5m close above the 2 h high on at least 1.5x volume with 15m \
+and 1h in an uptrend) and breakout of the 24 h high on volume (the strongest, rare). A 2 h breakout while the 15m \
+chart is not yet in an uptrend was weak – prefer the retest or wait for the 15m trend. reversal (catching a flush) \
+and range_support lost money in the backtest: take them only with an exceptional reason and at 25 % size.
+3. Location still matters: good longs start near support, at the reclaimed level or right at the breakout – not \
+right under a strong resistance that sits inside the first 1R.
+4. Stop: below the last 1-hour swing low with a quarter 1 h ATR of air – the brief computes it as \
+swing_plan.stop (about 2-4 % away). Put it at a nearby level if one is closer, but never inside the 5-minute noise \
+(at least one 5-minute ATR) and never further than max_stop_distance_pct. A stop at the 5-minute structure is what \
+lost money.
+5. Target: 3R above the entry (swing_plan.target_3r); 2.5-4R worked, below 2R did not. A take-profit before a \
+major resistance is fine if it still pays at least 2.5R – otherwise there is no trade.
+6. Size: size_pct of the amount by quality – 100 for an A setup in the regime, 50 for a good one with a flaw, 25 \
+for anything speculative. If you would only take it at 25, consider waiting.
+7. Managing: let it run. The backtest says: no break-even stop (it halved the result), no trailing stop, no time \
+exit after a few hours – a swing trade needs about a day, often several. Hold through 5-minute noise. Close early \
+only when the reason is gone: the 1 h trend has turned down while the trade is below +1R, or a level that defined \
+the trade is clearly lost. Don't widen stops, don't add hope.
+8. Review: the backtest numbers per setup are your prior, your own live statistics are the update. Lean into \
+what works for this pair, avoid what keeps failing, and after losses become pickier, not more active.
 
 ## How the bot executes
 - Spot, long only, one position at a time, at most the amount from the brief (size_pct of it). No leverage, no \
-shorting: in a downtrend the choices are waiting or a confirmed reversal.
+shorting: in a downtrend the choices are waiting or an exceptional reversal.
 - Every order is a post-only limit order a cent inside the spread – a buy at the best bid, a sale at the best ask. \
 Maker fees are 0 %, but a fill is not guaranteed: the order follows the price for limit_wait_minutes and is cancelled \
-if still unfilled. Chasing a fast move rarely fills; buying a pullback does.
-- Between checks the bot runs the plan every 30 seconds: sells at the take-profit, at the stop (in a fast drop the \
-stop sale follows the price down and may get less), raises the stop to break-even at +1R and trails it if you set \
-trail_pct. A stop is never lowered and never further away than max_stop_distance_pct.
-- You are woken early by the scanner (setups on the 5-minute candles), by your price alerts (wake_above / \
-wake_below), by large moves and when a position's time limit is up. Otherwise you are asked at the pace the API \
-budget allows (usual_gap_minutes).
+if still unfilled. Buying the pullback or the first pause after the breakout fills; chasing a vertical move rarely does.
+- Between checks the bot runs the plan every 30 seconds: sells at the take-profit and at the stop (in a fast drop the \
+stop sale follows the price down and may get less). Break-even and trailing stops are off by default; if the owner \
+turned them on or you set trail_pct, the bot runs them from +1R. A stop is never lowered and never further away \
+than max_stop_distance_pct.
+- You are woken early by the scanner (the backtested setups, only in the regime), by your price alerts (wake_above / \
+wake_below), by large moves, by a breakdown below the 2 h low while a position is open, and when a position's time \
+limit is up. Otherwise you are asked at the pace the API budget allows (usual_gap_minutes). Without a position and \
+outside the regime, a long next_check_minutes saves budget.
 
 ## Answer fields
 - action: without a position "buy" or "wait"; with a position "hold" or "sell" (close now).
-- setup: the playbook setup of a buy (for "hold" the setup of the trade, otherwise "none").
+- setup: the playbook setup of a buy (for "hold" the setup of the trade, otherwise "none"); a 24 h breakout is "breakout".
 - take_profit, stop_loss: absolute prices – for "buy" the plan of the new position, for "hold" the plan from now on \
 (repeat when unchanged); 0 for "wait" and "sell".
 - size_pct: 25–100 for a buy, otherwise 0.
-- trail_pct: optional trailing distance in % from the high once the trade is +1R, 0 = none.
-- max_hold_minutes: optional time limit after which you want to re-check a position that hasn't moved, 0 = none.
+- trail_pct: optional trailing distance in % from the high once the trade is +1R, 0 = none (the backtest says none).
+- max_hold_minutes: optional time limit after which you want to re-check a position, 0 = none (think in days, not hours).
 - wake_above, wake_below: price alerts at levels that would change your view, 0 = none.
 - next_check_minutes: when to look again if nothing happens (the bot stays within its budget).
 - confidence: how sure you are that this action is right now, honestly calibrated – 50 is a coin toss, 80 or more \
-only for an A setup.
+only for an A setup in the regime.
 - notes: your working notes for the next check (at most 300 characters) – the levels and scenario you are watching.
 - reason_en, reason_de: at most two short sentences each for the bot owner (English, then the same in German) naming \
 the concrete facts behind the decision."""
@@ -294,20 +298,23 @@ def trade_stats(trades: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 class AiStrategy(Strategy):
     key = "ai"
-    name = L("AI day trader", "KI-Daytrader")
+    name = L("AI swing trader", "KI-Swingtrader")
     description = L(
-        "Claude (Fable 5.1) trades the pair intraday like a disciplined day trader: it reads the chart as an image and "
-        "the numbers behind it (trend on four timeframes, support and resistance, VWAP, volume, order book), takes only "
-        "setups from a fixed playbook and sets take-profit and stop for every trade, which the bot runs by itself – "
-        "break-even at +1R, optional trailing stop. A scanner wakes Claude when a setup forms; daily loss limit and a "
-        "pause after losing streaks. Only fee-free limit orders, never at market. Paced by a monthly API budget; needs "
-        "an Anthropic API key on the agent.",
-        "Claude (Fable 5.1) handelt das Paar intraday wie ein disziplinierter Daytrader: Es liest den Chart als Bild "
-        "und die Zahlen dahinter (Trend auf vier Zeitebenen, Unterstützungen und Widerstände, VWAP, Volumen, "
-        "Orderbuch), nimmt nur Setups aus einem festen Playbook und setzt für jeden Trade Gewinnziel und Stop, die der "
-        "Bot selbst ausführt – Break-even ab +1R, optional Trailing-Stop. Ein Scanner weckt Claude, wenn sich ein Setup "
-        "bildet; Tagesverlust-Limit und Pause nach Verlustserien. Nur gebührenfreie Limit-Orders, nie zum Marktpreis. "
-        "Getaktet nach monatlichem API-Budget; braucht einen Anthropic-API-Key auf dem Agenten.",
+        "Claude (Fable 5.1) trades the pair like a swing trader with a day trader's entries – the way a backtest of the "
+        "playbook on six years of ETH/BTC data paid off: only in a 4 h uptrend with a trending 1 h chart, entries on "
+        "breakouts on volume or pullbacks in a 1 h uptrend, stop below the 1 h swing low, target 3R, held for hours "
+        "to days. Claude reads the chart as an image and the numbers behind it, sets take-profit and stop for every "
+        "trade, which the bot runs by itself. A scanner wakes Claude when a setup forms; daily loss limit and a pause "
+        "after losing streaks. Only fee-free limit orders, never at market. Paced by a monthly API budget; needs an "
+        "Anthropic API key on the agent.",
+        "Claude (Fable 5.1) handelt das Paar wie ein Swingtrader mit den Einstiegen eines Daytraders – so, wie ein "
+        "Backtest des Playbooks auf sechs Jahren ETH/BTC-Daten Gewinn brachte: nur im 4-h-Aufwärtstrend mit "
+        "trendendem 1-h-Chart, Einstieg bei Ausbrüchen mit Volumen oder Rücksetzern im 1-h-Aufwärtstrend, Stop unter "
+        "dem 1-h-Swing-Tief, Ziel 3R, gehalten über Stunden bis Tage. Claude liest den Chart als Bild und die Zahlen "
+        "dahinter und setzt für jeden Trade Gewinnziel und Stop, die der Bot selbst ausführt. Ein Scanner weckt "
+        "Claude, wenn sich ein Setup bildet; Tagesverlust-Limit und Pause nach Verlustserien. Nur gebührenfreie "
+        "Limit-Orders, nie zum Marktpreis. Getaktet nach monatlichem API-Budget; braucht einen Anthropic-API-Key auf "
+        "dem Agenten.",
     )
     icon = "sparkles"
     limit_only = True
@@ -333,13 +340,13 @@ class AiStrategy(Strategy):
             "Alarm ausgelöst hat oder ein Trade offen ist, niedrig bei Routineblicken. Mehr Denken kostet mehr, das "
             "Budget reicht also für weniger Prüfungen.",
         )),
-        Param("budget", L("API budget per month", "API-Budget pro Monat"), "number", 100.0,
+        Param("budget", L("API budget per month", "API-Budget pro Monat"), "number", 50.0,
               L("US dollars this bot may spend on Claude per calendar month. The bot measures what each check costs "
                 "and spreads the rest evenly over the rest of the month. Per bot – split it when you run several.",
                 "US-Dollar, die dieser Bot pro Kalendermonat für Claude ausgeben darf. Der Bot misst, was jede Prüfung "
                 "kostet, und verteilt den Rest gleichmäßig auf den Rest des Monats. Pro Bot – bei mehreren aufteilen."),
               min=1, max=10000, step=5, unit="$"),
-        Param("ai_interval", L("Ask Claude at most every", "Claude höchstens alle"), "int", 5,
+        Param("ai_interval", L("Ask Claude at most every", "Claude höchstens alle"), "int", 15,
               L("Shortest gap between two checks, also when the scanner or an alert wakes Claude.",
                 "Kürzester Abstand zwischen zwei Prüfungen, auch wenn Scanner oder Alarm Claude wecken."),
               min=1, max=1440, unit="min"),
@@ -353,13 +360,18 @@ class AiStrategy(Strategy):
                 "(ohne Gebühr); läuft der Kurs weg, zieht die Order nach. Was danach nicht ausgeführt ist, wird "
                 "storniert – nie zum Marktpreis."),
               min=1, max=120, unit="min"),
-        Param("stop_loss", L("Max. stop-loss", "Max. Stop-Loss"), "percent", 3.0,
-              L("Claude sets a stop for every position; it may never be further away than this. 0 = Claude alone decides.",
-                "Claude setzt für jede Position einen Stop; er darf nie weiter weg liegen als hier. 0 = nur Claude entscheidet."),
+        Param("stop_loss", L("Max. stop-loss", "Max. Stop-Loss"), "percent", 5.0,
+              L("Claude sets a stop for every position; it may never be further away than this. The backtested stop "
+                "below the 1 h swing low is about 3 % away; 4–6 % worked, 3 % cost a third of the result. 0 = Claude alone decides.",
+                "Claude setzt für jede Position einen Stop; er darf nie weiter weg liegen als hier. Der getestete Stop unter "
+                "dem 1-h-Swing-Tief liegt etwa 3 % entfernt; 4–6 % funktionierten, 3 % kostete ein Drittel des Ergebnisses. "
+                "0 = nur Claude entscheidet."),
               min=0, max=50, step=0.5),
-        Param("breakeven", L("Stop to break-even at +1R", "Stop auf Einstand ab +1R"), "bool", True,
-              L("Once a trade is up by as much as it risked, the stop moves to the entry price.",
-                "Sobald ein Trade so viel im Plus ist, wie er riskiert hat, rückt der Stop auf den Einstiegskurs.")),
+        Param("breakeven", L("Stop to break-even at +1R", "Stop auf Einstand ab +1R"), "bool", False,
+              L("Once a trade is up by as much as it risked, the stop moves to the entry price. Off by default: in the "
+                "backtest it halved the result (more trades stopped at zero), but lowered the drawdown.",
+                "Sobald ein Trade so viel im Plus ist, wie er riskiert hat, rückt der Stop auf den Einstiegskurs. "
+                "Standard aus: im Backtest halbierte das das Ergebnis (mehr Trades enden bei null), senkte aber den Rückgang.")),
         Param("cut_losses", L("Claude may close at a loss", "Claude darf mit Verlust schließen"), "bool", True,
               L("Off: Claude's own sell signal waits for break-even; only the stop realizes a loss.",
                 "Aus: Claudes eigenes Verkaufssignal wartet auf die Gewinnschwelle; nur der Stop realisiert einen Verlust.")),
@@ -547,7 +559,13 @@ class AiStrategy(Strategy):
             "daily_loss_limit_pct_of_amount": float(p["daily_loss_limit"]) or None,
             "min_confidence_for_a_buy": float(p["min_confidence"]) or None,
             "maker_fee_pct": 0,
+            "backtested_regime_ok": ta.regime_ok(tf),
         }
+        swing = ta.swing_stop(c60, price, ta.atr(c5))
+        if swing:
+            swing = {k: (_round(v, price) if isinstance(v, float) and not k.endswith("_pct") else v) for k, v in swing.items()}
+            if float(p["stop_loss"]) > 0 and swing["distance_pct"] > float(p["stop_loss"]):
+                swing["note"] = f"further than the owner's max. stop of {float(p['stop_loss']):g} % – the bot would cap it"
         data = {
             "time": ta.utc(now),
             "woken_by": woken_by or ["scheduled check"],
@@ -568,6 +586,8 @@ class AiStrategy(Strategy):
                 [_round(ta.f(v), price) for v in (c.open, c.high, c.low, c.close)] + [round(ta.f(c.volume), 4)]
                 for c in c5[-12:]
             ],
+            "swing_plan": swing,
+            "backtest": {"summary": ta.EVIDENCE_SUMMARY, "by_setup": ta.PLAYBOOK_EVIDENCE},
             "your_notes": state.get("notes") or None,
             "previous_decision": previous,
             "performance": {
@@ -758,7 +778,8 @@ class AiStrategy(Strategy):
         c15, c60 = ta.closed(raw15, i15, ctx.now), ta.closed(raw60, i60, ctx.now)
         tf = {"5m": ta.timeframe(c5, "5m", price), "15m": ta.timeframe(c15, "15m", price),
               "1h": ta.timeframe(c60, "1h", price)}
-        signals = ta.scan(c5, tf, ta.session(c15, ctx.now, price), price)
+        tf["4h"] = ta.timeframe(ta.closed(*(await ctx.market.candles(240)), ctx.now), "4h", price)
+        signals = ta.scan(c5, tf, ta.session(c15, ctx.now, price), price, position=ctx.position is not None)
         if signals:
             state["trigger"] = {"at": ctx.now, "signals": [s.text for s in signals]}
 

@@ -1,7 +1,12 @@
-"""Market analysis for the AI day trader – what a day trader reads off the charts before deciding, computed from the
+"""Market analysis for the AI swing trader – what a trader reads off the charts before deciding, computed from the
 exchange's candles so that Claude gets the facts precisely (the chart image shows the same data as a picture).
 
 Only closed candles are analysed; the forming candle is left out and the live price comes from the ticker.
+
+The scanner and the stop suggestion follow the backtest on Binance ETH-EUR/BTC-EUR 5-minute candles 2020–2026
+(docs/ki-swingtrader.md): intraday setups with stops at the 5-minute structure lost money in every variant; the same
+setups with a stop below the 1-hour swing low, a 3R target and a 4-hour uptrend with 1-hour ADX ≥ 25 were profitable
+in every two-year period on both coins (hold time about a day).
 """
 
 from __future__ import annotations
@@ -338,9 +343,85 @@ class Signal:
     text: str
 
 
-def scan(c5: list[Candle], tf: dict[str, dict[str, Any]], sess: dict[str, Any], price: float) -> list[Signal]:
-    """Setups worth a closer look by Claude – cheap rules on the closed 5-minute candles. They only wake Claude early;
-    Claude decides whether there is a trade."""
+# the regime in which the playbook setups made money in the backtest: 4 h uptrend and a trending 1 h chart
+REGIME_ADX = 25
+# stop below the last 1 h swing low, a quarter 1 h ATR of air, never inside the 5-minute noise
+STOP_BUFFER_ATR = 0.25
+STOP_MIN_ATR5 = 1.0
+
+# What the backtest says about each setup when traded mechanically with the swing plan (1 h swing stop, 3R target,
+# 4 h uptrend + 1 h ADX ≥ 25, max. stop 5 %): trades 2020-01..2026-09, win rate, average result in R and %.
+# Claude gets this as its starting track record – the live statistics of the bot come on top.
+PLAYBOOK_EVIDENCE: dict[str, dict[str, Any]] = {
+    "trend_pullback": {"eth": {"trades": 172, "win_rate_pct": 27, "avg_r": 0.05, "avg_result_pct": 0.50},
+                       "btc": {"trades": 145, "win_rate_pct": 31, "avg_r": 0.21, "avg_result_pct": 0.64},
+                       "note": "pullback to the 15m EMA20/VWAP in a 1h uptrend – the most frequent setup, solid on both coins"},
+    "momentum": {"eth": {"trades": 90, "win_rate_pct": 31, "avg_r": 0.24, "avg_result_pct": 0.49},
+                 "btc": {"trades": 68, "win_rate_pct": 31, "avg_r": 0.22, "avg_result_pct": 1.14},
+                 "note": "5m close above the 2h high on 1.5x volume with 15m and 1h in an uptrend – best risk-adjusted"},
+    "breakout_24h": {"eth": {"trades": 12, "win_rate_pct": 50, "avg_r": 0.99, "avg_result_pct": 3.52},
+                     "btc": {"trades": 11, "win_rate_pct": 64, "avg_r": 1.54, "avg_result_pct": 4.33},
+                     "note": "5m close above the 24h high on 1.5x volume – the strongest signal, but rare"},
+    "breakout": {"eth": {"trades": 100, "win_rate_pct": 24, "avg_r": -0.07, "avg_result_pct": 0.43},
+                 "btc": {"trades": 67, "win_rate_pct": 24, "avg_r": -0.11, "avg_result_pct": -0.01},
+                 "note": "2h breakout while the 15m chart is not yet in an uptrend – weak, wait for the retest or the 15m trend"},
+    "reversal": {"eth": {"trades": 1689, "win_rate_pct": 30, "avg_r": -0.21, "avg_result_pct": -0.16},
+                 "btc": {"trades": 1775, "win_rate_pct": 31, "avg_r": -0.23, "avg_result_pct": -0.11},
+                 "note": "capitulation buys (15m RSI < 30, reversal candle on 2x volume, intraday plan) lost money "
+                         "with every stop and target tested – only with an exceptional reason"},
+    "range_support": {"eth": {"trades": 3933, "win_rate_pct": 25, "avg_r": -0.40, "avg_result_pct": -0.09},
+                      "btc": {"trades": 4916, "win_rate_pct": 24, "avg_r": -0.53, "avg_result_pct": -0.10},
+                      "note": "buying the lower edge of a range (intraday plan) lost money on both coins – avoid"},
+}
+EVIDENCE_SUMMARY = (
+    "Backtest 2020-2026 (Binance ETH-EUR and BTC-EUR, 5-minute candles, fee-free limit fills, 0.05 % stop slippage): "
+    "every intraday variant – stops at the 5-minute structure or 1.5-3 ATR, targets 1.5-3R, break-even at +1R, "
+    "time exits after a few hours – lost money (about -0.1 R per trade, profit factor 0.6-0.95, roughly 1,600 "
+    "variants per coin). What worked: the same entries held like swing trades – stop below the last 1-hour swing "
+    "low (about 3 % away), target 3R (2.5-4R all fine), only in a 4-hour uptrend with 1-hour ADX >= 25, no "
+    "break-even stop, no trailing stop, no time exit. About 50 trades a year per coin, median hold 18-25 hours, "
+    "win rate 28-31 %, average +0.6-0.75 % per trade (+0.09-0.19 R), profit factor 1.3-1.45, positive in each of "
+    "the three periods 2020-21, 2022-23 and 2024-26 on both coins, worst year 2022 (BTC -39 % of the amount). "
+    "Moving the stop to break-even cut the result by about half; a trailing stop and a time exit after 8 hours "
+    "destroyed it. Compounded: ETH x4.3 and BTC x5.6 over the period at max. drawdown about 50 % of the trade "
+    "amount (holding the coin: ETH x20 / BTC x11 at 77 % drawdown)."
+)
+
+
+def regime_ok(tf: dict[str, dict[str, Any]]) -> bool:
+    """The backtested regime for new longs: 4 h trend up and the 1 h chart trending (ADX14 ≥ 25)."""
+    t4h, t1h = tf.get("4h", {}), tf.get("1h", {})
+    return str(t4h.get("trend", "")).startswith("up") and (t1h.get("adx14") or 0) >= REGIME_ADX
+
+
+def swing_stop(c60: list[Candle], price: float, atr5: float | None) -> dict[str, Any] | None:
+    """The backtested stop: a quarter 1 h ATR below the last confirmed 1 h swing low, at least one 5-minute ATR
+    below the price. Claude may put the stop tighter to a level, but this is the distance that made money."""
+    if len(c60) < 20 or price <= 0:
+        return None
+    _, lows = swings(c60)
+    atr60 = atr(c60)
+    if not lows or not atr60:
+        return None
+    stop = lows[-1][1] - STOP_BUFFER_ATR * atr60
+    if atr5:
+        stop = min(stop, price - STOP_MIN_ATR5 * atr5)
+    if stop >= price:
+        return None
+    distance = (1 - stop / price) * 100
+    return {"stop": stop, "distance_pct": round(distance, 2), "swing_low_1h": lows[-1][1],
+            "target_3r": price * (1 + 3 * distance / 100), "based_on": "last 1h swing low minus 0.25 ATR(1h)"}
+
+
+def scan(c5: list[Candle], tf: dict[str, dict[str, Any]], sess: dict[str, Any], price: float,
+         position: bool = False) -> list[Signal]:
+    """Setups worth a closer look by Claude – cheap rules on the closed 5-minute candles. They only wake Claude
+    early; Claude decides whether there is a trade.
+
+    Only the setups and the regime that made money in the backtest wake Claude for a new long: breakout of the 2 h
+    or 24 h high on volume, a pullback to the 15 min EMA20/VWAP in a 1 h uptrend (judged at a 15-minute close only,
+    which keeps the wake-ups at about 700 a year), all of it only in a 4 h uptrend with 1 h ADX ≥ 25. A breakdown
+    below the 2 h low wakes Claude when a position is open (the stop may need a look)."""
     out: list[Signal] = []
     if len(c5) < 30:
         return out
@@ -350,22 +431,29 @@ def scan(c5: list[Candle], tf: dict[str, dict[str, Any]], sess: dict[str, Any], 
     avg_vol = statistics.fmean(vols) if vols and sum(vols) > 0 else 0
     rel_vol = f(last.volume) / avg_vol if avg_vol else None
     hi, lo = max(f(c.high) for c in prior), min(f(c.low) for c in prior)
-    if f(last.close) > hi and (rel_vol is None or rel_vol >= 1.5):
-        out.append(Signal("breakout", "5m close above the 2 h high" + (f" on {rel_vol:.1f}x volume" if rel_vol else "")))
-    if f(last.close) < lo and (rel_vol is None or rel_vol >= 1.5):
+    if position and f(last.close) < lo and (rel_vol is None or rel_vol >= 1.5):
         out.append(Signal("breakdown", "5m close below the 2 h low" + (f" on {rel_vol:.1f}x volume" if rel_vol else "")))
+    if not regime_ok(tf):
+        return out
+    volume_text = f" on {rel_vol:.1f}x volume" if rel_vol else ""
+    day = c5[-289:-1]
+    if len(day) >= 200 and f(last.close) > max(f(c.high) for c in day) and (rel_vol is None or rel_vol >= 1.5):
+        out.append(Signal("breakout_24h", "5m close above the 24 h high" + volume_text + " in a 4 h uptrend"))
+    elif f(last.close) > hi and (rel_vol is None or rel_vol >= 1.5):
+        t15 = tf.get("15m", {})
+        aligned = t15.get("trend", "").startswith("up") and tf.get("1h", {}).get("trend", "").startswith("up")
+        out.append(Signal("momentum" if aligned else "breakout",
+                          "5m close above the 2 h high" + volume_text
+                          + (" with 15m and 1h in an uptrend" if aligned else " (15m not yet in an uptrend – weaker)")))
     t15, t1h, t5 = tf.get("15m", {}), tf.get("1h", {}), tf.get("5m", {})
     bullish_close = f(last.close) > f(last.open)
-    if t1h.get("trend", "").startswith("up") and not t15.get("trend", "").startswith("down"):
+    at_15m_close = (last.start // 60_000 + 5) % 15 == 0
+    if at_15m_close and t1h.get("trend", "").startswith("up") and not t15.get("trend", "").startswith("down"):
         near_ema = t15.get("ema20_vs_price_pct") is not None and abs(t15["ema20_vs_price_pct"]) <= max(
             0.6 * (t15.get("atr14_pct") or 0), 0.15)
         near_vwap = sess.get("price_vs_vwap_pct") is not None and abs(sess["price_vs_vwap_pct"]) <= 0.2
         if (near_ema or near_vwap) and (t5.get("rsi14") or 50) < 50 and bullish_close:
             out.append(Signal("pullback", "pullback to the 15m EMA20/VWAP in a 1 h uptrend, 5m turning up"))
-    if (t15.get("rsi14") or 50) < 30 and bullish_close and (rel_vol or 0) >= 2:
-        out.append(Signal("capitulation", "15m RSI below 30 and a 5m reversal candle on high volume"))
-    if rel_vol and rel_vol >= 3 and not out:
-        out.append(Signal("volume_spike", f"5m volume {rel_vol:.1f}x the average"))
     return out
 
 

@@ -4,6 +4,38 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.36.0] – 2026-10-09
+
+### Changed
+
+- **The AI day trader becomes the AI swing trader – its rules now come from a backtest** of the playbook on Binance
+  ETH-EUR and BTC-EUR 5-minute candles, January 2020 to September 2026 (details and tables in
+  `docs/ki-swingtrader.md`, formerly `docs/ki-daytrader.md`):
+  - **Intraday lost money in every variant** (about 1,600 per coin): stops at the 5-minute structure or 1.5–3 ATR,
+    targets 1.5–3R, break-even at +1R, time exits after a few hours – all setups ended at about −0.1 R per trade,
+    profit factor 0.6–0.95, no better than slightly above random entries.
+  - **The same entries held like swing trades made money** in each of the periods 2020–21, 2022–23 and 2024–26 on
+    both coins: stop below the last 1-hour swing low (~3 %), target 3R, only in a 4-hour uptrend with 1-hour
+    ADX ≥ 25, no break-even stop, no trailing stop, no time exit. About 50 trades a year, median hold about a day,
+    +0.6–0.75 % per trade, compounded ETH ×4.3 / BTC ×5.6 (holding ×20 / ×11) at about half the drawdown. Still far
+    behind the momentum trend follower (×36 / ×23) – the doc says so.
+  - **Scanner:** wakes Claude only in the backtested regime (4 h trend up, 1 h ADX ≥ 25) and only for the setups
+    that paid – 24-hour-high breakout (new), 2-hour breakout (marked "momentum" when 15 min and 1 h are up, "weaker"
+    otherwise), pullback to the 15 min EMA20/VWAP in a 1 h uptrend (now only at 15-minute closes). Capitulation and
+    volume spikes no longer wake Claude. A breakdown below the 2 h low wakes Claude only while a position is open.
+    About 700 wake-ups a year instead of 6,000.
+  - **Brief:** `swing_plan` with the backtested stop (1 h swing low minus ¼ ATR, at least one 5-minute ATR, hint
+    when beyond the max. stop) and the 3R target, `backtest` with the summary and the record per setup for ETH and
+    BTC, `rules.backtested_regime_ok`.
+  - **Prompt:** swing trader with a day trader's entries – regime first, only the backtested setups, stop below the
+    1 h swing low, target 3R (at least 2.5R), let it run, close early only when the 1 h trend turns while the trade
+    is below +1R; reversal and range-support only with an exceptional reason at 25 % size.
+  - **Defaults:** max. stop-loss 5 % (was 3 % – that cost a third of the result), break-even stop off (was on – it
+    halved the result), API budget 50 $ (was 100 $ – the scanner wakes Claude far less often), minimum gap 15 min
+    (was 5).
+  - The doc states the economics: at about 50 trades a year the backtested edge is roughly +30–40 % of the amount per
+    year, so below about 2,000–3,000 € per trade the API budget eats the result.
+
 ## [1.35.0] – 2026-10-09
 
 ### Changed

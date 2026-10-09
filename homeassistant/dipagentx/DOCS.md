@@ -25,7 +25,7 @@ UI, only the REST API the app talks to (port 3470).
 | `tick_seconds` | `30` | How often the bots check the market. |
 | `taker_fee` | `0.0009` | Fee used for simulated (paper) trades. |
 | `mock_speed` | `1` | Only for `exchange: mock` – time lapse (60 = one market hour per minute). |
-| `anthropic_api_key` | – | Only for the *AI day trader*: Claude trades intraday within a monthly API budget you set on the bot. Key from console.anthropic.com. |
+| `anthropic_api_key` | – | Only for the *AI swing trader*: Claude trades within a monthly API budget you set on the bot. Key from console.anthropic.com. |
 | `log_level` | `info` | `warning` = problems only, `info` = what the bots do, `debug` = also every request to the exchange and from the apps (many thousands of lines a day – only while looking for a problem). |
 
 Live trading, risk limits and bots are managed in the app and stored in the add-on data, not in the options.

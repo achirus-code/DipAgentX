@@ -1,4 +1,4 @@
-"""Candlestick chart for the AI day trader – a PNG that Claude looks at like a trader looks at the screen.
+"""Candlestick chart for the AI swing trader – a PNG that Claude looks at like a trader looks at the screen.
 
 Three panels from top to bottom: 1-hour candles of the last 3 days (the bigger picture), 15-minute candles of the last
 24 h and 5-minute candles of the last 3 h. Each panel shows the EMA20 (orange), EMA50 (blue), the VWAP since 00:00 UTC
