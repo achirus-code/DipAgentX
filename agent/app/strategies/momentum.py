@@ -36,13 +36,15 @@ _closes: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _fetched: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
-async def four_hour_closes(market) -> dict[int, Decimal]:
-    """{candle start: close} of the completed 4-hour candles of the last ``HISTORY_DAYS`` days."""
-    store: dict[int, Decimal] = _closes.setdefault(market.exchange, {}).setdefault(market.symbol, {})
+async def four_hour_closes(market, symbol: str | None = None) -> dict[int, Decimal]:
+    """{candle start: close} of the completed 4-hour candles of the last ``HISTORY_DAYS`` days – of the bot's own pair,
+    or of ``symbol`` (BTC as the brake for another coin)."""
+    symbol = symbol or market.symbol
+    store: dict[int, Decimal] = _closes.setdefault(market.exchange, {}).setdefault(symbol, {})
     fetched = _fetched.setdefault(market.exchange, {})
     last = market.now // STEP_MS * STEP_MS - STEP_MS  # start of the last completed candle
     first = last - HISTORY_DAYS * DAY_MS
-    if store and min(store) <= first and max(store) == last and fetched.get(market.symbol, 0) >= last + STEP_MS + FINAL_AFTER_MS:
+    if store and min(store) <= first and max(store) == last and fetched.get(symbol, 0) >= last + STEP_MS + FINAL_AFTER_MS:
         # complete and the newest candle read well after it closed: nothing new until the next candle closes
         for t in [t for t in store if t < first]:
             del store[t]
@@ -55,11 +57,11 @@ async def four_hour_closes(market) -> dict[int, Decimal]:
     chunk = max(1, min(market.exchange.max_candles, 98) - 2) * STEP_MS
     while since <= last:
         until = min(since + chunk, last + STEP_MS)
-        for c in await market.exchange.candles(market.symbol, 240, since, until - 1):
+        for c in await market.exchange.candles(symbol, 240, since, until - 1):
             if first <= c.start <= last:
                 store[c.start] = c.close
         since = until
-    fetched[market.symbol] = market.now
+    fetched[symbol] = market.now
     for t in [t for t in store if t < first]:
         del store[t]
     return store
@@ -212,6 +214,18 @@ class MomentumStrategy(Strategy):
               min=0, max=100, step=10),
         Param("funding_below", L("Funding threshold (per year)", "Funding-Schwelle (pro Jahr)"), "percent", 2.0,
               L("Normal is about +10 % a year.", "Normal sind etwa +10 % pro Jahr."), min=-50, max=50, step=0.5),
+        Param("btc_brake", L("BTC as a brake", "BTC als Bremse"), "bool", False,
+              L("For coins other than BTC: holds at most as much as BTC's own trend would – the share of BTC's six "
+                "lookbacks that are up (times this coin's volatility factor), or the funding floor if BTC's funding "
+                "shows panic too. A floor from this coin's funding alone no longer counts. Backtest ETH 2020–2026: "
+                "largest drop −29 % instead of −40 %, worst 12 months −19 % instead of −31 %, about 2 points less "
+                "return a year (×43 instead of ×46) – it lags in strong ETH rallies.",
+                "Für andere Coins als BTC: hält höchstens so viel, wie es der Trend von BTC erlauben würde – der "
+                "Anteil der sechs BTC-Zeitfenster, die aufwärts zeigen (mal dem Schwankungsfaktor dieses Coins), oder "
+                "die Funding-Untergrenze, wenn auch BTC-Funding Panik zeigt. Eine Untergrenze nur aus dem Funding "
+                "dieses Coins zählt dann nicht mehr. Backtest ETH 2020–2026: größter Rückgang −29 % statt −40 %, "
+                "schlechteste 12 Monate −19 % statt −31 %, etwa 2 Punkte weniger Rendite pro Jahr (×43 statt ×46) – "
+                "bleibt in starken ETH-Läufen zurück.")),
         Param("inflow_brake", L("Halve on exchange inflows", "Halbieren bei Börsenzuflüssen"), "bool", False,
               L("Halves the position while more coins were sent to the exchanges than withdrawn – more than the "
                 "threshold below of what they hold, over 7 days (Coin Metrics, daily). Helped in the backtests, but "
@@ -305,6 +319,10 @@ class MomentumStrategy(Strategy):
                     parts.append(m("momentum.funding", rate=pct(rate)) if via == "Binance"
                                  else m("momentum.via", text=m("momentum.funding", rate=pct(rate)), source=via))
                     tones.append("good")
+        if p["btc_brake"] and base != "BTC":
+            weight = await self._btc_brake(ctx, st, weight, scale, last, need, parts, tones)
+        else:
+            st.pop("btc_brake", None)
         if p["inflow_brake"]:
             flow = await cryptodata.exchange_inflow(base, market.now)
             if flow is None:
@@ -323,6 +341,40 @@ class MomentumStrategy(Strategy):
         for part in parts[1:]:
             detail = m("momentum.and", a=detail, b=part)
         return level, detail
+
+    async def _btc_brake(self, ctx: Context, st: dict, weight: float, scale: float, last: int, need: int,
+                         parts: list, tones: list) -> float:
+        """At most what BTC's trend allows: the share of BTC's lookbacks that are up times this coin's volatility
+        factor – or the funding floor if BTC's funding shows panic too."""
+        p, market = ctx.params, ctx.market
+        leader = "BTC-" + market.symbol.split("-")[1]
+        try:
+            hb = History(await four_hour_closes(market, leader))
+        except Exception:  # noqa: BLE001 – without BTC's prices the brake is off, the bot keeps trading
+            hb = None
+        if hb is None or not hb.starts or hb.starts[0] > last - need or hb.at(last) is None:
+            parts.append(m("momentum.btc_missing"))
+            tones.append("warn")
+            st.pop("btc_brake", None)
+            return weight
+        bst = st.setdefault("btc", {})
+        update_lookbacks(hb, bst, p, last)
+        up = sum(bst["on"].values())
+        cap = up / len(LOOKBACKS) * scale
+        panic = False
+        if p["funding_floor"] > 0:
+            rate = await cryptodata.funding("BTC", market.now)
+            if rate is not None and rate < p["funding_below"] and p["funding_floor"] / 100 * scale > cap:
+                cap, panic = p["funding_floor"] / 100 * scale, True
+        braking = weight > cap + 1e-9
+        st["btc_brake"] = {"up": up, "cap": round(min(1.0, cap) * 100), "active": braking}
+        if braking:
+            parts.append(m("momentum.btc_brake", up=up, n=len(LOOKBACKS), cap=num(round(min(1.0, cap) * 10) * 10, 0)))
+            tones.append("bad")
+            return cap
+        parts.append(m("momentum.btc_floor" if panic else "momentum.btc_ok", up=up, n=len(LOOKBACKS)))
+        tones.append("good")
+        return weight
 
     async def evaluate(self, ctx: Context) -> Decision:
         p, st, q = ctx.params, ctx.state.setdefault("momentum", {}), ctx.quote
