@@ -81,6 +81,9 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE trades ADD COLUMN position_id TEXT;",
     # 3: how a live order went out – 'limit' (waited as a maker order, no fee) or 'market'; NULL for paper/older
     "ALTER TABLE trades ADD COLUMN order_type TEXT;",
+    # 4: lead-lag monitor – BTC jumps and how ETH-EUR on Revolut X followed (measurement only)
+    "CREATE TABLE IF NOT EXISTS leadlag_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, data TEXT NOT NULL);"
+    "CREATE INDEX IF NOT EXISTS leadlag_at ON leadlag_events(at);",
 ]
 
 DEFAULT_LIMITS: dict[str, Any] = {
@@ -396,6 +399,18 @@ class Database:
 
     def list_ai_decisions(self, bot_id: int, limit: int = 100) -> list[dict[str, Any]]:
         return self._all("SELECT * FROM ai_decisions WHERE bot_id = ? ORDER BY id DESC LIMIT ?", (bot_id, limit))
+
+    def add_leadlag_event(self, at: int, data: dict[str, Any]) -> int:
+        return self._exec("INSERT INTO leadlag_events (at, data) VALUES (?, ?)",
+                          (at, json.dumps({k: v for k, v in data.items() if k != "id"})))
+
+    def update_leadlag_event(self, event_id: int, data: dict[str, Any]) -> None:
+        self._exec("UPDATE leadlag_events SET data = ? WHERE id = ?",
+                   (json.dumps({k: v for k, v in data.items() if k != "id"}), event_id))
+
+    def list_leadlag_events(self, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._all("SELECT id, data FROM leadlag_events ORDER BY at DESC LIMIT ?", (limit,))
+        return [{"id": r["id"], **json.loads(r["data"])} for r in rows]
 
     def list_events(self, bot_id: int | None = None, limit: int = 100) -> list[dict[str, Any]]:
         if bot_id is None:
