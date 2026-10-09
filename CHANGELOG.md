@@ -9,6 +9,9 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 ### Fixed
 
 - **Trade list**: the "No fee" badge (and the other badges) stay on one line instead of wrapping into two.
+- **Fee badge follows the fee Revolut X reported**: a trade with a fee always shows it, "No fee" only appears when
+  there really was none – before, every limit order said "No fee". The trade details call an order with a fee just
+  "Limit order".
 
 ## [1.38.0] – 2026-10-09
 
