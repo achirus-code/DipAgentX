@@ -157,6 +157,49 @@ Prüfungen:
 Fazit: Der kleinere Rückgang ist auf allen geprüften Daten belegt. Ob die Bremse auch mehr Rendite bringt, hängt am
 Zeitraum: 2017–2026 ja, 2020–2026 leicht nein (−2 Punkte pro Jahr). Sie kostet in starken ETH-Läufen (2021, 2025).
 
+### Einstieg an jedem Tag: hält MV6F+ so stabil wie M6F+?
+
+Start eines neuen Bots an jedem Tag, mit dem echten Neustart des Bots (Zeitfenster aus den letzten 14 Tagen
+aufgebaut, auch für BTC), Limit-Orders ohne Gebühr.
+
+EUR, Starts 2020-03 bis 2026-09 (2.385 Starts, mit Funding):
+
+| | im Plus nach 6 Mon. / 1 / 2 / 3 J. | nach 1 J. Median / 5-%-Quantil / schlechtester | tiefster Stand unter Einstand im 1. J. (Median / schlimmster) |
+|---|---|---|---|
+| BTC halten | 63 / 60 / 71 / 100 % | +37 / −54 / −72 % | −21 / −73 % |
+| ETH halten | 60 / 58 / 65 / 76 % | +24 / −56 / −73 % | −29 / −79 % |
+| M6F+ BTC | 74 / 81 / 100 / 100 % | +46 / −15 / −27 % | −8 / −28 % |
+| M6F+ ETH | 72 / 83 / 97 / 100 % | +50 / −13 / −31 % | −8 / −39 % |
+| **MV6F+ ETH** | **80 / 91 / 100 / 100 %** | +51 / **−6** / **−19 %** | −7 / **−29 %** |
+| M6F+ Depot | 74 / 88 / 99 / 100 % | +48 / −9 / −25 % | −6 / −32 % |
+| **MV6F+ Depot** | **81 / 92 / 100 / 100 %** | +46 / **−2** / **−18 %** | −5 / **−25 %** |
+
+USDT, Starts 2017-11 bis 2026-10 (3.263 Starts, mit dem Bärenmarkt 2018):
+
+| | im Plus nach 6 Mon. / 1 / 2 / 3 J. | nach 1 J. Median / 5-%-Quantil / schlechtester | nach 3 J. 5-%-Quantil / schlechtester | tiefster Stand im 1. J. (Median / schlimmster) |
+|---|---|---|---|---|
+| BTC halten | 57 / 63 / 75 / 100 % | +38 / −64 / −83 % | +18 / −10 % | −26 / −83 % |
+| ETH halten | 56 / 55 / 65 / 85 % | +14 / −73 / −92 % | −30 / −55 % | −40 / −94 % |
+| M6F+ ETH | 68 / 84 / 98 / 100 % | +49 / −17 / −49 % | +72 / +28 % | −9 / −49 % |
+| **MV6F+ ETH** | **72 / 84 / 100 / 100 %** | **+60 / −10 / −25 %** | **+83 / +46 %** | −7 / **−37 %** |
+| M6F+ Depot | 69 / 85 / 99 / 100 % | +58 / −18 / −45 % | +92 / +47 % | −8 / −46 % |
+| **MV6F+ Depot** | **74 / 86 / 100 / 100 %** | **+65 / −11 / −31 %** | **+99 / +57 %** | −7 / **−38 %** |
+
+Einstieg genau an ungünstigen Tagen (USDT, ETH-Bot; nach 1 / 2 / 3 Jahren, tiefster Stand im ersten Jahr):
+
+| Einstieg | ETH halten | M6F+ ETH | MV6F+ ETH |
+|---|---|---|---|
+| ETH-Hoch 13.1.2018 | −92 / −90 / −24 %, tief −94 % | −49 / −30 / +308 %, tief −49 % | **−24 / +11 / +559 %, tief −26 %** |
+| Hoch 11.5.2021 | −50 / −57 / −30 %, tief −59 % | +12 / +15 / +79 %, tief −35 % | **+93 / +87 / +215 %, tief −6 %** |
+| ETH-Hoch 9.11.2021 | −77 / −55 / −37 %, tief −81 % | −30 / ±0 / +38 %, tief −30 % | **−14 / +10 / +58 %, tief −15 %** |
+| vor FTX 1.11.2022 | +17 / +60 / +144 %, tief −31 % | −2 / +40 / +229 %, tief −22 % | −2 / +47 / +205 %, tief −14 % |
+| Hoch 11.3.2024 | −53 / −50 %, tief −54 % | −11 / +48 %, tief −28 % | −13 / +45 %, tief −29 % |
+| ETH-Hoch 23.8.2025 | −48 %, tief −68 % | −7 %, tief −34 % | **+3 %, tief −21 %** |
+
+MV6F+ endet bei 47–60 % der Starts vor M6F+ (Median −0,8 bis +4 %). Der Vorteil liegt nicht im Durchschnitt, sondern
+in den schlechten Starts: Das schlechteste Ergebnis nach einem Jahr steigt von −31 auf −19 % (EUR) bzw. von −49 auf
+−25 % (USDT), nach zwei Jahren war bei MV6F+ jeder Start im Plus.
+
 ## 6. Stufe und Zielposition
 
 - Stufe = `round(Gewicht × 10)`, 0 bis 10, mit Pythons `round` (bei genau ,5 zur geraden Zahl). Kaufmännische Rundung
