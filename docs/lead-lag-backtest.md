@@ -146,3 +146,56 @@ werden.
 - Der Rest-Effekt bei Sprüngen ≥ 1 % ist der Erholungsschub an Crash-Tagen. Wer den will, ist mit dem untersuchten
   „Crash-Käufer“ (1-Stunden-Rendite ≤ −3,5 Standardabweichungen, 24 h halten) besser bedient als mit einem Bot, der auf
   die Sekunde reagieren muss.
+
+## 7. Wie könnte er profitabel werden?
+
+Nachgeprüft am 9. Oktober 2026 (Abend), gleiche Daten und Kosten wie oben. Alle Varianten hier wurden **nach** dem
+Ergebnis gesucht (36 Kombinationen aus Richtung, Schwelle, Haltedauer, Marktlage) – also mit Vorsicht lesen.
+
+**Nicht über Nachhinken.** Ohne Kosten (Maker-Orders, kein Spread) bleibt die Variante „≥ 0,7 %, nachgehinkt“ ohne ihre
+fünf besten Trades bei +0,07 % (2021–23) bzw. −0,87 % (2024–26) je Trade. Mehr Tempo bringt nichts (Abschnitt 4).
+Der Filter „Coin hinkt nach“ ist zu streichen, nicht zu verfeinern.
+
+**Was auf den Daten Geld zeigt: große BTC-Sprünge in Crash-Phasen – in beide Richtungen.** Regel: BTC-USDT bewegt
+sich in einer Minute um mindestens 1,5 % (egal ob rauf oder runter), **und** BTC steht mindestens 8 % unter seinem
+7-Tage-Hoch; dann den Coin zum nächsten Kurs kaufen und 60 Minuten halten, kein enger Stop. Ohne die Crash-Bedingung
+(„ruhige Lage“) bleibt von allem fast nichts (+0,1 bis +0,4 %, ohne Top-Trades negativ).
+
+ETH-EUR 2021–2026, 5.000 € je Trade, Kosten 0,28 %:
+
+| Regel | Trades/Jahr | netto je Trade | ohne die 5 besten | Gewinnquote | t-Wert | €/Jahr | Jahre |
+|---|---|---|---|---|---|---|---|
+| BTC **−1,5 %** in 1 min, Crash-Phase, 60 min | 9 | **+1,62 %** | +0,81 % | 74 % | 3,2 | +750 | 2021 +1,8 · 2022 −0,3 · 2023 +1,0 · 2024 +3,2 · 2025 +3,4 · 2026 +5,9 (1 Trade) |
+| dito, 4 h halten | 9 | +2,02 % | +1,05 % | 70 % | 3,3 | +870 | 2022 +0,7, sonst alle positiv |
+| BTC **+1,5 %** in 1 min, Crash-Phase, 60 min | 12 | +1,52 % | +0,82 % | 55 % | 3,1 | +940 | alle positiv außer 2026 (2 Trades, −0,1) |
+| BTC ±1,0 %, Crash-Phase, 60 min | 57 | +0,61 % | +0,43 % | 56 % | 3,2 | +1.730 | 2022 −0,4, sonst positiv; größter Rückgang −2.700 € |
+| BTC −1,5 %, Crash-Phase, 60 min, Stop 3 % | 10 | +1,42 % | +0,45 % | 64 % | 2,2 | +740 | Stop kostet auch hier |
+| zum Vergleich: ±1,0 %, **ruhige Lage**, 60 min | 19 | +0,08 % / −0,11 % | negativ | 48 % | 0,5 / −0,6 | ≈ 0 | – |
+
+Auf den Sekundendaten (Oktober 2025 bis September 2026, rollierendes 60-s-Fenster) zeigt sich dasselbe: nach BTC
+−1,0 % in 60 s steigt ETH-EUR in der nächsten Stunde um +1,66 % (23 Fälle), nach +1,0 % um +0,36 % (45 Fälle);
+unter 1 % bleibt nichts.
+
+**Dieselbe Regel auf anderen Coins** (BTC −1,5 % in Crash-Phase, 60 min): 2021–26 ETH-USDT +1,33 %, BTC-EUR +0,85 %;
+2024–26 (nur 9 Signale, dieselben Tage) SOL +4,5 %, ADA +3,2 %, SUI +2,8 %, LINK +2,4 %, AVAX +2,4 %, DOGE +2,3 %,
+XRP +1,7 %, LTC +0,3 % – ohne die drei besten Trades noch 8 von 11 positiv. Die Variante „BTC +1,5 %“ lebt bei den
+Altcoins dagegen fast nur vom 10. Oktober 2025 (ein Trade mit +50 bis +120 %, weil die dünnen Binance-EUR-Paare dort
+ins Leere gefallen waren – auf Revolut X so nicht handelbar); ohne ihre Top-Trades bleibt sie bei 0 bis +0,5 %.
+
+**Einordnung.**
+
+- Das ist kein Lead-Lag mehr, sondern der **Erholungsschub nach Flash-Moves in Abwärtsphasen** – der minutengenaue
+  Verwandte des „Crash-Käufers“ aus `docs/daytrading-forschung.md` (1-h-Rendite ≤ −3,5 Standardabweichungen, 24 h
+  halten), der dort vorab angemeldet und auf ungesehenen Daten bestätigt wurde. Diese Variante hier ist nachträglich
+  gefunden; die Bestätigung ist nur, dass sie in 5 von 6 Jahren, in beide Richtungen und auf 10 von 11 Coins hält.
+- **Wenige Trades** (9–12 im Jahr bei 1,5 %, 57 bei 1,0 %), das Geld ist 99 % der Zeit unbeschäftigt; 750–1.700 € im
+  Jahr auf 5.000 € sind 15–35 % auf den Einsatz, aber nur, wenn der Einsatz sonst nichts verpasst.
+- **Ausführung ist leicht**, kein Sekundentempo nötig: der 30-Sekunden-Takt reicht, der Einstieg zum nächsten
+  Minutenkurs ist eingerechnet. Unbekannt bleibt der Revolut-X-Spread in genau diesen Minuten – in Crash-Minuten ist
+  er sicher breiter als die angenommenen 0,1 % je Runde.
+- 2022 (Bärenmarkt mit langen Abwärtswellen) war das schwächste Jahr: Flash-Moves nach unten gingen dort öfter weiter.
+  Ein Jahr wie 2022 kann also leicht ins Minus laufen.
+
+**Falls gebaut:** Strategie „Flash-Move-Käufer“ statt Lead-Lag – Auslöser |BTC 60 s| ≥ 1,5 % aus dem vorhandenen
+Monitor, Bedingung BTC ≥ 8 % unter 7-Tage-Hoch (4-h-Kerzen reichen), Kauf per Market, Verkauf nach 60–240 Minuten,
+kein Stop unter 3 %. Erst Paper, und dort vor allem den Spread in den Signalminuten mitschreiben.
