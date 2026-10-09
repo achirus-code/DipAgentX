@@ -1,5 +1,6 @@
 import calendar
 import math
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -80,7 +81,7 @@ async def test_an_uptrend_buys_the_first_slice():
     s = STRATEGIES["momentum"]
     d = await s.evaluate(ctx(PathExchange(steady(0.003)), amount=1000))
     assert isinstance(d.action, Buy) and d.action.quote_amount == Decimal("100.00")  # 10 % of the capital per trade
-    assert "6 of 6 lookbacks up" in render(d.action.reason, "en") and "target 100 %" in render(d.action.reason, "en")
+    assert "6 of 6 lookbacks up" in render(d.action.reason, "en") and "to 100 % invested" in render(d.action.reason, "en")
     assert "funding rate not available" in render(d.action.reason, "en")  # no data: the floor does nothing
 
 
@@ -122,22 +123,22 @@ async def test_high_volatility_means_less():
     d = await s.evaluate(ctx(PathExchange(choppy(0.003, 0.12)), state=state))
     text = render(d.status if d.action is None else d.action.reason, "en")
     assert "– less" in text
-    target = int(text.split("target ")[1].split(" %")[0])
+    target = int(re.search(r"(?:target|to) (\d+) %", text).group(1))
     assert 0 < target < 100
     d = await s.evaluate(ctx(PathExchange(choppy(0.003, 0.12)), vol_target=0))
-    assert "target 100 %" in render(d.action.reason, "en")
+    assert "to 100 % invested" in render(d.action.reason, "en")
 
 
 async def test_inflow_brake_halves_only_when_switched_on(monkeypatch):
     s = STRATEGIES["momentum"]
     set_data(monkeypatch, inflow=1.5)
     d = await s.evaluate(ctx(PathExchange(steady(0.003)), inflow_brake=True))
-    assert "target 50 %" in render(d.action.reason, "en") and "halved" in render(d.action.reason, "en")
+    assert "to 50 % invested" in render(d.action.reason, "en") and "halved" in render(d.action.reason, "en")
     d = await s.evaluate(ctx(PathExchange(steady(0.003))))
-    assert "target 100 %" in render(d.action.reason, "en")
+    assert "to 100 % invested" in render(d.action.reason, "en")
     set_data(monkeypatch, inflow=None)  # without fresh data the brake does nothing
     d = await s.evaluate(ctx(PathExchange(steady(0.003)), inflow_brake=True))
-    assert "target 100 %" in render(d.action.reason, "en") and "no brake" in render(d.action.reason, "en")
+    assert "to 100 % invested" in render(d.action.reason, "en") and "no brake" in render(d.action.reason, "en")
 
 
 async def test_waits_for_enough_price_history():
@@ -237,7 +238,7 @@ async def test_sells_one_slice_when_the_target_drops_a_step(monkeypatch):
     decisions = [await s.evaluate(ctx(falling, state=state, position=p, amount=1000)) for p in slices]
     sold = [d for d in decisions if isinstance(d.action, Sell)]
     assert len(sold) == 1 and sold[0].action.stop  # one trade per check – also at a loss
-    assert "target 50 %" in render(sold[0].action.reason, "en")
+    assert "to 50 % invested" in render(sold[0].action.reason, "en")
     # the target step didn't change: the position drifts with the price, nothing is traded
     state = {"momentum": {"level": 5}, "positions": [p.to_state() for p in slices]}
     decisions = [await s.evaluate(ctx(falling, state=state, position=p, amount=1000)) for p in slices]
@@ -611,7 +612,7 @@ async def test_btc_brake_caps_eth_by_btcs_trend():
     s = STRATEGIES["momentum"]
     paths = {"ETH-EUR": steady(0.003), "BTC-EUR": steady(-0.003)}
     d = await s.evaluate(ctx(PairExchange(paths)))
-    assert isinstance(d.action, Buy) and "target 100 %" in render(d.action.reason, "en")  # off by default
+    assert isinstance(d.action, Buy) and "to 100 % invested" in render(d.action.reason, "en")  # off by default
     state: dict = {}
     d = await s.evaluate(ctx(PairExchange(paths), state=state, btc_brake=True))
     text = render(d.status, "en")
@@ -619,7 +620,7 @@ async def test_btc_brake_caps_eth_by_btcs_trend():
     assert state["momentum"]["btc_brake"] == {"up": 0, "cap": 0, "active": True}
     rising = {"ETH-EUR": steady(0.003), "BTC-EUR": steady(0.003)}
     d = await s.evaluate(ctx(PairExchange(rising), btc_brake=True))
-    assert "target 100 %" in render(d.action.reason, "en") and "BTC trend 6 of 6 up – no brake" in render(d.action.reason, "en")
+    assert "to 100 % invested" in render(d.action.reason, "en") and "BTC trend 6 of 6 up – no brake" in render(d.action.reason, "en")
 
 
 async def test_btc_brake_drops_an_eth_only_funding_floor(monkeypatch):
@@ -633,14 +634,14 @@ async def test_btc_brake_drops_an_eth_only_funding_floor(monkeypatch):
     set_funding_by_coin(monkeypatch, {"ETH": -5.0, "BTC": -3.0})  # BTC panics too: the floor stays
     d = await s.evaluate(ctx(PairExchange(falling), btc_brake=True))
     reason = render(d.action.reason, "en")
-    assert isinstance(d.action, Buy) and "target 50 %" in reason and "floor stays" in reason
+    assert isinstance(d.action, Buy) and "to 50 % invested" in reason and "floor stays" in reason
 
 
 async def test_btc_brake_is_off_for_btc_and_without_btc_prices():
     s = STRATEGIES["momentum"]
     view = MarketView(PathExchange(steady(0.003)), "BTC-EUR", Ticker(Decimal("2000"), Decimal("2000"), Decimal("2000")), NOW)
     d = await s.evaluate(Context(s.normalize({"btc_brake": True}), None, {}, view))
-    assert "target 100 %" in render(d.action.reason, "en") and "BTC trend" not in render(d.action.reason, "en")
+    assert "to 100 % invested" in render(d.action.reason, "en") and "BTC trend" not in render(d.action.reason, "en")
     d = await s.evaluate(ctx(PairExchange({"ETH-EUR": steady(0.003)}), btc_brake=True))
     reason = render(d.action.reason, "en")
-    assert "target 100 %" in reason and "BTC prices not available – no BTC brake" in reason
+    assert "to 100 % invested" in reason and "BTC prices not available – no BTC brake" in reason

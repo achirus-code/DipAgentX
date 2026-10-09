@@ -165,7 +165,7 @@ public struct FeeBadge: View {
 
     public var body: some View {
         if trade.orderType == "limit" {
-            Badge(text: "LIMIT · NO FEE", color: .green, icon: "checkmark")
+            Badge(text: "NO FEE", color: .green, icon: "checkmark")
         } else if trade.fee >= 0.005 {
             Badge(text: "FEE \(Fmt.money(trade.fee, trade.quote))", color: .orange)
         }

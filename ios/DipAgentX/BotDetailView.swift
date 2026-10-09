@@ -261,8 +261,8 @@ struct BotDetailView: View {
     private var activity: some View {
         if !events.isEmpty {
             Section("Activity") {
-                ForEach(events.prefix(5)) { EventRow(event: $0) }
-                if events.count > 5 {
+                ForEach(events.prefix(6)) { EventRow(event: $0) }
+                if events.count > 6 {
                     NavigationLink {
                         List(events) { EventRow(event: $0) }.navigationTitle("Activity")
                     } label: {

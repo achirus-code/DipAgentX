@@ -266,6 +266,7 @@ public struct TradeDetailPanel: View {
                 }
             }
         }
+        why("Why sold")
         section("Sold") {
             row("Time", trade.date.formatted(date: .abbreviated, time: .shortened))
             row("Price", Fmt.price(trade.price, quote))
@@ -275,7 +276,6 @@ public struct TradeDetailPanel: View {
             if let type = trade.orderType {
                 row("Order", type == "limit" ? String(localized: "Limit order (no fee)") : String(localized: "Market order"))
             }
-            reason(trade)
         }
         section("Bought") {
             if buys.isEmpty {
@@ -304,6 +304,7 @@ public struct TradeDetailPanel: View {
         let sales = links.salesOfBuy[trade.id] ?? []
         let open = links.unsold[trade.id] ?? 0
         let shares = sales.map { share(of: $0) }
+        why("Why bought")
         section("Bought") {
             row("Time", trade.date.formatted(date: .abbreviated, time: .shortened))
             row("Price", Fmt.price(trade.price, quote))
@@ -313,7 +314,6 @@ public struct TradeDetailPanel: View {
             if let type = trade.orderType {
                 row("Order", type == "limit" ? String(localized: "Limit order (no fee)") : String(localized: "Market order"))
             }
-            reason(trade)
         }
         section("Sold") {
             if sales.isEmpty {
@@ -370,15 +370,18 @@ public struct TradeDetailPanel: View {
         .font(.ui(11.5))
     }
 
+    /// The reason the bot gave for this trade, as its own section right below the result.
     @ViewBuilder
-    private func reason(_ trade: Trade) -> some View {
+    private func why(_ title: LocalizedStringKey) -> some View {
         if !trade.reason.isEmpty {
-            Text(verbatim: trade.reason)
-                .font(.ui(11)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.04)))
+            section(title) {
+                Text(verbatim: trade.reason)
+                    .font(.ui(11.5))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.04)))
+            }
         }
     }
 
@@ -409,7 +412,11 @@ public struct TradeDetailPanel: View {
             }
             row(other.isBuy ? "Amount" : "Proceeds", Fmt.money(other.quoteAmount, other.quote))
             row("Fee", Fmt.money(other.fee, other.quote))
-            reason(other)
+            if !other.reason.isEmpty {
+                Text(verbatim: other.reason)
+                    .font(.ui(11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(9)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05)))

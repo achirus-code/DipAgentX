@@ -450,7 +450,7 @@
 "Filter" = "Filter";
 "Opened trades %@" = "Eröffnete Trades %@";
 "Entry %@" = "Einstieg %@";
-"LIMIT · NO FEE" = "LIMIT · OHNE GEBÜHR";
+"NO FEE" = "OHNE GEBÜHR";
 "FEE %@" = "GEBÜHR %@";
 "Order" = "Order";
 "Limit order (no fee)" = "Limit-Order (ohne Gebühr)";
@@ -481,3 +481,5 @@
 "Green" = "Grün";
 "Red" = "Rot";
 "Orange" = "Orange";
+"Why sold" = "Warum verkauft";
+"Why bought" = "Warum gekauft";

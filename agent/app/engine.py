@@ -1159,7 +1159,9 @@ class Engine:
             more_amount = amount_total - Decimal(str(booked["amount"]))
             more_fee = max(fee_in_quote - Decimal(str(booked["fee"])), Decimal(0))
             late_id = f"{order_id}#{int(booked['n']) + 1}"
-            reason = m("engine.late_fill", id=order_id)
+            # the rest of the order was placed for the same reason as its first part
+            original = self.db.reason_for_order(order_id)
+            reason = m("engine.late_fill_of", reason=original) if original else m("engine.late_fill", id=order_id)
             if check["side"] == "sell" and (position := find_position(state, check.get("position_id"))):
                 status = self._record_sell(bot, state, pair, more_qty, more_amount, r.avg_price, more_fee, late_id, False,
                                            reason, position_id=position.id)

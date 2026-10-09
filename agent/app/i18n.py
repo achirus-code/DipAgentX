@@ -387,10 +387,11 @@ CATALOG: dict[str, L] = {
         "Target {target} % ({amount}), invested {invested} % ({have}) – sells trades down to the target",
         "Ziel {target} % ({amount}), investiert {invested} % ({have}) – verkauft Trades bis zum Ziel"),
     "momentum.buying": L("Raising to {target} % – buying", "Aufstocken auf {target} % – kaufe"),
-    "momentum.buy_reason": L("target {target} % · {detail}", "Ziel {target} % · {detail}"),
+    "momentum.buy_reason": L("Target raised to {target} % invested · {detail}",
+                             "Ziel auf {target} % investiert erhöht · {detail}"),
     "momentum.selling": L("Lowering to {target} % – selling a trade", "Reduzieren auf {target} % – verkaufe einen Trade"),
-    "momentum.sell_reason": L("target {target} % · {detail} · result {profit}",
-                              "Ziel {target} % · {detail} · Ergebnis {profit}"),
+    "momentum.sell_reason": L("Target lowered to {target} % invested – selling down to it · {detail} · result {profit}",
+                              "Ziel auf {target} % investiert gesenkt – verkauft bis dorthin · {detail} · Ergebnis {profit}"),
     "momentum.trend": L("trend: {up} of {n} lookbacks up", "Trend: {up} von {n} Zeitfenstern aufwärts"),
     "momentum.funding_down": L(
         "⚠ No funding rate from Binance or Bybit for {since} – the floor is off (the trend still trades)",
@@ -442,6 +443,7 @@ CATALOG: dict[str, L] = {
     ),
     "engine.order_booked": L("Order already booked", "Order bereits verbucht"),
     "engine.late_fill": L("Late fill of order {id}", "Nachträgliche Ausführung von Order {id}"),
+    "engine.late_fill_of": L("{reason} (rest of the order, filled later)", "{reason} (Rest der Order, später ausgeführt)"),
     "engine.holdings_mismatch": L(
         "Books don't match the exchange: {booked} {base} booked, {held} {base} on the exchange · trading paused. "
         "“Sell position now” sells what is there and writes off the rest.",

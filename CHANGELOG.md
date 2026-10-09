@@ -11,6 +11,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   momentum follower.
 - **Menu bar icon with an open trade** (macOS): the circle is a bit larger (full icon height), so it no longer looks
   smaller than the idle chart; the Revolut X stays the same and overlaps it.
+- **Trade list**: a limit order's badge just says "No fee" (was "Limit · no fee").
+- **Trade details say why**: the bot's reason gets its own "Why sold" / "Why bought" section right below the result.
+  The momentum follower spells it out ("Target lowered to 30 % invested – selling down to it · …"), and the rest of an
+  order that filled later keeps the original reason instead of only "Late fill of order …".
+- **Activity** in the bot details (macOS): shows six entries and scrolls for the rest; the iPhone shows six before
+  "Show all".
 
 ## [1.37.0] – 2026-10-09
 

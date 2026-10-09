@@ -310,6 +310,8 @@ struct BotDetailView: View {
     let botId: Int
     let open: (Route?) -> Void
     @State private var events: [BotEvent] = []
+    /// Measured heights of the activity rows – the first six set the height of the scrolling list.
+    @State private var eventHeights: [Int: CGFloat] = [:]
     @State private var decisions: [AiDecision] = []
     @State private var error: String?
     /// "Sell position now" failed (for this trade id, or "position") – only then "discard without a sale" is offered.
@@ -589,29 +591,48 @@ struct BotDetailView: View {
 
     private var quoteCurrency: String { store.bots.first { $0.id == botId }?.quoteCurrency ?? "EUR" }
 
+    /// The bot's events: six visible, the rest scrolls inside the card.
     @ViewBuilder
     private var activity: some View {
         if !events.isEmpty {
+            let spacing: CGFloat = 8
+            let visible = Self.visibleEvents
+            let scrolls = events.count > visible
+            let height = (0..<min(visible, events.count)).reduce(0) { $0 + (eventHeights[$1] ?? 28) }
+                + spacing * CGFloat(min(visible, events.count) - 1)
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("Activity")
                 Card {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(events.prefix(12)) { event in
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: icon(for: event.level))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(color(for: event.level))
-                                    .frame(width: 12)
-                                    .padding(.top, 1)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(event.message).font(.system(size: 10.5)).fixedSize(horizontal: false, vertical: true)
-                                    Text(Date(ms: event.createdAt).formatted(date: .abbreviated, time: .shortened))
-                                        .font(.system(size: 9.5)).foregroundStyle(.tertiary)
-                                }
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: spacing) {
+                            ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                                eventRow(event)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { eventHeights[index] = $0 }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .scrollDisabled(!scrolls)
+                    .scrollIndicators(scrolls ? .automatic : .hidden)
+                    .frame(height: height)
                 }
+            }
+        }
+    }
+
+    private static let visibleEvents = 6
+
+    private func eventRow(_ event: BotEvent) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon(for: event.level))
+                .font(.system(size: 10))
+                .foregroundStyle(color(for: event.level))
+                .frame(width: 12)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(event.message).font(.system(size: 10.5)).fixedSize(horizontal: false, vertical: true)
+                Text(Date(ms: event.createdAt).formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
             }
         }
     }
