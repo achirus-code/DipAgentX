@@ -397,7 +397,7 @@ class Engine:
 
         _, quote = split_symbol(bot["symbol"])
         params = strategy.normalize(bot["params"])
-        maker = self._maker_until(params, state)
+        maker = self._maker_until(params, state, strategy.limit_only)
 
         def context(position: Position | None) -> Context:
             return Context(params, position, state, view, quote, self.sell_fee_rate(bot),
@@ -509,19 +509,26 @@ class Engine:
         self.db.add_event(bot["id"], "info", status)
         return status
 
-    def _maker_until(self, params: dict, state: dict) -> int | None:
+    def _maker_until(self, params: dict, state: dict, limit_only: bool = False) -> int | None:
         """Until when a strategy's live orders go out as fee-free limit orders – None: market orders (switched off,
         the exchange can't, or the waiting time is used up).
 
         The waiting time counts once per rebalancing, from its first order: all orders until the bot holds its target
         share again (e.g. several slices) share it, and whatever is left after it goes out at market – so a step is
-        never delayed by more than the waiting time. A check that sends no order ends the rebalancing."""
+        never delayed by more than the waiting time. A check that sends no order ends the rebalancing.
+        ``limit_only``: never at market – after the waiting time a new one starts (the unfilled order was cancelled)."""
         state.pop("taker_from", None)  # the 30-minute market pause of 1.31–1.33
-        if not params.get("maker_orders") or not self.exchange.supports_limit:
+        if not (params.get("maker_orders") or limit_only) or not self.exchange.supports_limit:
             state.pop("maker_until", None)
             return None
-        until = state.setdefault("maker_until", now_ms() + max(1, int(params.get("maker_wait") or 10)) * 60_000)
-        return until if now_ms() < until else None
+        wait = max(1, int(params.get("maker_wait") or 10)) * 60_000
+        until = state.setdefault("maker_until", now_ms() + wait)
+        if now_ms() < until:
+            return until
+        if limit_only:
+            state["maker_until"] = now_ms() + wait
+            return state["maker_until"]
+        return None
 
     def _waiting_status(self, bot: dict, pending: dict) -> Message:
         limit = pending.get("limit")
@@ -529,7 +536,13 @@ class Engine:
             return m("engine.waiting_for_order")
         _, quote = split_symbol(bot["symbol"])
         until = datetime.fromtimestamp(int(limit["until"]) / 1000).strftime("%H:%M")
-        return m("engine.limit_waiting", price=money(Decimal(limit["price"]), quote), until=until)
+        key = "engine.limit_waiting_only" if self._limit_only(bot) else "engine.limit_waiting"
+        return m(key, price=money(Decimal(limit["price"]), quote), until=until)
+
+    @staticmethod
+    def _limit_only(bot: dict) -> bool:
+        strategy = STRATEGIES.get(bot["strategy"])
+        return bool(strategy and strategy.limit_only)
 
     async def _sell_unless_loss(self, bot: dict, state: dict, view: MarketView, position: Position, sell: Sell,
                                 quote: str, maker: int | None = None) -> tuple[bool, Message]:
@@ -930,7 +943,8 @@ class Engine:
                 self.db.update_bot(bot["id"], state=state)
                 if limit_price is not None:  # e.g. post-only would have crossed the book: the next check tries again
                     log.info("Bot %s: limit order refused: %s", bot["name"], exc)
-                    self.db.add_event(bot["id"], "info", m("engine.limit_refused_event", side=m(f"side.{side}"),
+                    key = "engine.limit_refused_event_only" if self._limit_only(bot) else "engine.limit_refused_event"
+                    self.db.add_event(bot["id"], "info", m(key, side=m(f"side.{side}"),
                                                            error=as_message(exc)))
                     return None
                 raise
@@ -1194,7 +1208,8 @@ class Engine:
             # anew at the new price) – no error, and no re-reading for a missing fill (it was cancelled on purpose)
             state["fill_checked"] = r.order_id
             if r.filled_qty <= 0 and not moving:
-                msg = m("engine.limit_not_filled", price=money(Decimal(limit["price"]), pair.quote))
+                key = "engine.limit_not_filled_only" if self._limit_only(bot) else "engine.limit_not_filled"
+                msg = m(key, price=money(Decimal(limit["price"]), pair.quote))
                 self.db.add_event(bot["id"], "info", msg)
                 return msg
         if r.filled_qty <= 0:

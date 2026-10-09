@@ -157,18 +157,25 @@ public enum ParamNotes {
             (template(Fmt.money(value, quote, signed: true)), value > 0 ? .profit : .orange)
         }
         switch (strategyKey, key) {
-        case ("ai", "model"):
-            // rough Anthropic list prices for ~800 input and 600–2,000 output tokens per check
-            let perCheck: Double
-            switch values["model"]?.string ?? "claude-sonnet-5" {
-            case "claude-opus-5": perCheck = 0.04
-            case "claude-haiku-4-5": perCheck = 0.008
-            default: perCheck = 0.015
+        case ("ai", "budget"):
+            // rough Anthropic list prices for ~2,000 input tokens and the thinking + answer of one check
+            var perCheck: Double
+            switch values["model"]?.string ?? "claude-fable-5-1" {
+            case "claude-opus-5-5": perCheck = 0.03
+            case "claude-sonnet-5-5": perCheck = 0.015
+            case "claude-haiku-5-5": perCheck = 0.001
+            default: perCheck = 0.07
             }
-            let interval = max(num("ai_interval") ?? 30, 1)
-            let perMonth = perCheck * 43_200 / interval
+            switch values["effort"]?.string ?? "low" {
+            case "medium": perCheck *= 1.8
+            case "high": perCheck *= 3
+            default: break
+            }
+            if values["news"]?.bool == true { perCheck *= 3 }
+            let budget = max(num("budget") ?? 100, 1)
+            let interval = max(43_200 * perCheck / budget, num("ai_interval") ?? 5)
             let cents = (perCheck * 100).formatted(.number.precision(.fractionLength(0...1)))
-            return (String(localized: "≈ \(cents) ct per check · ≈ \(Fmt.money(perMonth, quote)) per month at every \(Fmt.number(interval)) min"), .secondary)
+            return (String(localized: "≈ \(cents) ct per check · the budget allows about one check every \(Fmt.number(interval.rounded())) min"), .secondary)
         case ("dip", "take_profit"):
             guard let pct = num(key), pct > 0 else { return nil }
             return profit(net(pct)) { String(localized: "Planned profit ≈ \($0) after fees") }

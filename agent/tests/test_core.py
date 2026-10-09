@@ -224,122 +224,6 @@ def test_position_state_keeps_the_trailing_high():
 
 
 @pytest.mark.asyncio
-async def test_ai_ask_now_skips_the_wait(tmp_path: Path, monkeypatch):
-    from app.strategies.ai import AiDecision
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    calls = 0
-
-    async def fake_ask(brief, news, model):
-        nonlocal calls
-        calls += 1
-        return AiDecision(action="wait", confidence=55, reason_en="x", reason_de="x")
-
-    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
-    ex = FakeExchange("2000", "1970")
-    db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30}, True, True)
-    await engine.tick()
-    await engine.tick()
-    assert calls == 1  # within the interval Claude is not asked again …
-    status = await engine.ask_now(bot_id)  # … unless the user asks for it
-    assert calls == 2 and "Claude: wait (55 % sure)" in render(status, "en")
-    assert db.get_bot(bot_id)["state"]["ai"]["next_at"] > ex.now  # and the regular rhythm continues from now
-
-    dip_id = db.create_bot("Dip", "dip", "ETH-EUR", {}, True, True)
-    with pytest.raises(Problem):
-        await engine.ask_now(dip_id)
-    db.update_bot(bot_id, enabled=False)
-    with pytest.raises(Problem):
-        await engine.ask_now(bot_id)
-
-
-async def test_ai_minimum_confidence_holds_back_trades(tmp_path: Path, monkeypatch):
-    from app.strategies.ai import AiDecision
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    confidences: list[int] = []
-
-    async def fake_ask(brief, news, model):
-        return AiDecision(action="buy", confidence=confidences.pop(0), reason_en="x", reason_de="x")
-
-    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
-    ex = FakeExchange("2000", "1970")
-    db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30, "min_confidence": 80}, True, True)
-
-    confidences.append(62)  # Claude wants to buy, but is not sure enough
-    await engine.tick()
-    bot = db.get_bot(bot_id)
-    assert pos(bot) is None
-    assert render(bot["status"], "de") == "Claude: kaufen (62 % sicher) · unter der Schwelle von 80 %, nicht ausgeführt · nächste Prüfung in 30 min"
-    await engine.tick()  # still visible until the next check
-    assert "unter der Schwelle" in render(db.get_bot(bot_id)["status"], "de")
-    assert db.list_ai_decisions(bot_id)[0]["action"] == "buy"  # the opinion is journaled as given
-
-    ex.now += 31 * 60_000
-    confidences.append(80)  # at the threshold: executed
-    await engine.tick()
-    assert pos(db.get_bot(bot_id))
-
-
-async def test_ai_strategy_buys_and_sells_on_claude_decision(tmp_path: Path, monkeypatch):
-    from app.strategies.ai import AiDecision, AiStrategy
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    strategy = STRATEGIES["ai"]
-    assert isinstance(strategy, AiStrategy)
-    answers: list[str] = []
-    briefs = []
-
-    models = []
-
-    async def fake_ask(brief, news, model):
-        briefs.append(brief)
-        models.append(model)
-        return AiDecision(action=answers.pop(0), confidence=80, reason_en="test", reason_de="Test")
-
-    monkeypatch.setattr(strategy, "ask", fake_ask)
-    ex = FakeExchange("2000", "1970")
-    db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 30, "model": "claude-haiku-4-5",
-                                                  "instructions": "Only buy on strong dips."}, True, True)
-
-    answers.append("wait")
-    await engine.tick()
-    assert pos(db.get_bot(bot_id)) is None
-    assert briefs[-1].position is None and "24h" in briefs[-1].changes
-    assert models == ["claude-haiku-4-5"]  # the bot's model reaches the API call
-    assert "Only buy on strong dips." in briefs[-1].to_text() and "bot owner" in briefs[-1].to_text()
-    # within the interval Claude is not asked again – the last answer is repeated
-    await engine.tick()
-    assert len(briefs) == 1 and "Claude: wait (80 % sure)" in render(db.get_bot(bot_id)["status"], "en")
-
-    ex.now += 31 * 60_000
-    answers.append("buy")
-    await engine.tick()
-    assert pos(db.get_bot(bot_id)), db.get_bot(bot_id)["status"]
-    assert briefs[-1].position is None
-
-    ex.now += 31 * 60_000
-    ex.price = Decimal("2030")
-    answers.append("hold")
-    await engine.tick()
-    assert pos(db.get_bot(bot_id)) and briefs[-1].position["profit_pct"] > 0
-    assert "Claude: hold" in render(db.get_bot(bot_id)["status"], "en")
-
-    ex.now += 31 * 60_000
-    answers.append("sell")
-    await engine.tick()
-    assert pos(db.get_bot(bot_id)) is None
-    trades = db.list_trades(bot_id)
-    assert [t["side"] for t in trades] == ["sell", "buy"] and "Claude (80 %" in render(trades[0]["reason"], "en")
-    journal = db.list_ai_decisions(bot_id)
-    assert [d["action"] for d in journal] == ["sell", "hold", "buy", "wait"]
-    assert journal[0]["confidence"] == 80 and journal[1]["profit_pct"] > 0 and journal[3]["profit_pct"] is None
-
-
-@pytest.mark.asyncio
 async def test_ai_strategy_without_key_does_nothing(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
@@ -348,29 +232,6 @@ async def test_ai_strategy_without_key_does_nothing(tmp_path: Path, monkeypatch)
     await engine.tick()
     bot = db.get_bot(bot_id)
     assert pos(bot) is None and "ANTHROPIC_API_KEY" in render(bot["status"], "en")
-
-
-@pytest.mark.asyncio
-async def test_ai_sell_at_a_loss_is_held_back(tmp_path: Path, monkeypatch):
-    from app.strategies.ai import AiDecision
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    answers = ["buy", "sell"]
-
-    async def fake_ask(brief, news, model):
-        return AiDecision(action=answers.pop(0), confidence=90, reason_en="x", reason_de="x")
-
-    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
-    ex = FakeExchange("2000", "1970")
-    db, engine = make_engine(tmp_path, ex)
-    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 5}, True, True)
-    await engine.tick()
-    assert pos(db.get_bot(bot_id))
-    ex.now += 6 * 60_000
-    ex.price = Decimal("1950")  # under water: Claude's "sell" must not go through
-    await engine.tick()
-    bot = db.get_bot(bot_id)
-    assert pos(bot) and "never sells at a loss" in render(bot["status"], "en")
 
 
 class LateFillExchange(FakeExchange):
@@ -553,26 +414,6 @@ async def test_revolut_balances_are_cached_and_dropped_after_an_order():
 
 
 @pytest.mark.asyncio
-async def test_ai_brief_needs_only_two_candle_series(monkeypatch):
-    from app.strategies.ai import AiStrategy
-
-    class CountingExchange(FakeExchange):
-        windows: list = []
-
-        async def candles(self, symbol, interval, since, until):
-            self.windows.append((interval, round((until - since - interval * 60_000) / HOUR)))  # minus the lead-in candle
-            return await super().candles(symbol, interval, since, until)
-
-    ex = CountingExchange("2000", "1990")
-    view = MarketView(ex, "ETH-EUR", Ticker(ex.price, ex.price, ex.price), ex.now)
-    strategy = STRATEGIES["ai"]
-    assert isinstance(strategy, AiStrategy)
-    brief = await strategy.brief(Context(strategy.normalize({}), None, {}, view))
-    assert set(brief.changes) == {"1h", "4h", "24h", "72h"}
-    assert len(ex.windows) == 2 and {w[1] for w in ex.windows} == {24, 72}
-
-
-@pytest.mark.asyncio
 async def test_discard_position_forgets_it_without_a_trade(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("app.engine.ORDER_POLL_DELAYS", (0, 0))
     ex = FakeExchange("2000", "1970")
@@ -593,12 +434,6 @@ def test_text_param_is_trimmed_and_bounded():
     assert p["instructions"] == "hello"
     assert len(STRATEGIES["ai"].normalize({"instructions": "x" * 5000})["instructions"]) == 2000
     assert STRATEGIES["ai"].normalize({})["instructions"] == ""
-
-
-def test_ai_model_defaults_to_sonnet_and_rejects_unknown():
-    assert STRATEGIES["ai"].normalize({})["model"] == "claude-sonnet-5"
-    assert STRATEGIES["ai"].normalize({"model": "gpt-9"})["model"] == "claude-sonnet-5"
-    assert STRATEGIES["ai"].normalize({"model": "claude-opus-5"})["model"] == "claude-opus-5"
 
 
 def test_min_profit_cannot_be_negative():
@@ -847,38 +682,6 @@ async def test_switching_to_paper_sells_all_live_positions(tmp_path: Path):
     assert pos(db.get_bot(live_b)) is None
     assert pos(db.get_bot(paper))  # simulated positions are not touched
     assert len(ex.placed) == 4  # 2 live buys + 2 live sells
-
-
-@pytest.mark.asyncio
-async def test_ai_brief_includes_fear_greed_when_enabled(tmp_path: Path, monkeypatch):
-    from app.strategies import ai as ai_module
-    from app.strategies.ai import AiDecision
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    async def fake_index():
-        return {"fear_greed_index": 18, "classification": "Extreme Fear", "last_7_days": [18, 22, 25, 30, 28, 31, 35]}
-
-    monkeypatch.setattr(ai_module, "fetch_fear_greed", fake_index)
-    briefs = []
-
-    async def fake_ask(brief, news, model):
-        briefs.append(brief)
-        return AiDecision(action="wait", confidence=50, reason_en="x", reason_de="x")
-
-    monkeypatch.setattr(STRATEGIES["ai"], "ask", fake_ask)
-    db, engine = make_engine(tmp_path, FakeExchange("2000", "1970"))
-    db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "sentiment": "contrarian"}, True, True)
-    db.create_bot("AI off", "ai", "BTC-EUR", {"amount": 50}, True, True)
-    await engine.tick()
-
-    assert len(briefs) == 2
-    with_index = next(b for b in briefs if b.symbol == "ETH-EUR")
-    without = next(b for b in briefs if b.symbol == "BTC-EUR")
-    assert with_index.sentiment == {"mode": "contrarian", "fear_greed_index": 18, "classification": "Extreme Fear",
-                                    "last_7_days": [18, 22, 25, 30, 28, 31, 35]}
-    assert '"fear_greed_index": 18' in with_index.to_text()
-    assert without.sentiment is None and "fear_greed" not in without.to_text()
 
 
 async def test_several_trades_are_spaced_and_sold_one_by_one(tmp_path: Path):

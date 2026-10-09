@@ -394,10 +394,10 @@
       <div class="ai-grid">
         <div>
           <span class="ai-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/></svg><span class="de">Neu · KI-Strategie mit Claude</span><span class="en">New · AI strategy with Claude</span></span>
-          <h2 class="ai-title"><span class="de">Lass Claude entscheiden, wann gekauft und verkauft wird.</span><span class="en">Let Claude decide when to buy and when to sell.</span></h2>
+          <h2 class="ai-title"><span class="de">Claude Fable 5.1 als Daytrader – nur mit Limit-Orders.</span><span class="en">Claude Fable 5.1 as a day trader – limit orders only.</span></h2>
           <p class="muted" style="margin-top:14px;font-size:18px">
-            <span class="de">Die Strategie <strong style="color:var(--text)">KI entscheidet</strong> gibt Claude alle paar Minuten ein Markt-Briefing und lässt es selbst entscheiden: kaufen, warten, halten oder verkaufen – mit einer Sicherheit in Prozent und einer kurzen Begründung in deiner Sprache.</span>
-            <span class="en">The <strong style="color:var(--text)">AI decides</strong> strategy hands Claude a market brief every few minutes and lets it decide for itself: buy, wait, hold or sell – with a confidence in percent and a short reason in your language.</span>
+            <span class="de">Der <strong style="color:var(--text)">KI-Daytrader</strong> gibt Claude ein Intraday-Briefing und lässt es selbst handeln: kaufen oder warten, halten oder verkaufen – jeder Kauf mit Gewinnziel und Stop, die der Bot zwischen zwei Prüfungen alle 30 Sekunden selbst überwacht. Wie oft Claude gefragt wird, richtet sich nach deinem monatlichen API-Budget.</span>
+            <span class="en">The <strong style="color:var(--text)">AI day trader</strong> hands Claude an intraday brief and lets it trade: buy or wait, hold or sell – every buy with a take-profit and a stop that the bot watches every 30 seconds between two checks. How often Claude is asked follows your monthly API budget.</span>
           </p>
 
           <div class="ai-points">
@@ -405,14 +405,14 @@
               <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 5-7 4 5"/><path d="M3 21h18"/></svg></div>
               <div>
                 <h3><span class="de">Was Claude sieht</span><span class="en">What Claude sees</span></h3>
-                <p><span class="de">Kurs, Veränderung über 1 h, 4 h, 24 h und 72 h, Volatilität der letzten Stunden, 24-h-Spanne, Abstand zum 72-h-Hoch und -Tief, die letzten Stundenschlusskurse, Gebühren und die offene Position. Optional dazu der Crypto Fear & Greed Index – als Hintergrund oder als Kontrasignal an Extremen – und ein paar Web-Suchen nach Nachrichten.</span><span class="en">Price, change over 1 h, 4 h, 24 h and 72 h, volatility of the last hours, 24 h range, distance to the 72 h high and low, the last hourly closes, fees and the open position. Optionally the Crypto Fear & Greed index – as background or as a contrarian signal at extremes – and a few web searches for news.</span></p>
+                <p><span class="de">5-Minuten-Kerzen der letzten 3 Stunden, RSI, EMAs, ATR und Bollinger-Lage auf 5- und 15-Minuten-Kerzen, Spread, Veränderungen von 15 Minuten bis 72 Stunden, die 24-/72-h-Spanne, die offene Position mit ihrem Plan und die eigenen letzten Trades mit Ergebnis. Optional der Crypto Fear & Greed Index und ein paar Web-Suchen nach Nachrichten.</span><span class="en">5-minute candles of the last 3 hours, RSI, EMAs, ATR and Bollinger position on 5- and 15-minute candles, the spread, changes from 15 minutes to 72 hours, the 24/72 h range, the open position with its plan and its own recent trades with their results. Optionally the Crypto Fear & Greed index and a few web searches for news.</span></p>
               </div>
             </div>
             <div class="ai-point">
               <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
               <div>
-                <h3><span class="de">Sicherheitsnetz bleibt an</span><span class="en">The safety net stays on</span></h3>
-                <p><span class="de">Claude entscheidet, <em>wann</em> ein Gewinn mitgenommen wird – nicht, ob ein Verlust realisiert wird. Ein Verkauf unter Einstand wird vom Agent zurückgehalten; nur der Stop-Loss des Bots darf im Minus verkaufen. Risikolimits und Paper-Modus gelten wie für jede andere Strategie.</span><span class="en">Claude decides <em>when</em> to take a profit – not whether to realize a loss. A sell below cost is held back by the agent; only the bot's stop-loss may sell at a loss. Risk limits and paper mode apply like for every other strategy.</span></p>
+                <h3><span class="de">Stop immer gesetzt, nur Limit-Orders</span><span class="en">Always a stop, limit orders only</span></h3>
+                <p><span class="de">Jede Position hat einen Stop, der nie weiter weg liegt als dein Max. Stop-Loss und nie gesenkt wird. Gehandelt wird live nur mit gebührenfreien Limit-Orders einen Cent im Spread, die dem Kurs folgen – was nicht ausgeführt wird, wird storniert, nie zum Marktpreis gehandelt. Risikolimits und Paper-Modus gelten wie für jede andere Strategie.</span><span class="en">Every position has a stop that is never further away than your max. stop-loss and never lowered. Live it trades only with fee-free limit orders a cent inside the spread that follow the price – what isn't filled is cancelled, never sent to the market. Risk limits and paper mode apply like for every other strategy.</span></p>
               </div>
             </div>
             <div class="ai-point">
@@ -568,12 +568,12 @@
         </div>
         <div class="card strat ai-strat">
           <div class="icon ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/><path d="M5 16l.6 1.4 1.4.6-1.4.6L5 20l-.6-1.4L3 18l1.4-.6z"/></svg></div>
-          <h3><span class="de">KI entscheidet</span><span class="en">AI decides</span> <a class="mini-link" href="#ai"><span class="de">Details ↓</span><span class="en">Details ↓</span></a></h3>
+          <h3><span class="de">KI-Daytrader</span><span class="en">AI day trader</span> <a class="mini-link" href="#ai"><span class="de">Details ↓</span><span class="en">Details ↓</span></a></h3>
           <dl>
             <dt><span class="de">Kauft</span><span class="en">Buys</span></dt>
-            <dd><span class="de">wenn Claude eine Chance sieht – es betrachtet alle N Minuten Trend, Volatilität der letzten Stunden, Momentum und optional die Nachrichten</span><span class="en">when Claude sees an edge – every N minutes it looks at trend, volatility of the last hours, momentum and optionally the news</span></dd>
+            <dd><span class="de">intraday, wenn Claude ein Setup mit klar besserem Chance-Risiko-Verhältnis sieht – mit Gewinnziel und Stop, als gebührenfreie Limit-Order</span><span class="en">intraday, when Claude sees a setup with a clearly better reward than risk – with take-profit and stop, as a fee-free limit order</span></dd>
             <dt><span class="de">Verkauft</span><span class="en">Sells</span></dt>
-            <dd><span class="de">wenn Claude den Gewinn mitnehmen will – nie im Minus, nur der optionale Stop-Loss darf das. Modell wählbar, jede Prüfung kostet ein paar Cent</span><span class="en">when Claude decides to take the profit – never at a loss, only the optional stop-loss may. Model selectable, every check costs a few cents</span></dd>
+            <dd><span class="de">am Gewinnziel oder Stop (vom Bot alle 30 s überwacht) oder wenn Claude verkauft – nur per Limit-Order. Fable 5.1 als Standard, Prüfungen nach Monatsbudget</span><span class="en">at the take-profit or stop (watched by the bot every 30 s) or when Claude sells – limit orders only. Fable 5.1 by default, checks paced by a monthly budget</span></dd>
           </dl>
         </div>
       </div>
@@ -642,7 +642,7 @@
               <tr><td><code>exchange</code></td><td><code>revolutx</code></td><td><span class="de"><code>mock</code> = simulierter Markt zum Ausprobieren, ganz ohne Revolut X</span><span class="en"><code>mock</code> = simulated market for trying things out, no Revolut X needed</span></td></tr>
               <tr><td><code>tick_seconds</code></td><td><code>30</code></td><td><span class="de">Wie oft die Bots den Markt prüfen</span><span class="en">How often the bots check the market</span></td></tr>
               <tr><td><code>taker_fee</code></td><td><code>0.0009</code></td><td><span class="de">Gebühr für simulierte Paper-Trades</span><span class="en">Fee used for simulated paper trades</span></td></tr>
-              <tr><td><code>anthropic_api_key</code></td><td>–</td><td><span class="de">Nur für die Strategie „KI entscheidet“ – Key von console.anthropic.com</span><span class="en">Only for the “AI decides” strategy – key from console.anthropic.com</span></td></tr>
+              <tr><td><code>anthropic_api_key</code></td><td>–</td><td><span class="de">Nur für den KI-Daytrader – Key von console.anthropic.com</span><span class="en">Only for the AI day trader – key from console.anthropic.com</span></td></tr>
               <tr><td><code>mock_speed</code></td><td><code>1</code></td><td><span class="de">Nur bei <code>mock</code>: Zeitraffer (60 = eine Marktstunde pro Minute)</span><span class="en">Only for <code>mock</code>: time lapse (60 = one market hour per minute)</span></td></tr>
             </tbody>
           </table>

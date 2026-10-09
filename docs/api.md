@@ -40,8 +40,8 @@ curl -H "Authorization: Bearer $TOKEN" -H "Accept-Language: de" http://192.168.1
 | POST | `/bots/{id}/close?position_id=` | Einen Trade oder alle zum Marktpreis verkaufen |
 | POST | `/bots/{id}/discard?position_id=` | Trade ohne Verkauf aus den Büchern nehmen |
 | POST | `/bots/{id}/reset-paper` | Papier-Ergebnis neu starten (nicht mit offener Live-Position) |
-| POST | `/bots/{id}/ask` | Nur „KI entscheidet“: sofort neue Entscheidung holen |
-| GET | `/bots/{id}/decisions?limit=100` | Nur „KI entscheidet“: Claudes Antworten |
+| POST | `/bots/{id}/ask` | Nur KI-Daytrader: sofort neue Entscheidung holen |
+| GET | `/bots/{id}/decisions?limit=100` | Nur KI-Daytrader: Claudes Antworten |
 | GET | `/bots/{id}/hodl` | Nur Momentum: Ergebnis von reinem Halten seit dem Start, alle 4 h – `[{"t", "value"}]` |
 
 Body für `POST`/`PUT /bots`:

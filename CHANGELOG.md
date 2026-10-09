@@ -4,6 +4,27 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.35.0] – 2026-10-09
+
+### Changed
+
+- **"AI decides" becomes the AI day trader on Claude Fable 5.1.** Claude trades the pair intraday: it gets 5-minute
+  candles of the last 3 hours, RSI, EMAs, ATR and Bollinger position on 5- and 15-minute candles, the spread, the
+  24/72 h range, its open position and its own last trades with their results, and decides on buy/wait or hold/sell.
+  Every buy comes with a take-profit and a stop; the bot runs that plan every tick by itself, so a position is
+  protected between two checks. A stop is never lowered and never further away than the new "Max. stop-loss" (3 %).
+  Claude may close a losing trade early (switchable). Models: Fable 5.1 (default), Opus 5.5, Sonnet 5.5, Haiku 5.5;
+  thinking depth selectable. A declined request is retried on Anthropic's recommended fallback model.
+- **Only limit orders:** live orders of the AI day trader go out as fee-free post-only limit orders a cent inside the
+  spread that follow the price, like the momentum bot – but what isn't filled within the waiting time is cancelled
+  instead of going to the market. Stop and take-profit sales too; only "Sell position now" sells at market.
+
+### Added
+
+- **Monthly API budget** for the AI day trader (default 100 $ per bot): the bot measures what every check costs and
+  spreads the rest of the budget evenly over the rest of the month; Claude can ask to look again sooner or later, set
+  price alerts that wake it early, and a large move wakes it too. The status shows what was spent this month.
+
 ## [1.34.0] – 2026-10-08
 
 ### Changed

@@ -311,6 +311,9 @@ class Strategy:
     # > 0 = the strategy manages its trades itself (slices of one position): the engine allows this many, without
     # spacing or min. time between them, and the limits count the bot as one open position
     fixed_trades: int = 0
+    # True = live orders only ever go out as fee-free limit orders: an order that isn't filled within the waiting time
+    # is cancelled and the strategy decides again – never a market order (except a sale by hand)
+    limit_only: bool = False
 
     def normalize(self, raw: dict[str, Any] | None) -> dict[str, Any]:
         raw = raw or {}
