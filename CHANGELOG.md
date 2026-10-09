@@ -4,6 +4,8 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.36.0] – 2026-10-09
+
 ### Added
 
 - **Momentum trend follower: "BTC as a brake"** (off by default, for coins other than BTC). The ETH bot then holds at
@@ -12,6 +14,19 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
   of 6 up – no brake" / "– at most 70 %"). Backtest ETH-EUR 2020-03 to 2026-09: largest drop −29 % instead of −40 %,
   worst 12 months −19 % instead of −31 %, ×43 instead of ×46 – it lags in strong ETH rallies
   (`docs/momentum-trendfolger.md`, section 5a).
+
+## [1.35.1] – 2026-10-09
+
+### Added
+
+- **Lead-lag measurement "does ETH follow BTC?"** – measurement only, never trades. A backtest on Binance found that
+  after BTC-USDT jumps by at least 0.5 % within a minute while ETH-EUR has moved less than half of that, ETH-EUR rises
+  by another 0.4–0.7 % on average within 15 minutes (2021–2026, every year positive). Whether ETH-EUR on Revolut X
+  lags the same way can only be measured live: the agent now polls BTC-USDT, ETH-USDT and ETH-EUR on Binance every
+  2 s (public, no key) and ETH-EUR on Revolut X every 10 s (every 2 s in the minute after a jump, backs off after
+  errors), stores every BTC move of at least 0.3 % in 60 s and ETH-EUR on Revolut X and Binance after 1, 5 and
+  15 minutes. `GET /api/research/leadlag` shows the events and the averages by jump size, including the taker round
+  trip (buy at the ask, sell at the bid). Off with `LEADLAG_MONITOR=0`.
 
 ## [1.35.0] – 2026-10-09
 

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from . import backup
+from . import backup, leadlag
 from .config import load_settings
 from .credentials import CredentialStore
 from .db import Database
@@ -32,7 +32,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.35.0"
+VERSION = "1.36.0"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 
@@ -93,20 +93,36 @@ def swap_exchange(new: Exchange) -> None:
 
 credentials = CredentialStore(settings)
 engine = Engine(db, build_exchange(), settings)
+_leadlag_http = httpx.AsyncClient(timeout=5.0, headers={"User-Agent": "DipAgentX"})
+
+
+async def _revx_eth_quote() -> tuple[float, float] | None:
+    """ETH-EUR bid/ask from the connected exchange – none in demo mode (simulated prices say nothing)."""
+    if engine.exchange.name == "mock":
+        return None
+    t = await engine.exchange.ticker(leadlag.REVX_SYMBOL)
+    return float(t.bid), float(t.ask)
+
+
+leadlag_monitor = leadlag.LeadLagMonitor(db, lambda: leadlag.binance_quotes(_leadlag_http), _revx_eth_quote)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     task = asyncio.create_task(engine.run())
+    monitor = asyncio.create_task(leadlag_monitor.run()) if leadlag.enabled() else None
     if not engine.live_trading_enabled():
         log.warning("Live trading is off – all bots trade simulated (paper trading)")
     yield
     # let a tick that is tracking an order finish (its pending order is persisted either way)
     task.cancel()
+    if monitor:
+        monitor.cancel()
     try:
         await asyncio.wait_for(task, timeout=10)
     except (asyncio.CancelledError, asyncio.TimeoutError):
         pass
+    await _leadlag_http.aclose()
     await engine.shutdown()
     db.close()
 
@@ -578,6 +594,12 @@ async def ai_decisions(bot_id: int, limit: int = Query(100, ge=1, le=500), lang:
         }
         for r in rows
     ]
+
+
+@api.get("/research/leadlag")
+async def leadlag_research(limit: int = Query(50, ge=0, le=1000)) -> dict[str, Any]:
+    """Lead-lag measurement: BTC-USDT jumps and how ETH-EUR on Revolut X followed (no trades)."""
+    return {"enabled": leadlag.enabled(), **leadlag_monitor.summary(), "events": db.list_leadlag_events(limit)}
 
 
 @api.get("/events")
