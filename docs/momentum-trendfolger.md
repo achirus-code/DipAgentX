@@ -109,6 +109,54 @@ Preis: In starken ETH-Läufen bleibt der Bot zurück (2021 +323 % statt +362 %, 
 Ertrag die Bremse kostet, hängt stark von der Funding-Einstellung ab (bei den Standardwerten 7 %, bei einer
 Funding-Schwelle von 0 % fast 30 %). Für den BTC-Bot mit ETH als Bremse lohnte es sich nicht.
 
+### Doppel-Check: M6F+ gegen MV6F+ (M6F+ mit BTC-Bremse)
+
+Nachbau des Bots auf 4-h-Kerzen, Limit-Orders ohne Gebühr. Der BTC-Bot ist in beiden Varianten gleich, die Bremse
+wirkt nur auf ETH. Depot = 3.000 € im ETH-Bot und 2.000 € im BTC-Bot, nicht angeglichen.
+
+ETH-EUR / BTC-EUR, März 2020 bis September 2026, mit Funding:
+
+| | Gewinn | pro Jahr | größter Rückgang | schlechteste 12 Monate | Rendite / Rückgang |
+|---|---|---|---|---|---|
+| BTC halten | +818 % | 40 % | −74 % | −72 % | 0,55 |
+| ETH halten | +1.050 % | 45 % | −77 % | −73 % | 0,58 |
+| M6F+ BTC (= MV6F+ BTC) | +2.297 % | 62 % | −29 % | −27 % | 2,13 |
+| M6F+ ETH | +4.531 % | 79 % | −39 % | −31 % | 2,06 |
+| **MV6F+ ETH** | +4.125 % | 77 % | **−29 %** | **−19 %** | **2,65** |
+| M6F+ Depot | +3.637 % | 74 % | −34 % | −25 % | 2,14 |
+| **MV6F+ Depot** | +3.394 % | 72 % | **−24 %** | **−18 %** | **3,00** |
+
+ETH-USDT / BTC-USDT, November 2017 bis Oktober 2026 (vor September 2019 ohne Funding-Daten, also ohne Untergrenze):
+
+| | Gewinn | pro Jahr | größter Rückgang | schlechteste 12 Monate | Rendite / Rückgang |
+|---|---|---|---|---|---|
+| BTC halten | +1.166 % | 33 % | −83 % | −83 % | 0,40 |
+| ETH halten | +716 % | 27 % | −94 % | −92 % | 0,28 |
+| M6F+ BTC (= MV6F+ BTC) | +8.135 % | 64 % | −53 % | −49 % | 1,21 |
+| M6F+ ETH | +14.006 % | 74 % | −51 % | −49 % | 1,47 |
+| **MV6F+ ETH** | **+18.274 %** | **79 %** | **−37 %** | **−25 %** | **2,16** |
+| M6F+ Depot | +11.657 % | 71 % | −47 % | −46 % | 1,49 |
+| **MV6F+ Depot** | **+14.218 %** | **74 %** | **−37 %** | **−30 %** | **1,99** |
+
+ETH je Jahr (USDT): 2018 −16 % → **+10 %**, 2019 +26 → +39 %, 2020 +312 → +318 %, 2021 +321 → +292 %, 2022 −8 → −1 %,
+2023 +43 → +36 %, 2024 +50 → +57 %, 2025 +81 → +60 %, 2026 +16 → +19 %. Mit Market-Orders (0,12 % je Seite) bleibt
+das Bild gleich (2017–2026: ETH ×111 → ×146, Rückgang −52 → −38 %).
+
+Prüfungen:
+
+- **2017–2019** wurde mit dem echten Bot erstmals gerechnet (ETH +96 % → +180 %, Rückgang −51 → −37 %). Ganz
+  unabhängig ist das nicht: Die Idee kam aus einer Tagesrechnung, die diese Jahre enthielt.
+- **Acht andere Coins**, die nie in einem Test vorkamen (XRP, LTC, ADA, BNB, LINK, DOGE, SOL, DOT, jeweils mit eigenem
+  Funding, ab 2017–2020): Rückgang mit Bremse **bei allen 8 kleiner** (Median 19 Punkte), Rendite bei 6 von 8 höher
+  (Median +7 Punkte pro Jahr), Rendite/Rückgang bei 7 von 8 besser. Ausnahme DOGE (−16 Punkte pro Jahr): Meme-Läufe
+  ohne BTC-Trend verpasst die Bremse.
+- **Block-Bootstrap** ETH 2017–2026 (2.000 Läufe, Blöcke ~60 Tage): Rückgang mit Bremse in 99 % der Läufe kleiner
+  (Median 13 Punkte). Rendite im Median +3 Punkte pro Jahr, aber unsicher (90-%-Band −7 bis +12).
+- **Rollierend:** MV6F+ endet nach 1 / 2 / 3 Jahren in 59 / 53 / 59 % der Starttage vorn.
+
+Fazit: Der kleinere Rückgang ist auf allen geprüften Daten belegt. Ob die Bremse auch mehr Rendite bringt, hängt am
+Zeitraum: 2017–2026 ja, 2020–2026 leicht nein (−2 Punkte pro Jahr). Sie kostet in starken ETH-Läufen (2021, 2025).
+
 ## 6. Stufe und Zielposition
 
 - Stufe = `round(Gewicht × 10)`, 0 bis 10, mit Pythons `round` (bei genau ,5 zur geraden Zahl). Kaufmännische Rundung
