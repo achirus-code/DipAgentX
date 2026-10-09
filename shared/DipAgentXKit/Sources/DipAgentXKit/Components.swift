@@ -148,8 +148,9 @@ public struct Badge: View {
     public var body: some View {
         HStack(spacing: 3) {
             if let icon { Image(systemName: icon).font(.ui(8, weight: .bold)) }
-            Text(text).font(.ui(9.5, weight: .semibold))
+            Text(text).font(.ui(9.5, weight: .semibold)).lineLimit(1)
         }
+        .fixedSize()
         .padding(.horizontal, 6)
         .padding(.vertical, 2.5)
         .foregroundStyle(color)
@@ -157,17 +158,17 @@ public struct Badge: View {
     }
 }
 
-/// What a trade cost: a limit order paid no fee (agent 1.31+), any other trade with a fee shows it.
+/// What a trade cost, as Revolut X reported it: any fee shows, a limit order without one says so (agent 1.31+).
 public struct FeeBadge: View {
     let trade: Trade
 
     public init(trade: Trade) { self.trade = trade }
 
     public var body: some View {
-        if trade.orderType == "limit" {
-            Badge(text: "NO FEE", color: .green, icon: "checkmark")
-        } else if trade.fee >= 0.005 {
+        if trade.fee >= 0.005 {
             Badge(text: "FEE \(Fmt.money(trade.fee, trade.quote))", color: .orange)
+        } else if trade.orderType == "limit" {
+            Badge(text: "NO FEE", color: .green, icon: "checkmark")
         }
     }
 }

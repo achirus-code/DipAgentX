@@ -454,6 +454,7 @@
 "FEE %@" = "GEBÜHR %@";
 "Order" = "Order";
 "Limit order (no fee)" = "Limit-Order (ohne Gebühr)";
+"Limit order" = "Limit-Order";
 "Market order" = "Market-Order";
 "With the bot" = "Mit dem Bot";
 "Only held (HODL)" = "Nur gehalten (HODL)";
