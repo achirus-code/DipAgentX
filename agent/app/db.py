@@ -308,6 +308,17 @@ class Database:
         )
         return row or {"n": 0, "qty": 0.0, "amount": 0.0, "fee": 0.0}
 
+    def reason_for_order(self, order_id: str) -> Any:
+        """Why an exchange order was placed: the reason of its first booked trade (a message, or legacy text)."""
+        row = self._one("SELECT reason FROM trades WHERE order_id = ? ORDER BY id LIMIT 1", (order_id,))
+        reason = (row or {}).get("reason") or ""
+        if isinstance(reason, str) and reason.startswith("{"):
+            try:
+                return json.loads(reason)
+            except ValueError:
+                pass
+        return reason
+
     def add_trade(self, **t: Any) -> int:
         t.setdefault("created_at", now_ms())
         t["reason"] = dump(t.get("reason") or "")
