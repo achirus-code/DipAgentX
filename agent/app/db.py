@@ -408,9 +408,28 @@ class Database:
         self._exec("UPDATE leadlag_events SET data = ? WHERE id = ?",
                    (json.dumps({k: v for k, v in data.items() if k != "id"}), event_id))
 
-    def list_leadlag_events(self, limit: int = 100) -> list[dict[str, Any]]:
-        rows = self._all("SELECT id, data FROM leadlag_events ORDER BY at DESC LIMIT ?", (limit,))
-        return [{"id": r["id"], **json.loads(r["data"])} for r in rows]
+    def list_leadlag_events(self, limit: int = 100, status: str | None = None) -> list[dict[str, Any]]:
+        if status:
+            rows = self._all("SELECT id, data FROM leadlag_events WHERE json_extract(data, '$.status') = ? "
+                             "ORDER BY at DESC LIMIT ?", (status, limit))
+        else:
+            rows = self._all("SELECT id, data FROM leadlag_events ORDER BY at DESC LIMIT ?", (limit,))
+        return [{**json.loads(r["data"]), "id": r["id"]} for r in rows]
+
+    def delete_leadlag_events(self, ids: list[int] | None = None, before: int | None = None) -> int:
+        """Delete the given events, the events before ``before`` (ms) – or all of them when neither is given."""
+        if ids is not None:
+            if not ids:
+                return 0
+            marks = ",".join("?" * len(ids))
+            return self._delete_count(f"DELETE FROM leadlag_events WHERE id IN ({marks})", tuple(ids))
+        if before is not None:
+            return self._delete_count("DELETE FROM leadlag_events WHERE at < ?", (before,))
+        return self._delete_count("DELETE FROM leadlag_events")
+
+    def _delete_count(self, sql: str, args: tuple = ()) -> int:
+        with self._lock:
+            return self._conn.execute(sql, args).rowcount
 
     def list_events(self, bot_id: int | None = None, limit: int = 100) -> list[dict[str, Any]]:
         if bot_id is None:

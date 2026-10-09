@@ -4,6 +4,23 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.35.2] – 2026-10-09
+
+### Changed
+
+- **Lead-lag measurement for more coins:** besides ETH-EUR it now measures BTC-EUR itself (does Revolut X lag the
+  world market?) and SOL, XRP, DOGE, ADA, LINK, AVAX, LTC and SUI against EUR – one Revolut X request and one Binance
+  request for all of them, as before every 10 s / 2 s. Other coins with `LEADLAG_COINS`. The summary shows every coin
+  by jump size and lag, with the key figures (jump ≥ 0.5 %, coin lagged) on top.
+- **The measurement survives restarts:** start of the measurement, number of restarts, error counts and the time of
+  the last jump are stored in the database; events still waiting for their 1/5/15-minute follow-ups are resumed after
+  a restart, or marked "interrupted" when a follow-up fell into the downtime (they don't distort the averages).
+
+### Added
+
+- `DELETE /api/research/leadlag?scope=interrupted|before|all` to clean up the measurement (`before=<ms>` for older
+  events, `all` starts over; `reset_counters=true` clears restarts and errors).
+
 ## [1.35.1] – 2026-10-09
 
 ### Added

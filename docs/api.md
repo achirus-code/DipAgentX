@@ -32,7 +32,10 @@ curl -H "Authorization: Bearer $TOKEN" -H "Accept-Language: de" http://192.168.1
 
 | Methode | Pfad | Zweck |
 |---|---|---|
-| GET | `/research/leadlag?limit=50` | Messung „ETH folgt BTC“: BTC-USDT-Sprünge ab 0,3 % in 60 s und wie ETH-EUR auf Revolut X nach 1, 5 und 15 min folgte (Mittelkurs und als Taker-Runde Ask → Bid), ausgewertet nach Sprunggröße und ob ETH nachhinkte. Handelt nie. Aus mit `LEADLAG_MONITOR=0` |
+| GET | `/research/leadlag?limit=50` | Messung „folgen die Coins BTC?“: BTC-USDT-Sprünge ab 0,3 % in 60 s und wie BTC-EUR, ETH, SOL, XRP, DOGE, ADA, LINK, AVAX, LTC und SUI (gegen EUR) auf Revolut X nach 1, 5 und 15 min folgten – Mittelkurs, Taker-Runde Ask → Bid und Binance zum Vergleich; Auswertung je Coin, Sprunggröße und ob der Coin nachhinkte (`key_figures_0_5pct_lagged`). Zähler und offene Ereignisse überstehen Neustarts. Handelt nie. Aus mit `LEADLAG_MONITOR=0`, andere Coins mit `LEADLAG_COINS=ETH,SOL,…` |
+| DELETE | `/research/leadlag?scope=interrupted` | Ereignisse löschen, die ein Neustart unterbrochen hat |
+| DELETE | `/research/leadlag?scope=before&before=<ms>` | Ereignisse vor einem Zeitpunkt (ms seit 1970) löschen |
+| DELETE | `/research/leadlag?scope=all` | Alles löschen, die Messung beginnt neu (Zähler auf null); `&reset_counters=true` setzt bei den anderen Varianten Neustarts und Fehler zurück |
 
 ## Bots
 

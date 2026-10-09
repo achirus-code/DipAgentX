@@ -32,7 +32,7 @@ from .revolutx import RevolutXClient, RevolutXError
 from .strategies import STRATEGIES, has_position, open_positions
 from .strategies.ai import AiStrategy
 
-VERSION = "1.35.1"
+VERSION = "1.35.2"
 # the app polls balances every few seconds – don't turn every poll into an exchange request
 
 
@@ -96,15 +96,15 @@ engine = Engine(db, build_exchange(), settings)
 _leadlag_http = httpx.AsyncClient(timeout=5.0, headers={"User-Agent": "DipAgentX"})
 
 
-async def _revx_eth_quote() -> tuple[float, float] | None:
-    """ETH-EUR bid/ask from the connected exchange – none in demo mode (simulated prices say nothing)."""
+async def _revx_quotes(symbols: list[str]) -> dict[str, tuple[float, float]] | None:
+    """Bid/ask of the measured coins from the connected exchange in one request – none in demo mode (simulated
+    prices say nothing)."""
     if engine.exchange.name == "mock":
         return None
-    t = await engine.exchange.ticker(leadlag.REVX_SYMBOL)
-    return float(t.bid), float(t.ask)
+    return {sym: (float(t.bid), float(t.ask)) for sym, t in (await engine.exchange.tickers(symbols)).items()}
 
 
-leadlag_monitor = leadlag.LeadLagMonitor(db, lambda: leadlag.binance_quotes(_leadlag_http), _revx_eth_quote)
+leadlag_monitor = leadlag.LeadLagMonitor(db, lambda symbols: leadlag.binance_quotes(_leadlag_http, symbols), _revx_quotes)
 
 
 @asynccontextmanager
@@ -598,8 +598,18 @@ async def ai_decisions(bot_id: int, limit: int = Query(100, ge=1, le=500), lang:
 
 @api.get("/research/leadlag")
 async def leadlag_research(limit: int = Query(50, ge=0, le=1000)) -> dict[str, Any]:
-    """Lead-lag measurement: BTC-USDT jumps and how ETH-EUR on Revolut X followed (no trades)."""
-    return {"enabled": leadlag.enabled(), **leadlag_monitor.summary(), "events": db.list_leadlag_events(limit)}
+    """Lead-lag measurement: BTC-USDT jumps and how the coins on Revolut X followed (no trades)."""
+    return {"enabled": leadlag.enabled(), **leadlag_monitor.summary(),
+            "events": [leadlag.normalize(e) for e in db.list_leadlag_events(limit)]}
+
+
+@api.delete("/research/leadlag")
+async def leadlag_cleanup(scope: str = Query(..., pattern="^(interrupted|before|all)$"), before: int | None = None,
+                          reset_counters: bool = False) -> dict[str, Any]:
+    """Clean up the measurement: interrupted events, events before ``before`` (ms since 1970) or all of them."""
+    if scope == "before" and before is None:
+        raise HTTPException(400, "before (ms) is required for scope=before")
+    return leadlag_monitor.cleanup(scope, before, reset_counters)
 
 
 @api.get("/events")
