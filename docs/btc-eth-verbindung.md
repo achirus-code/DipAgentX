@@ -136,8 +136,8 @@ Was das zeigt:
 2. **Offene Frage vor jedem Geld:** Hinkt ETH-EUR auf **Revolut X** genauso nach wie auf Binance? Revolut X ist
    kleiner; vermutlich ja, vielleicht stärker, vielleicht gleichen Market-Maker es in Sekunden aus. Das lässt sich nur
    live messen: erst ein paar Wochen im Paper-Modus die Signale und die Revolut-X-Kurse mitschreiben.
-3. **Für den bestehenden Momentum-Bot** gibt es eine kleine Verbesserung: ETH nur so weit investieren, wie **beide**
-   Signale (BTC und ETH) es erlauben – weniger Rückgang bei etwa gleichem Ertrag seit 2022.
+3. **Für den bestehenden Momentum-Bot:** siehe die genaue Nachprüfung in Teil 3. Die Aussage „weniger Rückgang bei
+   etwa gleichem Ertrag“ hält mit dem echten Bot nicht; es bleibt ein Tausch Rückgang gegen Ertrag.
 4. Die ETH/BTC-Rotation war bis 2021 ein Volltreffer und ist seitdem keiner mehr. Nicht einbauen.
 
 ### Grenzen
@@ -147,3 +147,78 @@ Was das zeigt:
 - 1-Minuten-Schlusskurse: Gekauft wird im Test zum Schlusskurs der Signalminute; in der Praxis kommt eine Order erst
   Sekunden später an. Die Spalte „1 min später“ ist die vorsichtige Schätzung.
 - Die Schwelle 0,5 % wurde auf 2024–26 gewählt, dann auf 2021–23 bestätigt; alle Schwellen zeigen dasselbe Muster.
+
+## Teil 3 – Genaue Nachprüfung: BTC-Signal als Bremse für den ETH-Bot
+
+Die Aussage aus L3 („ETH nur so weit wie beide Signale: Rückgang −54 % → −40 % bei gleichem Ertrag“) stammte aus einer
+vereinfachten Tagesrechnung in USDT ohne Funding-Untergrenze. Nachgeprüft mit dem **echten Bot**: 4-h-Schlusskurse
+ETH-EUR/BTC-EUR, sechs Zeitfenster mit Einstieg +5 % / Ausstieg 0 %, Volatilitätsdeckel 100 %, Funding-Untergrenze
+50 % unter 2 % p. a. (Binance, 7-Tage-Mittel), 10-%-Stufen, März 2020 bis September 2026. Der Nachbau trifft die
+früheren Zahlen (ETH ×46, mit Deckel 80 % ×36 wie in `docs/momentum-trendfolger.md`).
+
+### Drei Varianten für den ETH-Bot
+
+| Regel | Endvermögen | Rückgang | 2020–21 | 2022–26 | 2024–26 | Ø investiert |
+|---|---|---|---|---|---|---|
+| ETH-Bot heute | ×46,3 | −39,9 % | ×11,6 | ×3,98 | ×3,26 | 55 % |
+| ETH-Anteil = min(ETH-, BTC-Fenster), Untergrenze danach | ×41,4 | −35,8 % | ×11,0 | ×3,75 | ×2,97 | 47 % |
+| **wie oben, und BTC darf auch die Untergrenze kippen** | ×42,9 | **−29,3 %** | ×10,4 | **×4,13** | ×3,12 | 44 % |
+| Mittel aus ETH- und BTC-Fenstern | ×46,8 | −37,6 % | ×12,6 | ×3,70 | ×2,92 | 54 % |
+
+Mit 0,09 % Gebühr je Trade sinken alle Werte um etwa 12 %, die Reihenfolge bleibt. „BTC darf die Untergrenze kippen“
+heißt: Die ETH-Untergrenze bei Panik-Funding gilt nur, wenn auch BTC sie hätte (BTC-Funding unter 2 %) oder die
+BTC-Fenster so weit oben sind.
+
+**Die einfache Variante (nur min) lohnt nicht:** 11 % weniger Ertrag für 4 Punkte weniger Rückgang, und in jedem
+Teilzeitraum weniger Ertrag. Die ursprüngliche Aussage war zu optimistisch.
+
+### Die Variante mit BTC-Veto im Detail
+
+| | ETH-Bot heute | mit BTC-Veto |
+|---|---|---|
+| Rendite pro Jahr | 79,3 % | 77,2 % |
+| Größter Rückgang | −39,9 % (Aug.–Nov. 2022) | −29,3 % (März–Nov. 2024) |
+| Zweit-/drittgrößter | −38 % (Aug. 2025–Feb. 2026), −36 % (Mai–Juni 2021) | −29 % (Feb. 2021), −26 % (Aug.–Nov. 2022) |
+| Rendite / Rückgang (Calmar) | 1,99 | 2,64 |
+| Sharpe | 1,20 | 1,40 |
+| Schlechteste 12 Monate | −31 % | −19 % |
+| Jahre 2020 / 21 / 22 / 23 / 24 / 25 / 26 | +152 / +362 / −4 / +27 / +57 / +63 / +27 % | +146 / +323 / +8 / +23 / +65 / +46 / +29 % |
+| Rollierend 12 Monate besser | – | 58 % der Startzeitpunkte, im Schnitt −0,3 % |
+| Schlimmster Rückstand in 12 Monaten | – | −51 % (Bullenlauf 2021) |
+
+Über alle sechs Grundeinstellungen (Einstieg 2 / 5 / 8 %, Deckel 80 / 100 %) lag der Rückgang mit Veto bei −29 bis
+−31 % statt −37 bis −40 %, und 2022–26 war das Endvermögen in allen sechs höher. 2020–21 war es in allen sechs
+niedriger.
+
+### Abhängigkeit von der Funding-Untergrenze (Einstieg 5 %, Deckel 100 %)
+
+| Funding unter | Untergrenze | Rückgang heute → Veto | Endvermögen heute → Veto | 2022–26 heute → Veto |
+|---|---|---|---|---|
+| (ohne Untergrenze) | 0 % | −36 → −30 % | ×34 → ×28 | ×3,6 → ×3,4 |
+| 0 % p. a. | 50 % | −38 → −29 % | ×53 → ×38 | ×4,5 → ×3,7 |
+| **2 % p. a. (Standard)** | **50 %** | **−40 → −29 %** | **×46 → ×43** | **×4,0 → ×4,1** |
+| 2 % p. a. | 30 / 70 % | −37 → −30 % / −43 → −30 % | ×39 → ×36 / ×59 → ×56 | ×3,8 → ×3,9 / ×4,5 → ×4,7 |
+| 5 % p. a. | 50 % | −41 → −39 % | ×48 → ×48 | ×3,9 → ×4,5 |
+
+Der kleinere Rückgang ist robust (bis auf die 5-%-Schwelle). Was er an Ertrag kostet, hängt stark von den
+Einstellungen ab: bei den heutigen Standardwerten 7 %, bei einer Funding-Schwelle von 0 % fast 30 %.
+
+### Der BTC-Bot mit ETH-Signal als Bremse
+
+| | Endvermögen | Rückgang | 2022–26 | 12 Monate besser |
+|---|---|---|---|---|
+| BTC-Bot heute | ×24,2 | −30,5 % | ×3,18 | – |
+| BTC: min(BTC-, ETH-Fenster) | ×20,7 | −24,4 % | ×3,18 | 45 % |
+
+Für den BTC-Bot kostet die Bremse 15 % Ertrag bei 6 Punkten weniger Rückgang – kein guter Tausch.
+
+### Urteil
+
+- **Nicht bestätigt:** „Gleicher Ertrag, viel weniger Rückgang.“ Die einfache Variante kostet in jedem Zeitraum
+  Ertrag.
+- **Bestätigt, aber mit Preis:** Mit BTC-Veto auch für die Funding-Untergrenze sinkt der größte Rückgang des ETH-Bots
+  verlässlich um rund 10 Punkte (auf etwa −30 %), das schlechteste Jahr von −31 % auf −19 %. Dafür bleibt der Bot in
+  starken ETH-Läufen zurück (2021 +323 % statt +362 %, 2025 +46 % statt +63 %). Bei den heutigen Einstellungen kostet
+  das 7 % Endvermögen; ob es so günstig bleibt, ist unsicher, weil der Preis mit den Einstellungen stark schwankt.
+- **Einordnung:** Das ist eine Risiko-Einstellung, kein Gratis-Gewinn. Sinnvoll als **abschaltbare Option** im
+  ETH-Bot („BTC als Bremse“) für alle, denen −40 % zu viel sind – nicht als neuer Standard.
