@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The icon of a strategy (and of a bot): a tile in the strategy's colours with its symbol. The momentum trend follower
-/// gets a drawn trend arrow instead of an SF symbol and, for the ten most important coins, a small coin badge in the
-/// corner – the coin the bot trades (or will trade, in the editor).
+/// and the lead-lag bot get a drawn symbol instead of an SF symbol and, for the ten most important coins, a small coin
+/// badge in the corner – the coin the bot trades (or will trade, in the editor).
 public struct StrategyIcon: View {
     let strategy: String
     let symbol: String
@@ -17,17 +17,57 @@ public struct StrategyIcon: View {
     }
 
     public var body: some View {
-        if strategy == "momentum" {
-            TrendTile(size: size)
-                .overlay(alignment: .bottomTrailing) {
-                    if let coin, let mark = CoinMark.of(coin) {
-                        CoinBadge(mark: mark, size: (size * 0.5).rounded())
-                            .offset(x: size * 0.16, y: size * 0.16)
-                    }
-                }
-        } else {
-            IconTile(symbol: symbol, colors: strategyColors(strategy), size: size)
+        switch strategy {
+        case "momentum": TrendTile(size: size).overlay(alignment: .bottomTrailing) { badge }
+        case "leadlag": LeadLagTile(size: size).overlay(alignment: .bottomTrailing) { badge }
+        default: IconTile(symbol: symbol, colors: strategyColors(strategy), size: size)
         }
+    }
+
+    @ViewBuilder private var badge: some View {
+        if let coin, let mark = CoinMark.of(coin) {
+            CoinBadge(mark: mark, size: (size * 0.5).rounded())
+                .offset(x: size * 0.16, y: size * 0.16)
+        }
+    }
+}
+
+/// The lead-lag tile, from Bitcoin orange to Ethereum blue: BTC jumps first (the bright line), the coin follows a
+/// moment later (the faint line) – the bot buys in between.
+struct LeadLagTile: View {
+    let size: CGFloat
+
+    var body: some View {
+        let colors = strategyColors("leadlag")
+        let line = max(1.6, size * 0.085)
+        RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+            .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: size, height: size)
+            .overlay {
+                ZStack {
+                    StepLine(from: 0.70, to: 0.40, start: 0.40, end: 0.54)
+                        .stroke(.white.opacity(0.55), style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
+                    StepLine(from: 0.50, to: 0.08, start: 0.12, end: 0.28)
+                        .stroke(.white, style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
+                }
+                .frame(width: size * 0.66, height: size * 0.66)
+            }
+            .shadow(color: colors.last!.opacity(0.35), radius: 4, y: 2)
+    }
+}
+
+/// A flat line that jumps from height ``from`` to ``to`` between ``start`` and ``end`` (unit square, y downwards).
+struct StepLine: Shape {
+    let from: Double, to: Double, start: Double, end: Double
+
+    func path(in rect: CGRect) -> Path {
+        func p(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y) }
+        var path = Path()
+        path.move(to: p(0.0, from))
+        path.addLine(to: p(start, from))
+        path.addLine(to: p(end, to))
+        path.addLine(to: p(1.0, to))
+        return path
     }
 }
 
