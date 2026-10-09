@@ -68,8 +68,10 @@ async def test_buy_sets_the_plan_and_the_take_profit_sells_without_asking(tmp_pa
     ex.now += 2 * HOUR  # the next brief shows Claude its own result
     claude.answers.append(decision("wait"))
     await engine.tick()
-    assert claude.briefs[-1].recent_trades[0]["exit"] == "take_profit"
-    assert claude.briefs[-1].previous_decision["action"] == "buy"
+    performance = claude.briefs[-1].data["performance"]
+    assert performance["recent_trades"][0]["exit"] == "take_profit"
+    assert performance["stats_last_30"]["all"]["win_rate_pct"] == 100
+    assert claude.briefs[-1].data["previous_decision"]["action"] == "buy"
 
 
 async def test_the_stop_sells_at_a_loss(tmp_path: Path, claude):
@@ -118,7 +120,8 @@ async def test_a_stop_is_never_lowered_and_never_beyond_the_max(tmp_path: Path, 
     ex.price = Decimal("2020")
     claude.answers.append(decision("hold", take_profit=2100, stop_loss=2005))  # raised: taken
     await engine.tick()
-    assert ai_state(db, bot_id)["plan"] == {"target": 2100, "stop": 2005}
+    plan = ai_state(db, bot_id)["plan"]
+    assert (plan["target"], plan["stop"]) == (2100, 2005)
     assert "Claude: hold" in render(db.get_bot(bot_id)["status"], "en")
 
 
@@ -200,7 +203,8 @@ async def test_a_price_alert_wakes_claude_early(tmp_path: Path, claude):
     ex.now += ai_state(db, bot_id)["wake_after"] - ex.now
     claude.answers.append(decision("wait"))
     await engine.tick()
-    assert len(claude.briefs) == 2 and claude.briefs[-1].previous_decision["price_then"] == 2000
+    assert len(claude.briefs) == 2 and claude.briefs[-1].data["previous_decision"]["price_then"] == 2000
+    assert any("price alert" in r for r in claude.briefs[-1].data["woken_by"])
 
 
 async def test_ask_now_skips_the_wait(tmp_path: Path, claude):
@@ -272,12 +276,15 @@ async def test_brief_has_intraday_data():
     strategy = STRATEGIES["ai"]
     assert isinstance(strategy, AiStrategy)
     brief = await strategy.brief(Context(strategy.normalize({}), None, {}, view), {})
-    assert set(brief.changes_pct) == {"15m", "1h", "4h", "24h", "72h"}
-    assert sorted(calls) == [5, 15, 60] and len(brief.candles_5m) == 36
-    assert brief.spread_pct == pytest.approx(0.1005, rel=1e-3)
-    assert brief.rules["maker_fee_pct"] == 0 and brief.rules["limit_wait_minutes"] == 10
-    assert {"rsi14_5m", "ema21_5m_vs_price_pct", "atr14_5m_pct"} <= set(brief.indicators)
-    assert '"candles_5m":[[' in brief.to_text()
+    data = brief.data
+    assert set(data["changes_pct"]) == {"15m", "1h", "4h", "24h", "72h"}
+    assert sorted(calls) == [5, 15, 15, 60, 240] and len(data["last_12_candles_5m_ohlcv"]) == 12
+    assert set(data["timeframes"]) == {"4h", "1h", "15m", "5m"}
+    assert data["spread_pct"] == pytest.approx(0.1005, rel=1e-3)
+    assert data["rules"]["maker_fee_pct"] == 0 and data["rules"]["limit_wait_minutes"] == 10
+    assert {"trend", "structure", "rsi14", "adx14", "atr14_pct", "last_candles"} <= set(data["timeframes"]["15m"])
+    assert brief.chart_png and brief.chart_png.startswith(b"\x89PNG")  # the chart goes along as an image
+    assert data["market_leader"]["symbol"] == "BTC-EUR"
 
 
 async def test_brief_includes_fear_greed_when_enabled(tmp_path: Path, claude, monkeypatch):
@@ -303,7 +310,7 @@ def test_model_defaults_to_fable_and_rejects_unknown():
     assert normalize({})["model"] == "claude-fable-5-1"
     assert normalize({"model": "claude-sonnet-5"})["model"] == "claude-fable-5-1"  # no longer offered
     assert normalize({"model": "claude-opus-5-5"})["model"] == "claude-opus-5-5"
-    assert normalize({})["budget"] == 100 and normalize({})["effort"] == "low"
+    assert normalize({})["budget"] == 100 and normalize({})["effort"] == "auto"
 
 
 def test_call_cost_from_usage():
@@ -327,3 +334,212 @@ async def test_an_older_position_beyond_the_max_stop_is_not_sold_blindly(tmp_pat
     await engine.tick()
     assert pos(db.get_bot(bot_id)) and len(claude.briefs) == 2  # not sold – Claude was asked and set the plan
     assert ai_state(db, bot_id)["plan"]["stop"] == 1880
+
+
+# --- market analysis ----------------------------------------------------------------------------------------------
+
+from app.exchange import Candle  # noqa: E402
+from app.strategies import ai_analysis as ta  # noqa: E402
+from app.strategies import ai_chart  # noqa: E402
+
+
+def zigzag(n: int, start: float, drift: float, swing: float, minutes: int = 15, volume: float = 5.0) -> list[Candle]:
+    """Candles that rise by ``drift`` per candle with a wave of ``swing`` – higher highs and higher lows for drift > 0."""
+    import math
+    out, t0 = [], 1_760_000_000_000
+    prev = start
+    for i in range(n):
+        close = start * (1 + drift * i) * (1 + swing * math.sin(i / 3))
+        high, low = max(prev, close) * 1.001, min(prev, close) * 0.999
+        out.append(Candle(t0 + i * minutes * 60_000, Decimal(str(round(prev, 2))), Decimal(str(round(high, 2))),
+                          Decimal(str(round(low, 2))), Decimal(str(round(close, 2))), Decimal(str(volume))))
+        prev = close
+    return out
+
+
+def test_analysis_recognises_an_uptrend_and_a_downtrend():
+    up = zigzag(96, 2000, 0.002, 0.015)
+    tf = ta.timeframe(up, "15m", float(up[-1].close))
+    assert tf["trend"].startswith("up") and tf["structure"] == "higher highs and higher lows"
+    assert tf["ema20_vs_price_pct"] < 0 < tf["ema20_slope_5_candles_pct"]
+    down = zigzag(96, 2000, -0.002, 0.015)
+    tf = ta.timeframe(down, "15m", float(down[-1].close))
+    assert tf["trend"].startswith("down") and tf["structure"] == "lower highs and lower lows"
+    assert ta.regime({"15m": tf, "1h": tf}).startswith("downtrend")
+    flat = zigzag(96, 2000, 0.0, 0.004)
+    assert ta.efficiency_ratio([float(c.close) for c in flat]) < 0.3
+
+
+def test_levels_cluster_swing_points_around_the_price():
+    candles = zigzag(96, 2000, 0.0, 0.01)
+    price = float(candles[-1].close)
+    lv = ta.levels(candles, price, ta.atr(candles))
+    assert lv["support"] and lv["resistance"]
+    assert all(z["price"] < price for z in lv["support"]) and all(z["price"] > price for z in lv["resistance"])
+    assert max(z["touches"] for z in lv["support"] + lv["resistance"]) >= 2  # the same swing level, several times
+
+
+def test_candle_patterns_and_scanner_breakout():
+    candles = zigzag(60, 2000, 0.0, 0.002, minutes=5)
+    last = candles[-1]
+    # a wide bullish candle closing above the 2 h high on 4x volume
+    candles[-1] = Candle(last.start, Decimal("2000"), Decimal("2060"), Decimal("1999"), Decimal("2058"), Decimal("20"))
+    names = ta.candle_patterns(candles, ta.atr(candles))
+    assert "wide-range" in names[-1] and "1 ago" in names[-1]
+    signals = ta.scan(candles, {}, {}, 2058.0)
+    assert [s.key for s in signals] == ["breakout"] and "volume" in signals[0].text
+    hammer = Candle(0, Decimal("100"), Decimal("100.6"), Decimal("97"), Decimal("100.5"))
+    assert "hammer" in ta.candle_patterns([hammer, hammer], None)[-1]
+
+
+def test_order_book_summary_shows_the_imbalance():
+    bids = [(Decimal("1999"), Decimal("2")), (Decimal("1995"), Decimal("1"))]
+    asks = [(Decimal("2001"), Decimal("0.5")), (Decimal("2030"), Decimal("1"))]
+    book = ta.order_book_summary((bids, asks), 2000.0)
+    assert book["imbalance_0.25pct"] > 0.5 and book["largest_order_within_1pct"]["side"] == "bid"
+    assert ta.order_book_summary(None, 2000.0) is None
+
+
+def test_chart_is_a_valid_png():
+    import struct
+    import zlib
+    png = ai_chart.render([("15M 24H", zigzag(96, 2000, 0.001, 0.004), True)], 2190.0, [2100.0], 2150.0, 2120.0, 2250.0)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", png[16:24])
+    assert (width, height) == (ai_chart.W, ai_chart.PANEL_H)
+    idat = png[png.index(b"IDAT") + 4:png.index(b"IEND") - 8]
+    assert len(zlib.decompress(idat)) == height * (1 + width * 3)
+
+
+# --- trade management and discipline ------------------------------------------------------------------------------
+
+
+async def test_stop_moves_to_break_even_at_1r_and_trails(tmp_path: Path, claude):
+    ex = FakeExchange("2000", "2000")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50}, True, True)
+    claude.answers.append(decision("buy", take_profit=2200, stop_loss=1980, trail_pct=1, size_pct=50))
+    await engine.tick()
+    assert float(pos(db.get_bot(bot_id))["cost"]) == pytest.approx(25)  # half the amount for a B setup
+    await engine.tick()
+    entry = float(pos(db.get_bot(bot_id))["cost"]) / float(pos(db.get_bot(bot_id))["qty"])
+    ex.price = Decimal("2015")  # less than +1R: the stop stays
+    await engine.tick()
+    assert ai_state(db, bot_id)["plan"]["stop"] == pytest.approx(entry * 0.99, rel=1e-4)
+    ex.price = Decimal("2030")  # +1.5R: break-even, trailing 1 % below the high
+    await engine.tick()
+    assert ai_state(db, bot_id)["plan"]["stop"] == pytest.approx(max(entry, 2030 * 0.99), rel=1e-4)
+    ex.price = Decimal("2050")
+    await engine.tick()
+    assert ai_state(db, bot_id)["plan"]["stop"] == pytest.approx(2050 * 0.99, rel=1e-4)
+    ex.price = Decimal("2025")  # falls back through the trailing stop: sold with a profit
+    await engine.tick()
+    assert pos(db.get_bot(bot_id)) is None and float(db.list_trades(bot_id)[0]["pnl"]) > 0
+    await engine.tick()
+    trade = ai_state(db, bot_id)["trades"][-1]
+    assert trade["exit"] == "trailing/break-even stop" and trade["result_r"] > 1 and trade["size_pct"] == 50
+
+
+async def test_daily_loss_limit_and_losing_streak_stop_new_trades(tmp_path: Path, claude):
+    ex = FakeExchange("2000", "2000")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "daily_loss_limit": 2, "loss_streak": 0}, True, True)
+    claude.answers.append(decision("buy", take_profit=2100, stop_loss=1960))
+    await engine.tick()
+    ex.price = Decimal("1950")  # −2.5 %: stopped out
+    await engine.tick()
+    await engine.tick()
+    status = render(db.get_bot(bot_id)["status"], "en")
+    assert "Daily loss limit reached" in status and len(claude.briefs) == 1  # Claude isn't even asked
+    ex.now += 24 * HOUR  # a new day
+    claude.answers.append(decision("wait"))
+    await engine.tick()
+    assert len(claude.briefs) == 2
+
+    bot = db.get_bot(bot_id)
+    bot["state"]["ai"]["trades"] = [{"closed_at": ex.now, "result_pct": -1.0, "result_of_amount_pct": -1.0}] * 3
+    db.update_bot(bot_id, params={**bot["params"], "loss_streak": 3, "daily_loss_limit": 0}, state=bot["state"])
+    await engine.tick()
+    assert "3 losing trades in a row" in render(db.get_bot(bot_id)["status"], "en")
+
+
+async def test_the_scanner_wakes_claude_with_more_thinking(tmp_path: Path, claude, monkeypatch):
+    ex = FakeExchange("2000", "2000")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50, "ai_interval": 5}, True, True)
+    claude.answers.append(decision("wait", next_check_minutes=180))
+    await engine.tick()
+    assert claude.efforts == ["low"]  # a routine look
+
+    def fake_scan(c5, tf, sess, price):
+        return [ta.Signal("breakout", "5m close above the 2 h high on 3.0x volume")]
+
+    monkeypatch.setattr(ta, "scan", fake_scan)
+    ex.now += 6 * MIN  # after the minimum gap, on a new 5-minute candle
+    claude.answers.append(decision("wait"))
+    await engine.tick()
+    assert len(claude.briefs) == 2 and claude.efforts[-1] == "medium"
+    assert claude.briefs[-1].data["woken_by"] == ["scanner: 5m close above the 2 h high on 3.0x volume"]
+    ex.now += MIN
+    await engine.tick()  # the same signal doesn't wake Claude twice
+    assert len(claude.briefs) == 2
+
+
+async def test_notes_are_kept_for_the_next_check(tmp_path: Path, claude):
+    ex = FakeExchange("2000", "2000")
+    db, engine = make_engine(tmp_path, ex)
+    bot_id = db.create_bot("AI", "ai", "ETH-EUR", {"amount": 50}, True, True)
+    claude.answers += [decision("wait", notes="range 1985-2010, wait for a reclaim of 2010 on volume"), decision("wait")]
+    await engine.tick()
+    await engine.ask_now(bot_id)
+    assert claude.briefs[-1].data["your_notes"].startswith("range 1985-2010")
+
+
+async def test_ask_sends_the_chart_and_the_brief_to_fable(monkeypatch):
+    """The real request (against a mock transport): image + brief, effort, fallback beta, streaming."""
+    import json as jsonlib
+
+    import anthropic
+    import httpx2
+
+    captured = {}
+    answer = {"action": "wait", "confidence": 55, "reason_en": "a", "reason_de": "b", "setup": "none",
+              "take_profit": 0, "stop_loss": 0, "size_pct": 0, "trail_pct": 0, "max_hold_minutes": 0,
+              "wake_above": 2050, "wake_below": 0, "next_check_minutes": 30, "notes": "x"}
+
+    def handler(request):
+        captured["body"] = jsonlib.loads(request.content)
+        captured["beta"] = request.headers.get("anthropic-beta")
+        text = jsonlib.dumps(answer)
+        events = [
+            ("message_start", {"type": "message_start", "message": {
+                "id": "m", "type": "message", "role": "assistant", "model": "claude-fable-5-1", "content": [],
+                "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 6000, "output_tokens": 1}}}),
+            ("content_block_start", {"type": "content_block_start", "index": 0,
+                                     "content_block": {"type": "text", "text": ""}}),
+            ("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                     "delta": {"type": "text_delta", "text": text}}),
+            ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+            ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                               "usage": {"output_tokens": 1500}}),
+            ("message_stop", {"type": "message_stop"}),
+        ]
+        body = "".join(f"event: {e}\ndata: {jsonlib.dumps(d)}\n\n" for e, d in events)
+        return httpx2.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    strategy = STRATEGIES["ai"]
+    monkeypatch.setattr(strategy, "_client", anthropic.AsyncAnthropic(
+        api_key="x", http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler))))
+    ex = FakeExchange("2000", "1990")
+    view = MarketView(ex, "ETH-EUR", Ticker(Decimal("1989"), Decimal("1991"), ex.price), ex.now)
+    brief = await strategy.brief(Context(strategy.normalize({}), None, {}, view), {})
+    result, cost = await strategy.ask(brief, False, "claude-fable-5-1", "medium")
+    body = captured["body"]
+    assert result.action == "wait" and result.wake_above == 2050
+    assert cost == pytest.approx(6000 * 10 / 1e6 + 1500 * 50 / 1e6)
+    assert body["model"] == "claude-fable-5-1" and body["output_config"]["effort"] == "medium"
+    assert body["fallbacks"] == "default" and captured["beta"] == "server-side-fallback-2026-07-01" and body["stream"]
+    image, text = body["messages"][0]["content"]
+    assert image["type"] == "image" and image["source"]["media_type"] == "image/png"
+    assert text["text"].startswith("Market brief:") and '"market_phase"' in text["text"]
+    assert "thinking" not in body  # Fable thinks adaptively by itself

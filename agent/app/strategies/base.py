@@ -247,6 +247,13 @@ class MarketView:
             self._cache[key] = await self._fetch(self.symbol, interval, since, self.now)
         return self._cache[key], interval
 
+    async def candles_of(self, symbol: str, hours: float) -> tuple[list[Candle], int]:
+        """Candles of another symbol (e.g. BTC as the market leader) through the same cache."""
+        minutes = hours * 60
+        interval = next((i for i in CANDLE_INTERVALS if minutes / i <= 98), CANDLE_INTERVALS[-1])
+        since = self.now - int(hours * HOUR_MS) - interval * 60_000
+        return await self._fetch(symbol, interval, since, self.now), interval
+
     async def price_at(self, hours_ago: float) -> Decimal:
         candles, interval = await self.candles(hours_ago)
         if not candles:

@@ -279,6 +279,10 @@ CATALOG: dict[str, L] = {
     "ai.stop_reason": L("Claude's stop at {price} reached ({profit})", "Claudes Stop bei {price} erreicht ({profit})"),
     "ai.target_hit": L("Take-profit reached – selling", "Gewinnziel erreicht – Verkauf"),
     "ai.target_reason": L("Claude's take-profit at {price} reached ({profit})", "Claudes Gewinnziel bei {price} erreicht ({profit})"),
+    "ai.daily_limit": L("Daily loss limit reached ({lost} of max. {limit}) – no new trade for {left}",
+                        "Tagesverlust-Limit erreicht ({lost} bei max. {limit}) – kein neuer Trade für {left}"),
+    "ai.loss_streak": L("{count} losing trades in a row – pausing new trades for {left}",
+                        "{count} Verlust-Trades in Folge – Pause für neue Trades noch {left}"),
     "ai.no_stop": L("Claude wanted to buy without a stop – not executed · next check in {left}",
                     "Claude wollte ohne Stop kaufen – nicht ausgeführt · nächste Prüfung in {left}"),
     # --- engine

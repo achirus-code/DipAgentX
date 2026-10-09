@@ -8,22 +8,37 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ### Changed
 
-- **"AI decides" becomes the AI day trader on Claude Fable 5.1.** Claude trades the pair intraday: it gets 5-minute
-  candles of the last 3 hours, RSI, EMAs, ATR and Bollinger position on 5- and 15-minute candles, the spread, the
-  24/72 h range, its open position and its own last trades with their results, and decides on buy/wait or hold/sell.
-  Every buy comes with a take-profit and a stop; the bot runs that plan every tick by itself, so a position is
-  protected between two checks. A stop is never lowered and never further away than the new "Max. stop-loss" (3 %).
-  Claude may close a losing trade early (switchable). Models: Fable 5.1 (default), Opus 5.5, Sonnet 5.5, Haiku 5.5;
-  thinking depth selectable. A declined request is retried on Anthropic's recommended fallback model.
+- **"AI decides" becomes the AI day trader on Claude Fable 5.1**, built around how a disciplined day trader works
+  (details in `docs/ki-daytrader.md`):
+  - **Top-down market read:** trend, structure (higher highs/lows), EMAs, RSI, ADX, efficiency ratio and ATR on 4 h,
+    1 h, 15 min and 5 min, one label for the market phase (trend, range, chop), support/resistance zones from swing
+    points, the previous day's high/low/close, VWAP since 00:00 UTC, relative volume, Bollinger squeeze, the order
+    book (depth and imbalance) and BTC as the market leader for other coins.
+  - **Claude sees the chart:** a candlestick image with three panels (1 h for 3 days, 15 min for 24 h, 5 min for 3 h)
+    with EMA20/50, VWAP, volume, levels and the position's entry, stop and take-profit – drawn without an extra
+    library.
+  - **A playbook and a process** in the prompt: context, location, setup (trend pullback, breakout/retest, range
+    support, confirmed reversal, momentum), confirmation, stop at the invalidation, at least 1.5 : 1, size by quality.
+  - **The plan runs between checks:** take-profit and stop every tick, stop to break-even at +1R, optional trailing
+    stop from +1R, a time limit that wakes Claude. A stop is never lowered and never further away than the
+    "Max. stop-loss" (3 %).
+  - **Discipline in code:** daily loss limit (6 % of the amount), a 2-hour pause after 3 losses in a row, position size
+    25–100 % of the amount by setup quality, no buy without a stop.
+  - **Track record and notes:** every trade with setup, result in % and R, best price during the trade and exit
+    reason; Claude sees win rate and average R by setup and keeps notes from one check to the next.
+  - Models: Fable 5.1 (default), Opus 5.5, Sonnet 5.5, Haiku 5.5; thinking depth automatic (medium at setups and open
+    trades, low for routine looks). A declined request is retried on Anthropic's recommended fallback model.
 - **Only limit orders:** live orders of the AI day trader go out as fee-free post-only limit orders a cent inside the
   spread that follow the price, like the momentum bot – but what isn't filled within the waiting time is cancelled
   instead of going to the market. Stop and take-profit sales too; only "Sell position now" sells at market.
 
 ### Added
 
+- **Scanner:** on every new 5-minute candle cheap rules look for a breakout, a breakdown, a pullback in an uptrend, a
+  capitulation or a volume spike and wake Claude early; price alerts Claude sets and large moves wake it too.
 - **Monthly API budget** for the AI day trader (default 100 $ per bot): the bot measures what every check costs and
-  spreads the rest of the budget evenly over the rest of the month; Claude can ask to look again sooner or later, set
-  price alerts that wake it early, and a large move wakes it too. The status shows what was spent this month.
+  spreads the rest of the budget evenly over the rest of the month. The status shows what was spent this month.
+- Candles carry the volume, and the Revolut X order book can be read.
 
 ## [1.34.0] – 2026-10-08
 

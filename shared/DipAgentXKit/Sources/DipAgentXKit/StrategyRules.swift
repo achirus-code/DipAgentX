@@ -158,17 +158,18 @@ public enum ParamNotes {
         }
         switch (strategyKey, key) {
         case ("ai", "budget"):
-            // rough Anthropic list prices for ~2,000 input tokens and the thinking + answer of one check
+            // rough Anthropic list prices for brief + chart (~4,500 input tokens) and the thinking + answer of one check
             var perCheck: Double
             switch values["model"]?.string ?? "claude-fable-5-1" {
-            case "claude-opus-5-5": perCheck = 0.03
-            case "claude-sonnet-5-5": perCheck = 0.015
-            case "claude-haiku-5-5": perCheck = 0.001
-            default: perCheck = 0.07
+            case "claude-opus-5-5": perCheck = 0.05
+            case "claude-sonnet-5-5": perCheck = 0.025
+            case "claude-haiku-5-5": perCheck = 0.002
+            default: perCheck = 0.12
             }
-            switch values["effort"]?.string ?? "low" {
-            case "medium": perCheck *= 1.8
-            case "high": perCheck *= 3
+            switch values["effort"]?.string ?? "auto" {
+            case "low": perCheck *= 0.7
+            case "medium": perCheck *= 1.3
+            case "high": perCheck *= 2.2
             default: break
             }
             if values["news"]?.bool == true { perCheck *= 3 }
