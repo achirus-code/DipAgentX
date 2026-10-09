@@ -4,6 +4,15 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Added
+
+- **Momentum trend follower: "BTC as a brake"** (off by default, for coins other than BTC). The ETH bot then holds at
+  most what BTC's own trend allows – the share of BTC's six lookbacks that are up, times ETH's volatility factor – and
+  keeps the funding floor only while BTC's funding shows panic too. Shown in the bot as its own signal ("BTC trend 4
+  of 6 up – no brake" / "– at most 70 %"). Backtest ETH-EUR 2020-03 to 2026-09: largest drop −29 % instead of −40 %,
+  worst 12 months −19 % instead of −31 %, ×43 instead of ×46 – it lags in strong ETH rallies
+  (`docs/momentum-trendfolger.md`, section 5a).
+
 ## [1.35.0] – 2026-10-09
 
 ### Changed

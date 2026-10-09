@@ -581,3 +581,66 @@ async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path
     assert sum(x["up"] for x in lookbacks["items"]) == int(signals[0]["text"].split()[1])
     decision = engine.describe_bot(db.get_bot(bot_id), db.trade_stats(), "en")["decision"]
     assert decision.startswith("Target ") and ("buys the rest" in decision or "holds" in decision)
+
+
+class PairExchange(PathExchange):
+    """Like PathExchange, with its own price path per symbol (e.g. ETH rising while BTC falls)."""
+
+    def __init__(self, paths: dict, now: int = NOW):
+        self.paths = paths
+        super().__init__(paths["ETH-EUR"], now)
+
+    async def candles(self, symbol, interval, since, until):
+        if symbol not in self.paths:
+            raise RuntimeError(f"no candles for {symbol}")
+        self.path = self.paths[symbol]
+        try:
+            return await super().candles(symbol, interval, since, until)
+        finally:
+            self.path = self.paths["ETH-EUR"]
+
+
+def set_funding_by_coin(monkeypatch, rates: dict):
+    async def fund(base, now, days=7):
+        return rates.get(base.upper())
+
+    monkeypatch.setattr(cryptodata, "funding", fund)
+
+
+async def test_btc_brake_caps_eth_by_btcs_trend():
+    s = STRATEGIES["momentum"]
+    paths = {"ETH-EUR": steady(0.003), "BTC-EUR": steady(-0.003)}
+    d = await s.evaluate(ctx(PairExchange(paths)))
+    assert isinstance(d.action, Buy) and "target 100 %" in render(d.action.reason, "en")  # off by default
+    state: dict = {}
+    d = await s.evaluate(ctx(PairExchange(paths), state=state, btc_brake=True))
+    text = render(d.status, "en")
+    assert d.action is None and "target 0 %" in text and "BTC trend 0 of 6 up – at most 0 %" in text
+    assert state["momentum"]["btc_brake"] == {"up": 0, "cap": 0, "active": True}
+    rising = {"ETH-EUR": steady(0.003), "BTC-EUR": steady(0.003)}
+    d = await s.evaluate(ctx(PairExchange(rising), btc_brake=True))
+    assert "target 100 %" in render(d.action.reason, "en") and "BTC trend 6 of 6 up – no brake" in render(d.action.reason, "en")
+
+
+async def test_btc_brake_drops_an_eth_only_funding_floor(monkeypatch):
+    s = STRATEGIES["momentum"]
+    falling = {"ETH-EUR": steady(-0.003), "BTC-EUR": steady(-0.003)}
+    set_funding_by_coin(monkeypatch, {"ETH": -5.0, "BTC": 8.0})  # panic only in ETH
+    d = await s.evaluate(ctx(PairExchange(falling)))
+    assert isinstance(d.action, Buy) and "at least 50 %" in render(d.action.reason, "en")  # without the brake: floor
+    d = await s.evaluate(ctx(PairExchange(falling), btc_brake=True))
+    assert d.action is None and "target 0 %" in render(d.status, "en")
+    set_funding_by_coin(monkeypatch, {"ETH": -5.0, "BTC": -3.0})  # BTC panics too: the floor stays
+    d = await s.evaluate(ctx(PairExchange(falling), btc_brake=True))
+    reason = render(d.action.reason, "en")
+    assert isinstance(d.action, Buy) and "target 50 %" in reason and "floor stays" in reason
+
+
+async def test_btc_brake_is_off_for_btc_and_without_btc_prices():
+    s = STRATEGIES["momentum"]
+    view = MarketView(PathExchange(steady(0.003)), "BTC-EUR", Ticker(Decimal("2000"), Decimal("2000"), Decimal("2000")), NOW)
+    d = await s.evaluate(Context(s.normalize({"btc_brake": True}), None, {}, view))
+    assert "target 100 %" in render(d.action.reason, "en") and "BTC trend" not in render(d.action.reason, "en")
+    d = await s.evaluate(ctx(PairExchange({"ETH-EUR": steady(0.003)}), btc_brake=True))
+    reason = render(d.action.reason, "en")
+    assert "target 100 %" in reason and "BTC prices not available – no BTC brake" in reason

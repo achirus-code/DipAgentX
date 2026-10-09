@@ -84,6 +84,31 @@ Beispiel: 14 T +8 %, 21 T +7 %, 30 T +6 %, 40 T +4 % (war an, bleibt an), 50 T +
 - Aus, weil Coin Metrics Werte nachträglich korrigiert und ein Tag erst 30 Stunden nach Tagesbeginn nutzbar ist.
   Nicht im Backtest geprüft.
 
+## 5a. Optional: BTC als Bremse (Standard aus, nur für Coins außer BTC)
+
+- Der ETH-Bot hält höchstens so viel, wie der Trend von BTC erlauben würde: Anteil der sechs BTC-Zeitfenster, die
+  aufwärts zeigen (gleiche Schwellen `entry` / `exit`, BTC-EUR-4-h-Kurse), mal dem Schwankungsfaktor von ETH.
+- Die Funding-Untergrenze bleibt nur, wenn auch das BTC-Funding unter `funding_below` liegt. Panik nur bei ETH reicht
+  nicht mehr.
+- Wirkt nach der Untergrenze und vor der Zufluss-Bremse. Fehlen die BTC-Kurse, ist die Bremse aus (Signal „BTC-Kurse
+  nicht verfügbar“).
+- Im Bot sichtbar als eigenes Signal: „BTC-Trend 4 von 6 aufwärts – keine Bremse“ (grün), „… – höchstens 70 %“ (rot),
+  „… auch BTC-Funding zeigt Panik – Untergrenze bleibt“ (grün).
+
+Backtest mit Nachbau des Bots, ETH-EUR, März 2020 bis September 2026, ohne Gebühr (Details in
+`docs/btc-eth-verbindung.md`, Teil 3):
+
+| | Gewinn | pro Jahr | größter Rückgang | 2022–26 | schlechteste 12 Monate |
+|---|---|---|---|---|---|
+| ETH halten | +1.050 % | 45 % | −79 % | −28 % | – |
+| ETH-Bot ohne Bremse | +4.531 % | 79 % | −40 % | +298 % | −31 % |
+| ETH-Bot mit BTC-Bremse | +4.190 % | 77 % | −29 % | +313 % | −19 % |
+
+Der kleinere Rückgang hielt in allen sechs geprüften Grundeinstellungen (−29 bis −31 % statt −37 bis −40 %). Der
+Preis: In starken ETH-Läufen bleibt der Bot zurück (2021 +323 % statt +362 %, 2025 +46 % statt +63 %), und wie viel
+Ertrag die Bremse kostet, hängt stark von der Funding-Einstellung ab (bei den Standardwerten 7 %, bei einer
+Funding-Schwelle von 0 % fast 30 %). Für den BTC-Bot mit ETH als Bremse lohnte es sich nicht.
+
 ## 6. Stufe und Zielposition
 
 - Stufe = `round(Gewicht × 10)`, 0 bis 10, mit Pythons `round` (bei genau ,5 zur geraden Zahl). Kaufmännische Rundung
@@ -165,6 +190,7 @@ Beispiel: 14 T +8 %, 21 T +7 %, 30 T +6 %, 40 T +4 % (war an, bleibt an), 50 T +
 | `vol_target` | 100 % |
 | `funding_floor` / `funding_below` | 50 % / +2 % p. a. |
 | `inflow_brake` / `inflow_above` | aus / 1 % |
+| `btc_brake` | aus |
 | `maker_orders` / `maker_wait` | an / 10 min |
 
 ## 11. Beispiel eines Checks
