@@ -70,6 +70,113 @@ H6. Reine Uhrzeit-Effekte (H1–H3) halte ich nach realistischen Kosten für zu 
 nur an wenigen Tagen mit klarer Ausbruchsbewegung** – das passt zum „warten auf die beste Gelegenheit“. Eine eigene
 Strategie baue ich erst nach dem Test aus dem, was besteht, und prüfe sie ausdrücklich nur auf dem Prüfzeitraum.
 
-## Teil 2 – Backtest-Ergebnisse
+## Teil 2 – Backtest-Ergebnisse (nach dem Test geschrieben)
 
-(folgt nach dem Test)
+Gerechnet am 2026-10-09 nach dem Commit von Teil 1, mit genau den Regeln oben. Ø = Ergebnis je Trade nach
+Basiskosten, „pess.“ = nach 0,2 % Kosten je Trade, PF = Profitfaktor.
+
+### Die neun Hypothesen im Prüfzeitraum 2024-01 bis 2026-09
+
+| # | ETH: Trades · Ø · pess. · PF | BTC: Trades · Ø · pess. · PF | Bestanden? | Vorhersage gestimmt? |
+|---|---|---|---|---|
+| H1 Abendstunden 21–23 UTC | 913 · +0,07 % · −0,13 % · 1,25 | 924 · +0,05 % · −0,15 % · 1,25 | nein (Kosten) | ja |
+| H2 Außerhalb US-Sitzung | 670 · +0,25 % · +0,05 % · 1,25 | 665 · +0,17 % · −0,03 % · 1,24 | nur ETH | teilweise – stärker als erwartet, aber auch 2020–23 schon positiv |
+| H3 Intraday-Momentum | 306 · +0,06 % · −0,14 % · 1,14 | 252 · −0,06 % · −0,26 % · 0,83 | nein | ja |
+| H4 Noise-Area-Ausbruch | 1.627 · +0,02 % · −0,18 % · 1,06 | 1.642 · +0,01 % · −0,19 % · 1,04 | nein | **nein** – mein Favorit fiel durch |
+| H5 Asien-Montag | 346 · +0,00 % · −0,20 % · 1,01 | 336 · +0,04 % · −0,16 % · 1,17 | nein | ja |
+| H6 10-Tage-Hoch | 133 · +0,13 % · −0,04 % · 1,09 | 134 · +0,23 % · +0,05 % · 1,24 | nur BTC | teilweise |
+| H7 Überreaktion nach Absturz | 145 · +0,34 % · +0,14 % · 1,26 | 173 · +0,22 % · +0,02 % · 1,27 | **ja** | **nein** – besser als erwartet |
+| H8 Liquidity Sweep (YouTube/ICT) | 249 · −0,14 % · −0,26 % · 0,64 | 268 · −0,08 % · −0,21 % · 0,75 | nein, Verlust in jedem Jahr | ja |
+| H9 VWAP-Rücksetzer (YouTube) | 814 · −0,14 % · −0,28 % · 0,72 | 801 · −0,11 % · −0,26 % · 0,74 | nein, Verlust in jedem Jahr | ja |
+
+**Gegenprobe mit Zufall.** Jeder Long-Trade verdient in steigenden Märkten etwas, einfach weil der Kurs steigt. Deshalb
+habe ich jede Regel mit zufälligen Einstiegen gleicher Anzahl und Haltedauer verglichen (300 Durchläufe):
+
+- **H1, H6:** im Rahmen des Zufalls oder knapp darüber – kein belastbarer Vorteil.
+- **H2 (außerhalb der US-Sitzung):** 2020–23 im Rahmen des Zufalls, **2024–26 bei ETH klar darüber** (+0,25 % gegen
+  +0,05 %), bei BTC knapp innerhalb. Passt zur Literatur: Der Effekt entsteht mit den Spot-ETFs 2024.
+- **H7 (Überreaktion):** mit festen Schwellen 2020–23 nicht besser als Zufall, 2024–26 besser. Deutlich und in beiden
+  Zeiträumen besser wird es, **je größer der Einbruch**: ETH ab −4 % in 1 h, BTC ab −2,5 bis −3 %.
+
+Gesamtbild: **Klassisches Daytrading mit Stops, Zielen und Chart-Mustern hat keinen Vorteil** – weder die
+Varianten des Bots (letzter Backtest) noch die akademischen Ausbruchsregeln (H4, H5) noch die YouTube-Setups (H8, H9).
+Übrig bleiben zwei Effekte, bei denen nicht das Muster, sondern **der Zeitpunkt** zählt: nachts halten und nach
+Panik-Einbrüchen kaufen.
+
+### Eigene Strategie „Gelegenheitskäufer“ (nachträglich entworfen)
+
+Entworfen nur auf 2020–2023, dann einmal auf 2024–2026 geprüft. Zwei Bausteine, eine Position zur Zeit:
+
+1. **Crash-Kauf:** Fällt der Kurs in einer Stunde um mindestens das 3,5-Fache der üblichen Stunden-Schwankung (30 Tage),
+   Limit-Kauf zum Schlusskurs; Verkauf nach 24 Stunden. Kein Stop. Die Schwelle passt sich der Volatilität an, damit
+   dieselbe Regel für ETH und BTC gilt (bei ETH heute etwa −3 %, bei BTC etwa −2 % in einer Stunde).
+2. **Nachtschicht:** Montag bis Freitag 20:00 UTC kaufen, am nächsten Werktag 13:30 UTC verkaufen (Wochenende
+   durchhalten), also nur außerhalb der US-Börsenzeit investiert.
+3. **Filter für beides:** nur wenn der Schlusskurs des Vortags über dem 50-Tage-Durchschnitt liegt.
+
+Warum diese Werte: Auf 2020–23 lagen alle Schwellen von 2,5 bis 5 und Haltezeiten von 24–48 h im Plus; mit dem
+50-Tage-Filter halbierte sich der Rückgang. 3,5 und 24 h liegen in der Mitte des Plateaus. Der Filter wurde aus vier
+Kandidaten gewählt (keiner, 20-Tage-Schnitt, 10-Tage-Rendite, 50-Tage-Schnitt).
+
+| | ETH 2020–23 | ETH **2024–26** | BTC 2020–23 | BTC **2024–26** |
+|---|---|---|---|---|
+| Crash-Kauf: Trades/Jahr · Treffer · Ø · PF | 40 · 64 % · +0,86 % · 1,56 | 36 · 56 % · **+0,51 %** · 1,48 | 36 · 64 % · +0,88 % · 2,01 | 40 · 52 % · **+0,62 %** · 1,87 |
+| Crash-Kauf: Summe · größter Rückgang | +178 % · −48 % | +56 % · −28 % | +199 % · −26 % | +87 % · −9 % |
+| Nachtschicht: Trades/Jahr · Ø · PF | 142 · +0,43 % · 1,36 | 122 · **+0,44 %** · 1,51 | 130 · +0,41 % · 1,48 | 133 · **+0,23 %** · 1,37 |
+| Beides zusammen: Ø · PF · Rückgang | +0,59 % · 1,48 · −40 % | **+0,47 %** · 1,49 · −25 % | +0,49 % · 1,53 · −48 % | **+0,22 %** · 1,28 · −27 % |
+| Beides, nach 0,2 % Kosten je Trade | +0,39 % | +0,27 % | +0,29 % | +0,02 % |
+
+Vermögen im Prüfzeitraum Januar 2024 bis September 2026 (Faktor auf den Einsatz):
+
+| | ETH | BTC |
+|---|---|---|
+| Gelegenheitskäufer (beides, 41–46 % der Zeit investiert) | **×3,27** | ×1,77 |
+| Nur Crash-Kauf (etwa 10 % der Zeit investiert) | ×1,56 | ×1,87 |
+| Coin halten | ×1,14 | ×1,91 |
+| **Ganztägig long, solange über dem 50-Tage-Schnitt** (50–55 % der Zeit) | **×3,59** | **×2,41** |
+
+Je Jahr (Summe der Trade-Ergebnisse, beides zusammen): ETH 2020 +94 %, 2021 +159 %, 2022 −27 %, 2023 +47 %,
+2024 +48 %, 2025 +55 %, 2026 +33 %. BTC 2020 +99 %, 2021 +88 %, 2022 −49 %, 2023 +69 %, 2024 +66 %, 2025 −9 %,
+2026 +13 %.
+
+**Robustheit des Crash-Kaufs im Prüfzeitraum** (nachträglich angesehen, nicht zur Auswahl benutzt): Alle 54
+Nachbarvarianten (Schwelle 3–4, Haltezeit 12/24/48 h, Filter 50 Tage/20 Tage/keiner) sind nach Basiskosten im Plus;
+24 h ist auf beiden Coins der beste Bereich, 12 h ist nach pessimistischen Kosten knapp null. Gegen zufällige
+24-h-Käufe an denselben Filtertagen ist der Crash-Kauf bei BTC klar besser (+0,62 % gegen +0,20 %), bei ETH besser,
+aber noch im Zufallsbereich (+0,51 % gegen +0,28 %, 95-%-Grenze +0,81 %). Bei ETH stammen 87 % des Gewinns aus den
+fünf besten Trades, bei BTC 63 %. 2025 war bei beiden Coins fast null.
+
+### Was das heißt
+
+1. **Die Strategie hätte Geld verdient**, auch im Zeitraum, den ich beim Entwurf nicht angesehen habe – ETH ×3,3 statt
+   ×1,1 beim Halten, BTC ×1,8 bei einem Drittel weniger Rückgang als beim Halten (−27 % gegen −32 % im Prüfzeitraum,
+   über 2020–26 −48 % gegen −77 %).
+2. **Aber sie schlägt nicht die einfachste Alternative.** Ganztägig long, solange der Kurs über dem 50-Tage-Schnitt
+   liegt, brachte in beiden Coins mehr. Der Großteil des Gewinns kommt also vom Trendfilter, nicht vom Daytrading.
+   Und der Momentum-Trendfolger (`docs/momentum-trendfolger.md`) ist noch einmal deutlich besser.
+3. **Sinnvoll ist der Crash-Kauf als Ergänzung,** genau im Sinn von „warten auf die beste Gelegenheit“: etwa
+   40 Käufe im Jahr, je 24 h, also nur rund 10 % der Zeit investiert; im Prüfzeitraum ETH +56 %, BTC +87 % auf den
+   Einsatz, größter Rückgang −28 % bzw. −9 %. Das Geld wartet die übrige Zeit – es kann daneben verzinst liegen.
+   Er braucht keine KI und keine API-Kosten: Die Regel ist eine einfache Rechnung.
+4. **Die Nachtschicht** ist bei ETH seit 2024 belastbar, bei BTC nicht. Sie ist eher eine Eigenheit der ETF-Ära als
+   ein dauerhaftes Gesetz und kann wieder verschwinden.
+5. **Für den KI-Bot:** Claude kann das nicht besser lernen, als es die Regeln schon zeigen – die Setups, die ein
+   Sprachmodell aus Chartbildern lesen würde (Ausbruch, Rücksetzer, Sweep, VWAP), haben keinen messbaren Vorteil.
+   Wenn KI, dann als Filter, der offensichtlich schlechte Crash-Käufe auslässt (z. B. bei echten Pleite-Nachrichten
+   wie FTX 2022). Das lässt sich nicht backtesten.
+
+### Vorhersage gegen Ergebnis
+
+Vorhergesagt waren „höchstens eine bis zwei Regeln bestehen, am ehesten H4 oder H6“. Bestanden hat eine Regel ganz
+(H7), zwei halb (H2 bei ETH, H6 bei BTC). H4 und H6 lagen falsch, H7 hatte ich mit 25 % unterschätzt. Richtig lag die
+Erwartung, dass reine Uhrzeit-Effekte nach Kosten zu klein sind (H1, H3) und dass die YouTube-Setups (H8, H9)
+verlieren – sie verlieren in jedem einzelnen Jahr.
+
+### Grenzen
+
+- Füllung zum Schlusskurs der Signalkerze, sobald der Kurs ihn in 10 Minuten berührt; Ausstiege zum Schlusskurs ohne
+  Gebühr. In einem echten Crash ist der Spread auf Revolut X breiter – deshalb der pessimistische Fall.
+- Binance-Kurse statt Revolut X. Die Kurse laufen gleich, die Liquidität in Crashs nicht.
+- Prüfzeitraum 2,75 Jahre, rund 100 Crash-Käufe je Coin. Ein Effekt, der von fünf Trades lebt, kann Glück sein.
+- Über 30 Varianten habe ich nach dem Test angesehen; ausgewählt wurde aber nur auf 2020–23.
+- Skripte lagen im Scratchpad der Sitzung (`dt.py`, `own.py`, `final.py`), nicht im Repository.
