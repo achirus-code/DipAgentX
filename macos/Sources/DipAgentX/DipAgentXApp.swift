@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func icon(_ symbol: String, rotatedBy angle: CGFloat = 0) -> NSImage? {
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "DipAgentX") else { return nil }
         base.isTemplate = true
-        if symbol.hasPrefix("chart") { return withX(base) }
+        if symbol.hasPrefix("chart") { return withX(base, circle: symbol.hasSuffix(".circle") || symbol.hasSuffix(".circle.fill")) }
         guard angle != 0 else { return base }
         let size = NSSize(width: 18, height: 18) // the menu bar renders the symbol at this size anyway
         let image = NSImage(size: size, flipped: false) { rect in
@@ -175,10 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The chart with the X of Revolut X over its bottom-right corner – as narrow as the chart allows.
-    private static func withX(_ chart: NSImage) -> NSImage {
+    /// The circle (open position) gets the full canvas height, otherwise it would look smaller than the bare chart.
+    private static func withX(_ chart: NSImage, circle: Bool = false) -> NSImage {
         let canvas = NSSize(width: 18, height: 16)
         let image = NSImage(size: canvas, flipped: false) { _ in
-            let scale = min(15 / chart.size.width, 13 / chart.size.height)
+            let scale = circle ? 15.5 / max(chart.size.width, chart.size.height) : min(15 / chart.size.width, 13 / chart.size.height)
             let size = NSSize(width: chart.size.width * scale, height: chart.size.height * scale)
             chart.draw(in: NSRect(x: 0, y: canvas.height - size.height, width: size.width, height: size.height))
             let box = NSRect(x: canvas.width - 6.5, y: 0, width: 6.5, height: 7)
