@@ -4,6 +4,13 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Added
+
+- **"i" in the bot details** (iPhone: next to "Edit", Mac: next to Start/Stop): explains how the bot works exactly –
+  the strategy in words, every setting with its current value and what it does – and its state right now: running
+  or stopped, paper or live, last check, status and hints, what it waits for, its indicators and decision (momentum),
+  open trades with entry and open result, closed trades, realized result and fees.
+
 ### Changed
 
 - **Own icon for the lead-lag bot** in the iOS and macOS apps: two step lines – BTC jumps first, the coin follows a

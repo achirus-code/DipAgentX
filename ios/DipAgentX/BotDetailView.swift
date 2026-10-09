@@ -54,7 +54,10 @@ struct BotDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await store.refresh() }
             .toolbar {
-                Button("Edit") { editing = true }
+                ToolbarItemGroup {
+                    BotInfoButton(bot: bot)
+                    Button("Edit") { editing = true }
+                }
             }
             .sheet(isPresented: $editing) {
                 BotEditorSheet(bot: bot) { _ in }
