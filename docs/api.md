@@ -28,6 +28,12 @@ curl -H "Authorization: Bearer $TOKEN" -H "Accept-Language: de" http://192.168.1
 | GET | `/pairs` | Handelbare Paare der Börse, z. B. `ETH-EUR` |
 | GET | `/balances` | Guthaben auf der Börse |
 
+## Forschung
+
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/research/leadlag?limit=50` | Messung „ETH folgt BTC“: BTC-USDT-Sprünge ab 0,3 % in 60 s und wie ETH-EUR auf Revolut X nach 1, 5 und 15 min folgte (Mittelkurs und als Taker-Runde Ask → Bid), ausgewertet nach Sprunggröße und ob ETH nachhinkte. Handelt nie. Aus mit `LEADLAG_MONITOR=0` |
+
 ## Bots
 
 | Methode | Pfad | Zweck |
