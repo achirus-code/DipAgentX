@@ -4,6 +4,8 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.38.0] – 2026-10-09
+
 ### Changed
 
 - **Own icon for the lead-lag bot** in the iOS and macOS apps: two step lines – BTC jumps first, the coin follows a
