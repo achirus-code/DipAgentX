@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Own icon for the lead-lag bot** in the iOS and macOS apps: two step lines – BTC jumps first, the coin follows a
+  moment later – on a tile from Bitcoin orange to Ethereum blue, with the coin badge of the traded coin like the
+  momentum follower.
+
 ## [1.37.0] – 2026-10-09
 
 ### Added
