@@ -1213,7 +1213,7 @@ private struct ResultBar: View {
                 Capsule().fill(Color.primary.opacity(0.06))
                 Capsule().fill(value < 0 ? Color.red : Color.profit)
                     .frame(width: length)
-                    .offset(x: value < 0 ? zero - length : zero)
+                    .offset(x: diverging && value < 0 ? zero - length : zero) // only losses: from the left, like profits
                 if diverging {
                     Rectangle().fill(Color.primary.opacity(0.3)).frame(width: 1).offset(x: zero - 0.5)
                 }
