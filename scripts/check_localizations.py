@@ -23,6 +23,7 @@ RESOURCES = ROOT / "shared" / "Localization"
 # literals that are not UI text (identifiers, protocol values, product names …)
 IGNORE = {
     "EUR", "USD", "GBP", "CHF", "PLN", "PAPER", "LIVE", "Revolut X", "DipAgentX", "English", "Deutsch", "System",
+    "M6F+", "MV6F+", "BTC",  # strategy short names, ticker
     "Authorization", "Accept", "Accept-Language", "Content-Type", "application/json",
     "GET", "POST", "PUT", "DELETE", "AppleLanguages", "LIVE", "Bots", "Trades", "Name", "Agent",
     " · Paper", " (Paper)", " · ", "–", "App", "ETH-EUR", "-EUR", "apiToken", "Not Found",

@@ -4,6 +4,12 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Profit chart (macOS)**: the dotted line of a momentum bot is named after its strategy – **M6F+**, or **MV6F+**
+  when BTC brakes it (a coin other than BTC with "BTC as a brake") – instead of "with open trades"; the tooltip groups
+  it under the bot's name with HODL and "M6F+ against HODL".
+
 ## [1.39.0] – 2026-10-10
 
 ### Added
