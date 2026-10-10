@@ -147,20 +147,32 @@ def hodl_comparison(state: dict, params: dict, price: Decimal) -> dict | None:
     }
 
 
-def hodl_history(state: dict, exchange, symbol: str, price: Decimal, now: int) -> list[dict]:
-    """The result of holding instead (value minus the money put in) at every 4-hour close since the start – from the
-    closes the bot loads anyway – and now."""
+def hodl_history(state: dict, exchange, symbol: str, price: Decimal, now: int, trades: list[dict] = ()) -> list[dict]:
+    """The result of holding instead (value minus the money put in) at the start, at every 4-hour close since – from
+    the closes the bot loads anyway – and now. ``bot`` is the bot's own result at the same moments, on the same terms:
+    what its sales brought in minus what its buys cost, plus the coins it holds at that price – fees included, open
+    trades too (its realized result alone only moves with a sale). ``trades``: the bot's trades since the start,
+    oldest first."""
     deposits = hodl_deposits(state.get("momentum") or {})
     if not deposits:
         return []
+    start = int(deposits[0]["at"])
     closes = (_closes.get(exchange) or {}).get(symbol) or {}
-    points = []
-    for t in [t for t in sorted(closes) if t + STEP_MS >= int(deposits[0]["at"])] + [now]:
-        close = price if t == now else closes[t]
-        at = t if t == now else t + STEP_MS  # a close belongs to the end of its candle
+    moments = [(start, Decimal(deposits[0]["price"]))]  # holding is worth what it cost right at the start
+    moments += [(t + STEP_MS, closes[t]) for t in sorted(closes) if t + STEP_MS > start]  # a close ends its candle
+    moments.append((now, price))
+    points, coins, cash, done = [], Decimal(0), Decimal(0), 0
+    for at, close in moments:
+        while done < len(trades) and int(trades[done]["created_at"]) <= at:
+            trade = trades[done]
+            sign = 1 if trade["side"] == "buy" else -1
+            coins += sign * Decimal(trade["base_qty"])
+            cash -= sign * Decimal(trade["quote_amount"])  # a buy's amount includes its fee, a sale's is after it
+            done += 1
         own = [d for d in deposits if int(d["at"]) <= at] or deposits[:1]
-        coins = sum((Decimal(d["capital"]) / Decimal(d["price"]) for d in own), Decimal(0))
-        points.append({"t": at, "value": float(coins * close - sum((Decimal(d["capital"]) for d in own), Decimal(0)))})
+        held = sum((Decimal(d["capital"]) / Decimal(d["price"]) for d in own), Decimal(0))
+        put_in = sum((Decimal(d["capital"]) for d in own), Decimal(0))
+        points.append({"t": at, "value": float(held * close - put_in), "bot": float(coins * close + cash)})
     return points
 
 

@@ -9,12 +9,26 @@ import UIKit
 /// on the Mac (window) and the iPhone (page).
 public struct ProfitHistoryData {
     public struct Curve: Identifiable {
-        public let id: Int // bot id, -1 = all shown bots together, -1000 - bot id = the bot's "only held" line
+        /// The realized result, the result of only holding (HODL) – or the bot's own with its open trades valued at
+        /// the price of then, which moves with the price like holding does.
+        public enum Kind { case realized, holding, value }
+
+        public let id: Int // bot id, -1 = all shown bots together; -1000 - bot id: holding, -2000 - bot id: value
         public let color: Color
         public let points: [ProfitPoint]
+        public var kind: Kind = .realized
+
+        /// The bot the line belongs to, -1 for all shown bots together.
+        public var botId: Int {
+            switch kind {
+            case .realized: return id
+            case .holding: return -1000 - id
+            case .value: return -2000 - id
+            }
+        }
 
         /// The value at `date`, nil before the curve starts. The realized result only changes with a sale, so it is
-        /// the last point's; the "only held" line moves all the time, so it is interpolated between two points.
+        /// the last point's; the lines valued at the price move all the time, so they are interpolated.
         public func value(at date: Date) -> Double? {
             guard let first = points.first, date >= first.date else { return nil }
             var low = 0, high = points.count - 1
@@ -22,7 +36,7 @@ public struct ProfitHistoryData {
                 let mid = (low + high + 1) / 2
                 if points[mid].date <= date { low = mid } else { high = mid - 1 }
             }
-            guard id <= -1000, low + 1 < points.count else { return points[low].value }
+            guard kind != .realized, low + 1 < points.count else { return points[low].value }
             let (a, b) = (points[low], points[low + 1])
             let span = b.date.timeIntervalSince(a.date)
             return span > 0 ? a.value + (b.value - a.value) * date.timeIntervalSince(a.date) / span : a.value
@@ -161,19 +175,27 @@ public struct ProfitHistoryData {
 
     /// The "only held" lines of the chosen bots – in a paler shade of the bot's colour, drawn dashed: the result
     /// holding would have had since the bot's start, on the same scale as the bot's own line.
-    public var hodlCurves: [Curve] {
+    public var hodlCurves: [Curve] { comparisonCurves(.holding) { $0.value } }
+
+    /// The same bots' own result with their open trades valued at the price of then (agent 1.39+) – compared with
+    /// holding on the same terms: both move with the price, the realized result only with a sale.
+    public var valueCurves: [Curve] { comparisonCurves(.value) { $0.bot } }
+
+    private func comparisonCurves(_ kind: Curve.Kind, _ value: (HodlPoint) -> Double?) -> [Curve] {
         let start = range.start
         return hodl.keys.sorted().filter { !hidden.contains($0) }.compactMap { id in
-            let all = hodl[id] ?? []
+            let all = (hodl[id] ?? []).compactMap { point in value(point).map { (date: point.date, value: $0) } }
             var shown = all.filter { start == nil || $0.date >= start! }
             guard !shown.isEmpty else { return nil }
             if let start, let before = all.last(where: { $0.date < start }) {
-                shown.insert(HodlPoint(t: Int64(start.timeIntervalSince1970 * 1000), value: before.value), at: 0)
+                shown.insert((date: start, value: before.value), at: 0)
             }
             let points = shown.enumerated().map { index, point in
-                ProfitPoint(id: "hodl-\(id)-\(index)", date: point.date, value: point.value, trade: nil)
+                ProfitPoint(id: "\(kind)-\(id)-\(index)", date: point.date, value: point.value, trade: nil)
             }
-            return Curve(id: -1000 - id, color: color(id).opacity(0.45), points: points)
+            return kind == .holding
+                ? Curve(id: -1000 - id, color: color(id).opacity(0.45), points: points, kind: kind)
+                : Curve(id: -2000 - id, color: color(id), points: points, kind: kind)
         }
     }
 
@@ -212,7 +234,7 @@ public struct ProfitHistoryData {
 
     /// The values of the shown curves plus the zero line, with a little air above and below.
     public var yDomain: ClosedRange<Double> {
-        let values: [Double] = (curves + hodlCurves).flatMap { curve in curve.points.map(\.value) } + [0]
+        let values: [Double] = (curves + hodlCurves + valueCurves).flatMap { curve in curve.points.map(\.value) } + [0]
         let low = values.min() ?? 0, high = values.max() ?? 0
         let pad = max((high - low) * 0.08, 1)
         return (low - pad)...(high + pad)

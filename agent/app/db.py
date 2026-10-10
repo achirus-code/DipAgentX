@@ -345,6 +345,13 @@ class Database:
             "SELECT * FROM trades WHERE bot_id = ? ORDER BY created_at DESC, id DESC LIMIT ?", (bot_id, limit)
         )
 
+    def bot_trades_since(self, bot_id: int, since_ms: int, paper: bool) -> list[dict[str, Any]]:
+        """A bot's trades in one mode (paper or live) from ``since_ms`` on, oldest first."""
+        return self._all(
+            f"SELECT * FROM trades WHERE bot_id = ? AND created_at >= ? {self._mode(paper)} ORDER BY created_at, id",
+            (bot_id, since_ms),
+        )
+
     def trade_stats(self) -> dict[tuple[int, bool], dict[str, Any]]:
         """Per bot and mode (paper or live), so a bot switched to live doesn't show its paper results."""
         rows = self._all(

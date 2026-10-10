@@ -343,6 +343,8 @@ public struct HodlComparison: Codable, Equatable {
 public struct HodlPoint: Codable, Equatable {
     public let t: Int64
     public let value: Double
+    /// The bot's own result at the same moment, its open trades valued at the price of then – agent 1.39+.
+    public var bot: Double?
 
     public var date: Date { Date(ms: t) }
 }

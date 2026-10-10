@@ -4,6 +4,20 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+## [1.39.0] – 2026-10-10
+
+### Added
+
+- **Bot against HODL on the same terms**: `/bots/{id}/hodl` also returns the bot's own result (`bot`) at every
+  4-hour point – what its sales brought in minus what its buys cost, plus the coins it holds at the price of then,
+  fees included. With HODL switched on, the profit chart (macOS and iPhone) draws it dotted next to the dashed HODL
+  line: both move with the price, while the realized result only moves with a sale – a momentum bot that hasn't sold
+  yet stayed flat at 0. Hovering shows both and how far the bot is ahead of or behind holding.
+
+### Fixed
+
+- **The HODL line starts at 0** at the start of the comparison instead of at the first 4-hour close after it.
+
 ### Changed
 
 - **Profit history redesigned** (macOS): white cards on a calm background, in light and dark mode. Moving the mouse
