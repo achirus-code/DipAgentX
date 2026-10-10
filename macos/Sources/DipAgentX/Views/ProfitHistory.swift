@@ -306,7 +306,7 @@ struct ProfitHistoryView: View {
                         legendItem("Buy") { TradeSymbol(isBuy: true).fill(Color.profit).frame(width: 8, height: 8) }
                         legendItem("Sale") { TradeSymbol(isBuy: false).fill(Color.red).frame(width: 8, height: 8) }
                         if !model.values.isEmpty {
-                            legendItem("With open trades") { LineKey(color: .secondary, style: .dotted) }
+                            legendItem(model.valueLegend) { LineKey(color: .secondary, style: .dotted) }
                                 .help("Dotted: the bot's result with its open trades valued at the price of then – moves with the price like holding.")
                         }
                         if !model.hodl.isEmpty {
@@ -529,6 +529,7 @@ private struct ChartModel {
     let perBot: Bool
     private let names: [Int: String]
     private let colors: [Int: Color]
+    private let labels: [Int: String]
 
     init(_ data: ProfitHistoryData) {
         curves = data.curves
@@ -543,11 +544,20 @@ private struct ChartModel {
         perBot = data.perBot
         names = Dictionary(uniqueKeysWithValues: data.botIds.map { ($0, data.name($0)) })
         colors = Dictionary(uniqueKeysWithValues: data.botIds.map { ($0, data.color($0)) })
+        labels = Dictionary(uniqueKeysWithValues: data.botIds.map { ($0, data.strategyLabel($0)) })
     }
 
     func name(_ botId: Int) -> String { names[botId] ?? "#\(botId)" }
 
     func color(_ botId: Int) -> Color { colors[botId] ?? .secondary }
+
+    /// M6F+ or MV6F+ – the strategy the dotted line stands for.
+    func label(_ botId: Int) -> String { labels[botId] ?? "M6F+" }
+
+    /// The legend of the dotted lines: the strategies shown, e.g. "M6F+ · MV6F+".
+    var valueLegend: LocalizedStringKey {
+        LocalizedStringKey(stringLiteral: Array(Set(values.map { label($0.botId) })).sorted().joined(separator: " · "))
+    }
 
     func bucket(at date: Date) -> ProfitHistoryData.Bucket? {
         let start = Calendar.current.dateInterval(of: unit, for: date)?.start
@@ -793,7 +803,7 @@ private struct CurveHoverLayer: View {
             let value = model.values.first { $0.botId == id }
             let held = model.hodl.first { $0.botId == id }
             let compared = TimeTooltip.Compared(
-                id: id, name: model.name(id), color: value?.color ?? held?.color ?? .secondary, heldColor: held?.color ?? .secondary,
+                id: id, name: model.name(id), label: model.label(id), color: value?.color ?? held?.color ?? .secondary, heldColor: held?.color ?? .secondary,
                 value: value?.value(at: date), held: held?.value(at: date)
             )
             return compared.value == nil && compared.held == nil ? nil : compared
@@ -969,6 +979,8 @@ private struct TimeTooltip: View {
     struct Compared: Identifiable {
         let id: Int
         let name: String
+        /// M6F+ or MV6F+.
+        let label: String
         let color: Color
         let heldColor: Color
         let value: Double?
@@ -1009,11 +1021,12 @@ private struct TimeTooltip: View {
                     }
                     ForEach(compared) { bot in
                         Divider().gridCellColumns(2).opacity(0.6)
+                        Text(verbatim: bot.name).font(.system(size: 11, weight: .medium)).lineLimit(1).gridCellColumns(2)
                         if let value = bot.value {
                             GridRow {
                                 HStack(spacing: 6) {
                                     LineKey(color: bot.color, style: .dotted)
-                                    Text("\(bot.name) · with open trades").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(verbatim: bot.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 PnLText(value: value, currency: currency, font: .system(size: 12, weight: .semibold))
                             }
@@ -1022,14 +1035,14 @@ private struct TimeTooltip: View {
                             GridRow {
                                 HStack(spacing: 6) {
                                     LineKey(color: bot.heldColor, style: .dashed)
-                                    Text(verbatim: "\(bot.name) · HODL").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(verbatim: "HODL").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 PnLText(value: held, currency: currency, font: .system(size: 12, weight: .semibold))
                             }
                         }
                         if let value = bot.value, let held = bot.held {
                             GridRow {
-                                Text("Bot against HODL").font(.system(size: 11, weight: .medium)).padding(.leading, 20)
+                                Text("\(bot.label) against HODL").font(.system(size: 11, weight: .medium)).padding(.leading, 20)
                                 PnLText(value: value - held, currency: currency, font: .system(size: 12, weight: .bold))
                             }
                         }

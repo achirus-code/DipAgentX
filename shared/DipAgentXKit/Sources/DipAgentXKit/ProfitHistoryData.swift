@@ -168,6 +168,13 @@ public struct ProfitHistoryData {
         return points.isEmpty ? [] : [Curve(id: -1, color: .accentColor, points: points)]
     }
 
+    /// The momentum follower's short name in the comparison with holding: MV6F+ when BTC brakes it (a coin other
+    /// than BTC with "BTC as a brake"), else M6F+.
+    public func strategyLabel(_ botId: Int) -> String {
+        guard let bot = bots.first(where: { $0.id == botId }) else { return "M6F+" }
+        return bot.baseCurrency != "BTC" && bot.params["btc_brake"]?.bool == true ? "MV6F+" : "M6F+"
+    }
+
     /// Bots that can compare themselves with holding (momentum follower).
     public func canCompare(_ botId: Int) -> Bool {
         bots.first { $0.id == botId }?.strategy == "momentum"

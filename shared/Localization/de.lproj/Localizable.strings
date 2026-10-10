@@ -477,10 +477,8 @@
 "Decision" = "Entscheidung";
 "Dashed: only held (HODL) since the bot's start" = "Gestrichelt: nur gehalten (HODL) seit dem Start des Bots";
 "Compares the bot with holding since its start: dashed what holding would have made, dotted the bot's own result with its open trades." = "Vergleicht den Bot mit Halten seit seinem Start: gestrichelt, was Halten gebracht hätte, punktiert das eigene Ergebnis des Bots mit seinen offenen Trades.";
-"Dotted: the bot's result with its open trades valued at the price of then – moves with the price like holding." = "Punktiert: das Ergebnis des Bots mit seinen offenen Trades zum damaligen Kurs – bewegt sich mit dem Kurs wie Halten.";
-"With open trades" = "Mit offenen Trades";
-"%@ · with open trades" = "%@ · mit offenen Trades";
-"Bot against HODL" = "Bot ggü. HODL";
+"Dotted: the bot's result with its open trades valued at the price of then – moves with the price like holding." = "Punktiert: das Ergebnis des Bots (M6F+, mit BTC-Bremse MV6F+) mit seinen offenen Trades zum damaligen Kurs – bewegt sich mit dem Kurs wie Halten.";
+"%@ against HODL" = "%@ ggü. HODL";
 "Hide the HODL line of this bot" = "HODL-Linie dieses Bots ausblenden";
 "Show what holding would have made since this bot's start" = "Zeigen, was Halten seit dem Start dieses Bots gebracht hätte";
 "HODL" = "HODL";
