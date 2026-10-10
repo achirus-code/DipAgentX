@@ -1,12 +1,32 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Everything the profit chart shows, computed from the trade history and the chosen filters – the same numbers
 /// on the Mac (window) and the iPhone (page).
 public struct ProfitHistoryData {
     public struct Curve: Identifiable {
-        public let id: Int // bot id, -1 = all shown bots together
+        public let id: Int // bot id, -1 = all shown bots together, -1000 - bot id = the bot's "only held" line
         public let color: Color
         public let points: [ProfitPoint]
+
+        /// The value at `date`, nil before the curve starts. The realized result only changes with a sale, so it is
+        /// the last point's; the "only held" line moves all the time, so it is interpolated between two points.
+        public func value(at date: Date) -> Double? {
+            guard let first = points.first, date >= first.date else { return nil }
+            var low = 0, high = points.count - 1
+            while low < high { // the last point not after `date`
+                let mid = (low + high + 1) / 2
+                if points[mid].date <= date { low = mid } else { high = mid - 1 }
+            }
+            guard id <= -1000, low + 1 < points.count else { return points[low].value }
+            let (a, b) = (points[low], points[low + 1])
+            let span = b.date.timeIntervalSince(a.date)
+            return span > 0 ? a.value + (b.value - a.value) * date.timeIntervalSince(a.date) / span : a.value
+        }
     }
 
     public struct BotStats: Identifiable {
@@ -22,9 +42,45 @@ public struct ProfitHistoryData {
         public let last: Date?
     }
 
+    /// The realized result of one day, week or month – a bar below the curve.
+    public struct Bucket: Identifiable {
+        public let start: Date
+        public let end: Date
+        public let pnl: Double
+        public let sales: Int
+        public let wins: Int
+        /// Each bot's share of the result, the largest first.
+        public let perBot: [(botId: Int, pnl: Double)]
+        public var id: Date { start }
+    }
+
     public typealias Marker = (curve: Curve, point: ProfitPoint)
 
-    public static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .yellow, .red, .indigo, .mint, .brown, .cyan]
+    /// Bot colours, one shade for light and one for dark mode. No green and no red: those mean buy / profit and
+    /// sale / loss in the chart. The order keeps neighbouring colours apart for colour-blind eyes too.
+    public static let palette: [Color] = [
+        shade(0x2A78D6, 0x3987E5), shade(0xEB6834, 0xD95926), shade(0x1BAF7A, 0x199E70), shade(0xEDA100, 0xC98500),
+        shade(0xE87BA4, 0xD55181), shade(0x4A3AA7, 0x9085E9), shade(0x8A9A1B, 0x8E9E1F), shade(0xA8327F, 0xB9488F),
+    ]
+
+    private static func shade(_ light: UInt32, _ dark: UInt32) -> Color {
+        func rgb(_ hex: UInt32) -> (CGFloat, CGFloat, CGFloat) {
+            (CGFloat(hex >> 16 & 0xFF) / 255, CGFloat(hex >> 8 & 0xFF) / 255, CGFloat(hex & 0xFF) / 255)
+        }
+        let (l, d) = (rgb(light), rgb(dark))
+        #if canImport(AppKit)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? NSColor(srgbRed: d.0, green: d.1, blue: d.2, alpha: 1)
+                : NSColor(srgbRed: l.0, green: l.1, blue: l.2, alpha: 1)
+        })
+        #else
+        return Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(red: d.0, green: d.1, blue: d.2, alpha: 1)
+                : UIColor(red: l.0, green: l.1, blue: l.2, alpha: 1)
+        })
+        #endif
+    }
 
     public let trades: [Trade]
     public let bots: [Bot]
@@ -166,6 +222,31 @@ public struct ProfitHistoryData {
         let now = Date()
         let lower = range.start ?? scoped.map(\.date).min() ?? now
         return min(lower, now.addingTimeInterval(-3600))...now
+    }
+
+    /// Days up to about three months, then weeks, beyond a year and a half months.
+    public var bucketUnit: Calendar.Component {
+        let days = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound) / 86_400
+        return days <= 100 ? .day : days <= 550 ? .weekOfYear : .month
+    }
+
+    /// The realized result of the shown bots per day, week or month in the period – only periods with a sale.
+    public var buckets: [Bucket] {
+        let calendar = Calendar.current
+        let unit = bucketUnit
+        let sales = inRange.filter { $0.pnl != nil && !hidden.contains($0.botId) }
+        let groups = Dictionary(grouping: sales) { calendar.dateInterval(of: unit, for: $0.date)?.start ?? $0.date }
+        return groups.map { start, trades in
+            var perBot: [Int: Double] = [:]
+            for trade in trades { perBot[trade.botId, default: 0] += trade.pnl ?? 0 }
+            return Bucket(
+                start: start, end: calendar.date(byAdding: unit, value: 1, to: start) ?? start,
+                pnl: trades.reduce(0) { $0 + ($1.pnl ?? 0) }, sales: trades.count,
+                wins: trades.filter { ($0.pnl ?? 0) > 0 }.count,
+                perBot: perBot.map { (botId: $0.key, pnl: $0.value) }.sorted { abs($0.pnl) > abs($1.pnl) }
+            )
+        }
+        .sorted { $0.start < $1.start }
     }
 
     /// Totals of the shown bots in the period – the tiles above the chart.

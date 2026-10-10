@@ -4,6 +4,21 @@ All notable changes to DipAgentX (formerly DipAgent) are documented here. The fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Profit history redesigned** (macOS): white cards on a calm background, in light and dark mode. Moving the mouse
+  over the chart shows a line at that moment with a dot on every curve and every bot's result in a tooltip; right on
+  a buy or sale it shows that trade. The curve runs in steps – the realized result only changes with a sale.
+- **Result per day** below the curve (per week from a year on, per month beyond a year and a half): green and red
+  bars on the same time axis; hovering a bar shows the day's result, sales, winners and each bot's share, and marks
+  the day on the curve too.
+- **Tiles with graphics**: a small curve under the profit, buys against sales as a bar, the win rate as a ring, plus
+  the average per trade and the fees as a share of the volume.
+- **Bot table**: win rate per bot, the result as a bar against the best bot, and hovering a row highlights the bot's
+  line in the chart. With the trade details open, fees and last trade make room.
+- **Bot colours** (macOS and iPhone): no more green and red for bots – those mean buy and sale; eight colours that stay
+  apart for colour-blind eyes too, with their own shade in dark mode.
+
 ## [1.38.1] – 2026-10-09
 
 ### Fixed
