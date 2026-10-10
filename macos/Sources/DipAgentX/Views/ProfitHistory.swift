@@ -305,8 +305,12 @@ struct ProfitHistoryView: View {
                     HStack(spacing: 14) {
                         legendItem("Buy") { TradeSymbol(isBuy: true).fill(Color.profit).frame(width: 8, height: 8) }
                         legendItem("Sale") { TradeSymbol(isBuy: false).fill(Color.red).frame(width: 8, height: 8) }
+                        if !model.values.isEmpty {
+                            legendItem("With open trades") { LineKey(color: .secondary, style: .dotted) }
+                                .help("Dotted: the bot's result with its open trades valued at the price of then – moves with the price like holding.")
+                        }
                         if !model.hodl.isEmpty {
-                            legendItem("HODL") { LineKey(color: .secondary, dashed: true) }
+                            legendItem("HODL") { LineKey(color: .secondary, style: .dashed) }
                                 .help("Dashed: only held (HODL) since the bot's start")
                         }
                         if trades.count >= Self.historyLimit {
@@ -362,7 +366,7 @@ struct ProfitHistoryView: View {
                         Text("Last trade").frame(width: BotColumns.last, alignment: .trailing)
                     }
                     Text("HODL").frame(width: BotColumns.hodl, alignment: .center)
-                        .help("Shows what holding would have made since the bot's start – a dashed line in a paler colour.")
+                        .help("Compares the bot with holding since its start: dashed what holding would have made, dotted the bot's own result with its open trades.")
                 }
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -514,6 +518,8 @@ private struct ChartModel {
 
     let curves: [Curve]
     let hodl: [Curve]
+    /// The bots compared with holding: their result with the open trades.
+    let values: [Curve]
     let markers: [ProfitHistoryData.Marker]
     let buckets: [ProfitHistoryData.Bucket]
     let unit: Calendar.Component
@@ -527,6 +533,7 @@ private struct ChartModel {
     init(_ data: ProfitHistoryData) {
         curves = data.curves
         hodl = data.hodlCurves
+        values = data.valueCurves
         markers = curves.flatMap { curve in curve.points.filter { $0.trade != nil }.map { (curve, $0) } }
         buckets = data.buckets
         unit = data.bucketUnit
@@ -541,9 +548,6 @@ private struct ChartModel {
     func name(_ botId: Int) -> String { names[botId] ?? "#\(botId)" }
 
     func color(_ botId: Int) -> Color { colors[botId] ?? .secondary }
-
-    /// The bot a curve belongs to – its own line or its "only held" line.
-    static func botId(_ curve: Curve) -> Int { curve.id <= -1000 ? -1000 - curve.id : curve.id }
 
     func bucket(at date: Date) -> ProfitHistoryData.Bucket? {
         let start = Calendar.current.dateInterval(of: unit, for: date)?.start
@@ -627,7 +631,7 @@ private struct CurveChart: View {
     let select: (Trade?) -> Void
 
     private func faded(_ curve: ChartModel.Curve) -> Bool {
-        highlighted.map { ChartModel.botId(curve) != $0 } ?? false
+        highlighted.map { curve.botId != $0 } ?? false
     }
 
     var body: some View {
@@ -646,7 +650,16 @@ private struct CurveChart: View {
                 ForEach(curve.points) { point in
                     LineMark(x: .value("Date", point.date), y: .value("Result", point.value * reveal), series: .value("Bot", curve.id))
                         .interpolationMethod(.linear)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: LineKey.Style.dashed.dash))
+                        .foregroundStyle(curve.color)
+                        .opacity(faded(curve) ? 0.12 : 1)
+                }
+            }
+            ForEach(model.values) { curve in
+                ForEach(curve.points) { point in
+                    LineMark(x: .value("Date", point.date), y: .value("Result", point.value * reveal), series: .value("Bot", curve.id))
+                        .interpolationMethod(.linear)
+                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round, dash: LineKey.Style.dotted.dash))
                         .foregroundStyle(curve.color)
                         .opacity(faded(curve) ? 0.12 : 1)
                 }
@@ -742,8 +755,8 @@ private struct CurveHoverLayer: View {
                                          total: marker.point.value, perBot: model.perBot, showsHint: detailId != trade.id)
                                 .tooltip(at: location, in: geo.size)
                         } else {
-                            let values = rows(at: date)
-                            ForEach(values) { row in
+                            let own = rows(model.curves, at: date), compared = comparisons(at: date)
+                            ForEach(own + rows(model.values + model.hodl, at: date)) { row in
                                 if let y = proxy.position(forY: row.value) {
                                     Circle().fill(row.color)
                                         .frame(width: 8, height: 8)
@@ -751,8 +764,8 @@ private struct CurveHoverLayer: View {
                                         .position(x: plot.minX + x, y: plot.minY + y)
                                 }
                             }
-                            if !values.isEmpty {
-                                TimeTooltip(date: date, rows: values, currency: model.currency, perBot: model.perBot)
+                            if !own.isEmpty || !compared.isEmpty {
+                                TimeTooltip(date: date, rows: own, compared: compared, currency: model.currency, perBot: model.perBot)
                                     .tooltip(at: location, in: geo.size)
                             }
                         }
@@ -763,17 +776,28 @@ private struct CurveHoverLayer: View {
         }
     }
 
-    /// The value of every shown line at `date`, the highest first; the "only held" lines after the bots'.
-    private func rows(at date: Date) -> [TimeTooltip.Row] {
-        let own = model.curves.compactMap { curve in
-            curve.value(at: date).map { TimeTooltip.Row(id: curve.id, name: curve.id < 0 ? nil : model.name(curve.id), color: curve.color, value: $0, dashed: false) }
-        }
-        let held = model.hodl.compactMap { curve in
+    /// The value of each line at `date`, the highest first.
+    private func rows(_ curves: [ChartModel.Curve], at date: Date) -> [TimeTooltip.Row] {
+        curves.compactMap { curve in
             curve.value(at: date).map {
-                TimeTooltip.Row(id: curve.id, name: model.name(ChartModel.botId(curve)), color: curve.color, value: $0, dashed: true)
+                TimeTooltip.Row(id: curve.id, name: curve.botId < 0 ? nil : model.name(curve.botId), color: curve.color, value: $0)
             }
         }
-        return own.sorted { $0.value > $1.value } + held.sorted { $0.value > $1.value }
+        .sorted { $0.value > $1.value }
+    }
+
+    /// The bots compared with holding: their result with the open trades and the one of holding at `date`.
+    private func comparisons(at date: Date) -> [TimeTooltip.Compared] {
+        let ids = Array(Set((model.values + model.hodl).map(\.botId))).sorted()
+        return ids.compactMap { id in
+            let value = model.values.first { $0.botId == id }
+            let held = model.hodl.first { $0.botId == id }
+            let compared = TimeTooltip.Compared(
+                id: id, name: model.name(id), color: value?.color ?? held?.color ?? .secondary, heldColor: held?.color ?? .secondary,
+                value: value?.value(at: date), held: held?.value(at: date)
+            )
+            return compared.value == nil && compared.held == nil ? nil : compared
+        }
     }
 
     private func track(_ phase: HoverPhase, plot: CGRect) {
@@ -939,11 +963,21 @@ private struct TimeTooltip: View {
         let name: String?
         let color: Color
         let value: Double
-        let dashed: Bool
+    }
+
+    /// A bot compared with holding: its result with the open trades, the one of holding – and how far apart they are.
+    struct Compared: Identifiable {
+        let id: Int
+        let name: String
+        let color: Color
+        let heldColor: Color
+        let value: Double?
+        let held: Double?
     }
 
     let date: Date
     let rows: [Row]
+    let compared: [Compared]
     let currency: String
     let perBot: Bool
 
@@ -956,13 +990,9 @@ private struct TimeTooltip: View {
                     ForEach(rows) { row in
                         GridRow {
                             HStack(spacing: 6) {
-                                LineKey(color: row.color, dashed: row.dashed)
+                                LineKey(color: row.color)
                                 Group {
-                                    if let name = row.name {
-                                        Text(verbatim: row.dashed ? "\(name) · HODL" : name)
-                                    } else {
-                                        Text("Total")
-                                    }
+                                    if let name = row.name { Text(verbatim: name) } else { Text("Total") }
                                 }
                                 .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                             }
@@ -970,12 +1000,38 @@ private struct TimeTooltip: View {
                                 .gridColumnAlignment(.trailing)
                         }
                     }
-                    let own = rows.filter { !$0.dashed }
-                    if perBot, own.count > 1 {
+                    if perBot, rows.count > 1 {
                         Divider().gridCellColumns(2).opacity(0.6)
                         GridRow {
                             Text("Total").font(.system(size: 11, weight: .medium))
-                            PnLText(value: own.reduce(0) { $0 + $1.value }, currency: currency, font: .system(size: 12, weight: .bold))
+                            PnLText(value: rows.reduce(0) { $0 + $1.value }, currency: currency, font: .system(size: 12, weight: .bold))
+                        }
+                    }
+                    ForEach(compared) { bot in
+                        Divider().gridCellColumns(2).opacity(0.6)
+                        if let value = bot.value {
+                            GridRow {
+                                HStack(spacing: 6) {
+                                    LineKey(color: bot.color, style: .dotted)
+                                    Text("\(bot.name) · with open trades").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                PnLText(value: value, currency: currency, font: .system(size: 12, weight: .semibold))
+                            }
+                        }
+                        if let held = bot.held {
+                            GridRow {
+                                HStack(spacing: 6) {
+                                    LineKey(color: bot.heldColor, style: .dashed)
+                                    Text(verbatim: "\(bot.name) · HODL").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                PnLText(value: held, currency: currency, font: .system(size: 12, weight: .semibold))
+                            }
+                        }
+                        if let value = bot.value, let held = bot.held {
+                            GridRow {
+                                Text("Bot against HODL").font(.system(size: 11, weight: .medium)).padding(.leading, 20)
+                                PnLText(value: value - held, currency: currency, font: .system(size: 12, weight: .bold))
+                            }
                         }
                     }
                 }
@@ -1081,16 +1137,30 @@ private struct BucketTooltip: View {
 private extension View {
     /// Shows the view as a tooltip next to `point`, on the side with more room – or `above` it.
     func tooltip(at point: CGPoint, in size: CGSize, above: Bool = false) -> some View {
-        let alignment: Alignment = switch (point.x > size.width * 0.6, above || point.y > size.height * 0.5) {
-        case (false, false): .topLeading
-        case (true, false): .topTrailing
-        case (false, true): .bottomLeading
-        case (true, true): .bottomTrailing
-        }
-        return Color.clear
-            .frame(width: 0, height: 0)
-            .overlay(alignment: alignment) { fixedSize().padding(14) }
-            .position(point)
+        Tooltip(point: point, bounds: size, above: above) { self }
+    }
+}
+
+/// Places a tooltip next to the mouse and keeps it inside the chart – unless it is meant to reach `above` it
+/// (the low bars).
+private struct Tooltip<Content: View>: View {
+    let point: CGPoint
+    let bounds: CGSize
+    let above: Bool
+    @ViewBuilder let content: Content
+    @State private var size = CGSize.zero
+
+    var body: some View {
+        let gap: CGFloat = 14
+        let x = point.x > bounds.width * 0.6 ? point.x - gap - size.width : point.x + gap
+        let y = above || point.y > bounds.height * 0.5 ? point.y - gap - size.height : point.y + gap
+        let left = min(max(x, 0), max(bounds.width - size.width, 0))
+        let top = above ? y : min(max(y, 0), max(bounds.height - size.height, 0))
+        content
+            .fixedSize()
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+            .opacity(size == .zero ? 0 : 1) // measured first
+            .position(x: left + size.width / 2, y: top + size.height / 2)
     }
 }
 
@@ -1126,16 +1196,29 @@ private struct AxisLabel: View {
 
 /// A short stroke in a line's colour – the key of a line in tooltips and the legend.
 private struct LineKey: View {
+    enum Style {
+        case solid, dashed, dotted
+
+        /// The dash of the line in the chart and of its key.
+        var dash: [CGFloat] {
+            switch self {
+            case .solid: return []
+            case .dashed: return [5, 4]
+            case .dotted: return [0.1, 4]
+            }
+        }
+    }
+
     let color: Color
-    var dashed = false
+    var style = Style.solid
 
     var body: some View {
         Path { path in
             path.move(to: CGPoint(x: 1, y: 1.5))
-            path.addLine(to: CGPoint(x: 13, y: 1.5))
+            path.addLine(to: CGPoint(x: 15, y: 1.5))
         }
-        .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: dashed ? [3, 3] : []))
-        .frame(width: 14, height: 3)
+        .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: style == .dashed ? [3.5, 3] : style.dash))
+        .frame(width: 16, height: 3)
     }
 }
 

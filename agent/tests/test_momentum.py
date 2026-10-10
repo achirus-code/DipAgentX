@@ -381,10 +381,11 @@ class LimitExchange(PathExchange):
 
 
 def limit_engine(tmp_path, monkeypatch, **params):
-    from app import engine as engine_module
+    from app import db as db_module, engine as engine_module
     from tests.test_core import make_engine
     clock = [NOW]
     monkeypatch.setattr(engine_module, "now_ms", lambda: clock[0])
+    monkeypatch.setattr(db_module, "now_ms", lambda: clock[0])  # trades are stamped on the same clock
     monkeypatch.setattr(engine_module, "ORDER_POLL_DELAYS", (0,) * 7)
     ex = LimitExchange(steady(0.003))
     db, engine = make_engine(tmp_path, ex, live=True)
@@ -560,7 +561,10 @@ async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Pa
     assert 0 < hodl["value"] <= 1000.01
 
     history = engine.hodl_history(db.get_bot(bot_id))
-    assert history and history[-1]["value"] == pytest.approx(hodl["hodl_value"] - 1000)
+    assert history[0] == {"t": hodl["since"], "value": 0, "bot": history[0]["bot"]}  # starts at nothing
+    assert history[-1]["value"] == pytest.approx(hodl["hodl_value"] - 1000)
+    # the bot's own line ends where its comparison does: what its capital is worth now minus what was put in
+    assert history[-1]["bot"] == pytest.approx(hodl["value"] - hodl["start_capital"])
 
     bot = db.get_bot(bot_id)  # a higher amount is money put in: holding "buys" the same at the price of then
     db.update_bot(bot_id, params={**bot["params"], "amount": 2000})
@@ -569,6 +573,26 @@ async def test_the_bot_compares_itself_with_holding_since_its_start(tmp_path: Pa
     after = engine.describe_bot(db.get_bot(bot_id), db.trade_stats())["hodl"]
     assert after["start_capital"] == pytest.approx(2000, abs=0.01) and after["deposits"] == 2
     assert after["since"] == hodl["since"]
+
+
+def test_the_history_shows_the_bots_own_result_next_to_holding():
+    class Exchange:  # the closes are kept per exchange object
+        pass
+
+    exchange, start = Exchange(), NOW - 9 * HOUR
+    momentum_module = __import__("app.strategies.momentum", fromlist=["_closes"])
+    momentum_module._closes[exchange] = {"ETH-EUR": {start - HOUR: Decimal(2100), start + 3 * HOUR: Decimal(2200)}}
+    state = {"momentum": {"hodl": {"deposits": [{"at": start, "capital": "1000", "price": "2000"}]}}}
+    trades = [
+        {"side": "buy", "base_qty": "0.25", "quote_amount": "500.5", "created_at": start},
+        {"side": "buy", "base_qty": "0.2", "quote_amount": "420", "created_at": start + 4 * HOUR},
+        {"side": "sell", "base_qty": "0.25", "quote_amount": "549", "created_at": start + 5 * HOUR},
+    ]
+    history = momentum_module.hodl_history(state, exchange, "ETH-EUR", Decimal(2300), NOW, trades)
+    assert [p["t"] for p in history] == [start, start + 3 * HOUR, start + 7 * HOUR, NOW]
+    assert [p["value"] for p in history] == pytest.approx([0, 50, 100, 150])  # 0.5 ETH held from 2000 on
+    # 0.25 ETH bought for 500.50 (fee included); then 0.2 more for 420 and the first 0.25 sold for 549
+    assert [p["bot"] for p in history] == pytest.approx([-0.5, 24.5, 68.5, 88.5])
 
 
 async def test_the_indicators_come_with_what_they_mean_for_the_decision(tmp_path: Path, monkeypatch):

@@ -189,6 +189,14 @@ struct ProfitHistoryScreen: View {
                         .foregroundStyle(curve.color)
                 }
             }
+            ForEach(data.valueCurves) { curve in
+                ForEach(curve.points) { point in
+                    LineMark(x: .value("Date", point.date), y: .value("Result", point.value * reveal), series: .value("Bot", curve.id))
+                        .interpolationMethod(.linear)
+                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round, dash: [0.1, 4]))
+                        .foregroundStyle(curve.color)
+                }
+            }
             ForEach(markers, id: \.point.id) { marker in
                 let emphasized = marker.point.trade.map { related.contains($0.id) } ?? false
                 PointMark(x: .value("Date", marker.point.date), y: .value("Result", marker.point.value * reveal))
@@ -247,6 +255,9 @@ struct ProfitHistoryScreen: View {
             Text("Tap a point for the trade's details. The line shows the realized result, fees deducted – it moves with every sale.")
             if !hodlShown.isEmpty {
                 Text("Dashed: only held (HODL) since the bot's start")
+                if !data.valueCurves.isEmpty {
+                    Text("Dotted: the bot's result with its open trades valued at the price of then – moves with the price like holding.")
+                }
             }
         }
         .font(.caption)
